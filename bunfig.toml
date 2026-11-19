@@ -3,3 +3,5 @@ linker = "hoisted"
 
 [test]
 preload = ["./shell/test/setup.ts"]
+# The views' tests poll for the DOM; a cold first run transforms every module, which can take seconds.
+timeout = 30000

@@ -15,7 +15,7 @@ afterEach(() => {
   document.title = "Crow"
 })
 
-async function waitFor(fn: () => boolean, label = "condition", timeoutMs = 3000): Promise<void> {
+async function waitFor(fn: () => boolean, label = "condition", timeoutMs = 10000): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (fn()) return
