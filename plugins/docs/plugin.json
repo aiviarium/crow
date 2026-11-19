@@ -1,0 +1,320 @@
+{
+  "id": "docs",
+  "name": "Docs",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "description": "Documents, planning and a knowledge base: a tree of pages per space, each a collaborative document with typed properties, comments, history and backlinks; inline databases, templates, and Markdown in and out.",
+  "namespace": "docs",
+  "host": "src/host.ts",
+  "interface": "interface.ts",
+  "client": "src/client.tsx",
+  "styles": "src/client.css",
+  "provides": { "services": ["docs"] },
+  "contributes": {
+    "collections": [
+      {
+        "name": "pages",
+        "scope": "space",
+        "entity": {
+          "scheme": "doc",
+          "title": "title",
+          "icon": "icon",
+          "parent": "parent",
+          "private": "private"
+        },
+        "access": { "read": "view", "write": "use" },
+        "history": true,
+        "trash": true,
+        "fields": [
+          { "name": "title", "type": "text", "search": true, "required": true, "default": "Untitled" },
+          { "name": "icon", "type": "text" },
+          { "name": "cover", "type": "text" },
+          { "name": "parent", "type": "ref", "to": "doc", "index": true },
+          { "name": "rank", "type": "text", "default": "a0" },
+          { "name": "private", "type": "boolean", "default": false },
+          { "name": "document", "type": "text", "index": true },
+          { "name": "props", "type": "json" },
+          { "name": "schema", "type": "json" },
+          { "name": "localSchema", "type": "json" },
+          { "name": "links", "type": "refs" },
+          { "name": "template", "type": "boolean", "default": false, "index": true },
+          { "name": "trashedWith", "type": "text", "index": true },
+          { "name": "wide", "type": "boolean", "default": false },
+          { "name": "session", "type": "ref" }
+        ],
+        "indexes": [["parent", "template"]],
+        "display": {
+          "title": "Pages",
+          "description": "Pages of a space, with the properties their parent gives them.",
+          "icon": "file",
+          "fields": ["parent"],
+          "view": "docs.page",
+          "create": true,
+          "filter": { "template": false }
+        }
+      },
+      {
+        "name": "comments",
+        "scope": "space",
+        "entity": { "scheme": "doc-comment", "title": "text", "parent": "page" },
+        "access": { "read": "view", "write": "view" },
+        "fields": [
+          { "name": "page", "type": "ref", "to": "doc", "index": true, "required": true },
+          { "name": "thread", "type": "text", "index": true },
+          { "name": "body", "type": "json" },
+          { "name": "text", "type": "text", "search": true, "required": true },
+          { "name": "anchor", "type": "json" },
+          { "name": "resolved", "type": "boolean", "default": false }
+        ]
+      }
+    ],
+    "entityTypes": [
+      {
+        "scheme": "doc",
+        "title": "Page",
+        "icon": "file",
+        "view": "docs.page",
+        "description": "A page in Docs"
+      },
+      {
+        "scheme": "doc-comment",
+        "title": "Comment",
+        "icon": "chat",
+        "view": "docs.comment",
+        "description": "A comment on a page"
+      }
+    ],
+    "spaceKinds": [
+      {
+        "id": "docs.teamspace",
+        "title": "Teamspace",
+        "icon": "layers",
+        "description": "A space a team keeps its pages in"
+      }
+    ],
+    "commands": [
+      {
+        "id": "docs.create",
+        "title": "New document",
+        "description": "Creates a page in the current space and opens it.",
+        "icon": "plus"
+      },
+      { "id": "docs.open", "title": "Open Docs", "icon": "file" },
+      { "id": "docs.import", "title": "Import Markdown into Docs", "icon": "folder" },
+      {
+        "id": "docs.read",
+        "title": "Read a page as Markdown",
+        "description": "A page's properties and body as Markdown.",
+        "icon": "file"
+      },
+      {
+        "id": "docs.search",
+        "title": "Search pages",
+        "description": "Pages whose title or text match.",
+        "icon": "search"
+      },
+      {
+        "id": "docs.list",
+        "title": "List pages under a page",
+        "description": "The subtree of a page, or the top of a space.",
+        "icon": "list"
+      },
+      {
+        "id": "docs.append",
+        "title": "Append to a page",
+        "description": "Adds Markdown at the end of a page.",
+        "icon": "edit"
+      },
+      {
+        "id": "docs.replaceSection",
+        "title": "Replace a section of a page",
+        "description": "Replaces the blocks under a heading with Markdown.",
+        "icon": "edit"
+      },
+      {
+        "id": "docs.setProperties",
+        "title": "Set page properties",
+        "description": "Sets properties of a page by name.",
+        "icon": "tag"
+      }
+    ],
+    "tools": [
+      {
+        "id": "docs.read",
+        "title": "Read a page",
+        "description": "Read a Docs page as Markdown, with its properties as front matter. The page is its id, its doc:// link or its exact title."
+      },
+      {
+        "id": "docs.search",
+        "title": "Search pages",
+        "description": "Find Docs pages whose title or text contain the words. Returns each page's id, doc:// link, title and space."
+      },
+      {
+        "id": "docs.list",
+        "title": "List pages",
+        "description": "List the pages under a page (or the top of a space), a few levels deep, with their ids and titles."
+      },
+      {
+        "id": "docs.create",
+        "title": "Create a page",
+        "description": "Create a Docs page with a title, Markdown body and properties, under a page or at the top of the space, or from a template (builtin:meeting, builtin:decision, builtin:runbook, builtin:weekly). Mentions are written [Title](scheme://id)."
+      },
+      {
+        "id": "docs.append",
+        "title": "Append to a page",
+        "description": "Add Markdown at the end of a Docs page. People in the page see the agent while it writes."
+      },
+      {
+        "id": "docs.replaceSection",
+        "title": "Replace a section",
+        "description": "Replace what is under a heading of a Docs page with Markdown (the section is added when there is no such heading)."
+      },
+      {
+        "id": "docs.setProperties",
+        "title": "Set page properties",
+        "description": "Set properties of a Docs page by name (Status, Owner, Review...). New names become properties of the page."
+      }
+    ],
+    "composer": [{ "type": "mention", "id": "docs.mention", "title": "Pages", "schemes": ["doc"] }],
+    "views": [
+      { "id": "docs.home", "title": "Docs", "slot": "main", "icon": "file" },
+      { "id": "docs.page", "title": "Page", "slot": "main", "icon": "file" },
+      { "id": "docs.comment", "title": "Comment", "slot": "main", "icon": "chat" }
+    ],
+    "nav": [{ "id": "docs.nav", "title": "Docs", "view": "docs.home", "icon": "book-open" }],
+    "routes": [
+      { "path": "/", "view": "docs.home", "context": "rookery.space" },
+      { "path": "/home/*path", "view": "docs.home", "context": "rookery.space" },
+      { "path": "/comment/:comment", "view": "docs.comment" },
+      { "path": "/:page", "view": "docs.page" }
+    ],
+    "blocks": [
+      {
+        "id": "docs.database",
+        "title": "Database",
+        "description": "Table, board or list",
+        "icon": "grid",
+        "keywords": ["table", "board", "kanban", "list", "view", "inline"],
+        "width": { "default": "reading", "allowed": ["reading", "wide", "full"] },
+        "attrs": {
+          "type": "object",
+          "properties": {
+            "source": { "type": ["object", "null"], "default": null },
+            "view": {
+              "type": "object",
+              "default": { "layout": "table", "groupBy": null, "sorts": [], "filters": [], "fields": [] }
+            },
+            "title": { "type": "string", "default": "" }
+          }
+        },
+        "text": "{title}",
+        "markdown": "*Database: {title}*"
+      },
+      {
+        "id": "docs.page",
+        "title": "Link to page",
+        "description": "A page as a card",
+        "icon": "file",
+        "keywords": ["page", "link", "card", "subpage"],
+        "attrs": {
+          "type": "object",
+          "properties": {
+            "uri": { "type": "string", "default": "" },
+            "title": { "type": "string", "default": "" }
+          }
+        },
+        "text": "{title}",
+        "markdown": "[{title}]({uri})"
+      },
+      {
+        "id": "docs.item",
+        "title": "Embed an item",
+        "description": "Anything with a card, live: a saved view as a table or a board",
+        "icon": "layers",
+        "keywords": ["embed", "view", "saved view", "table", "board", "card", "item"],
+        "width": { "default": "reading", "allowed": ["reading", "wide", "full"] },
+        "attrs": {
+          "type": "object",
+          "properties": {
+            "uri": { "type": "string", "default": "" },
+            "title": { "type": "string", "default": "" }
+          }
+        },
+        "text": "{title}",
+        "markdown": "[{title}]({uri})"
+      },
+      {
+        "id": "docs.toc",
+        "title": "Table of contents",
+        "description": "The headings of this document",
+        "icon": "list",
+        "keywords": ["toc", "contents", "outline", "headings"],
+        "attrs": { "type": "object", "properties": {} },
+        "text": "",
+        "markdown": ""
+      },
+      {
+        "id": "docs.synced",
+        "title": "Synced block",
+        "description": "The same content in several places",
+        "icon": "layers",
+        "keywords": ["synced", "sync", "mirror", "transclusion", "embed"],
+        "attrs": {
+          "type": "object",
+          "properties": {
+            "document": { "type": "string", "default": "" },
+            "from": { "type": "string", "default": "" }
+          }
+        },
+        "text": "",
+        "markdown": ""
+      }
+    ],
+    "widgets": [
+      {
+        "id": "docs.recent",
+        "title": "Recent pages",
+        "description": "The pages of the space that changed last, live.",
+        "icon": "file",
+        "category": "Docs",
+        "sizes": { "default": { "w": 4, "h": 4 }, "min": { "w": 3, "h": 2 }, "max": { "w": 8, "h": 10 } },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "heading": { "type": "string", "title": "Heading", "default": "Recent pages" },
+            "limit": { "type": "integer", "title": "Pages shown", "default": 8, "minimum": 1, "maximum": 30 }
+          }
+        }
+      },
+      {
+        "id": "docs.embed",
+        "title": "Page",
+        "description": "One page, live, on a dashboard.",
+        "icon": "file",
+        "category": "Docs",
+        "sizes": { "default": { "w": 6, "h": 6 }, "min": { "w": 3, "h": 3 }, "max": { "w": 12, "h": 16 } },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "page": { "type": "string", "title": "Page", "description": "The page's link (doc://…) or id." },
+            "editable": { "type": "boolean", "title": "Edit in place", "default": false }
+          }
+        },
+        "areas": ["dashboard", "home"]
+      }
+    ],
+    "extensions": {
+      "home.actions": [
+        {
+          "id": "docs.new",
+          "title": "New document",
+          "icon": "file",
+          "command": "docs.create",
+          "params": {},
+          "order": 10
+        },
+        { "id": "docs.all", "title": "Open Docs", "icon": "file", "view": "docs.home", "order": 11 }
+      ]
+    }
+  }
+}
