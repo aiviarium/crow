@@ -30,6 +30,6 @@
     }
   },
   "files": {
-    "includes": ["shell/**", "plugins/**", "scripts/**", "!**/*.css", "!**/dist/**", "!**/target/**"]
+    "includes": ["shell/**", "plugins/**", "scripts/**", "!**/*.css", "!**/dist/**", "!**/target/**", "!**/builtins.gen.ts"]
   }
 }

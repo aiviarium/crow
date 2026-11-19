@@ -9,13 +9,14 @@
   "scripts": {
     "sync-deps": "bun scripts/sync-deps.ts",
     "bootstrap": "bun run sync-deps && bun install",
-    "dev": "bun --cwd shell dev",
-    "build": "bun --cwd shell build",
+    "dev": "bun run builtins && bun --cwd shell dev",
+    "build": "bun run builtins && bun --cwd shell build",
     "lint": "biome ci shell plugins scripts",
     "format": "biome format --write shell plugins scripts",
-    "typecheck": "tsc -p shell/tsconfig.json --noEmit && tsc -p plugins/fleet/tsconfig.json --noEmit && tsc -p plugins/terminal/tsconfig.json --noEmit && tsc -p plugins/ai/tsconfig.json --noEmit && tsc -p plugins/model-anthropic/tsconfig.json --noEmit && tsc -p plugins/agents/tsconfig.json --noEmit",
-    "test": "bun test --timeout 30000 shell/test plugins/fleet/test plugins/terminal/test plugins/ai/test plugins/model-anthropic/test plugins/agents/test",
-    "check": "bun run lint && bun run typecheck && bun run test && bun run build"
+    "typecheck": "bun run builtins && bun scripts/typecheck.ts",
+    "test": "bun run builtins && bun test --timeout 30000 shell/test plugins",
+    "check": "bun run lint && bun run typecheck && bun run test && bun run build",
+    "builtins": "bun scripts/builtins.ts"
   },
   "devDependencies": {
     "@babel/core": "^7.29.13",
