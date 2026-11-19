@@ -5,7 +5,6 @@ import type {
   ClientStream,
   Connection,
   JobChanged,
-  JobDetail,
   JobEnd,
   JobInfo,
   JobList,
@@ -22,7 +21,7 @@ export interface JobsStore {
   readonly error: Accessor<string | null>
   readonly activeCount: Accessor<number>
   refresh(query?: JobQuery): Promise<void>
-  get(id: string): Promise<JobDetail>
+  get(id: string): Promise<JobInfo>
   cancel(id: string): Promise<void>
   retry(id: string, attempts?: number): Promise<JobInfo>
   onChanged(fn: (job: JobInfo) => void): () => void
@@ -199,7 +198,7 @@ export function createJobsStore(conn: Connection): JobsStore {
     }
   }
 
-  const get = (id: string) => conn.call<JobDetail>("jobs.get", { id })
+  const get = (id: string) => conn.call<JobInfo>("jobs.get", { id })
 
   const cancel = async (id: string) => {
     await conn.call("jobs.cancel", { id })

@@ -229,7 +229,7 @@ function fakeRookery(state: FakeState) {
       case "jobs.get": {
         const job = state.jobs.find((one) => one.id === params.id)
         if (!job) throw new Error(`No job ${params.id}`)
-        return { job, attempts: [] }
+        return job
       }
       case "provisioners.list":
         return structuredClone(state.provisioners)
