@@ -4,13 +4,21 @@ import { Count, type IconName, Nav, NavItem } from "@aiviarium/nocturne"
 import { createMemo, For, type JSX, Show } from "solid-js"
 import { AccountMenu } from "../auth/AccountMenu"
 import { BrandMark } from "./BrandMark"
-import { HOME_VIEW, type ShellApp } from "./state"
+import { HOME_VIEW, INBOX_ITEM_VIEW, INBOX_VIEW, JOB_VIEW, JOBS_VIEW, type ShellApp } from "./state"
 
 export function Sidebar(props: { app: ShellApp; onNavigate?: () => void }): JSX.Element {
   const activeView = () => props.app.routeMatch()?.view ?? HOME_VIEW
+  const activePlugin = () => props.app.routeMatch()?.plugin
 
   const pluginNavItems = createMemo(() => {
-    const items: Array<{ id: string; title: string; href: string; view?: string; icon?: string }> = []
+    const items: Array<{
+      id: string
+      plugin: string
+      title: string
+      href: string
+      view?: string
+      icon?: string
+    }> = []
     for (const plugin of Object.values(props.app.loader.plugins)) {
       if (!plugin?.manifest || plugin.state === "invalid") continue
       for (const entry of plugin.manifest.contributes.nav ?? []) {
@@ -19,6 +27,7 @@ export function Sidebar(props: { app: ShellApp; onNavigate?: () => void }): JSX.
         if (!href) continue
         items.push({
           id: entry.id,
+          plugin: plugin.id,
           title: entry.title,
           href,
           view: viewId,
@@ -34,6 +43,9 @@ export function Sidebar(props: { app: ShellApp; onNavigate?: () => void }): JSX.
     if (val === undefined || val === "") return undefined
     return typeof val === "number" ? <Count value={val} /> : <span>{val}</span>
   }
+
+  const unreadCount = () => props.app.inbox.unread()
+  const activeJobsCount = () => props.app.jobs.activeCount()
 
   return (
     <div class="crow-sidebar" data-part="sidebar">
@@ -52,6 +64,28 @@ export function Sidebar(props: { app: ShellApp; onNavigate?: () => void }): JSX.
           current={activeView() === HOME_VIEW}
           onClick={() => props.onNavigate?.()}
         />
+        <NavItem
+          label="Inbox"
+          icon="inbox"
+          href="/inbox"
+          meta={
+            unreadCount() > 0 ? <Count value={unreadCount()} data-part="inbox-unread-count" /> : undefined
+          }
+          current={activeView() === INBOX_VIEW || activeView() === INBOX_ITEM_VIEW}
+          onClick={() => props.onNavigate?.()}
+        />
+        <NavItem
+          label="Jobs"
+          icon="activity"
+          href="/jobs"
+          meta={
+            activeJobsCount() > 0 ? (
+              <Count value={activeJobsCount()} data-part="jobs-active-count" />
+            ) : undefined
+          }
+          current={activeView() === JOBS_VIEW || activeView() === JOB_VIEW}
+          onClick={() => props.onNavigate?.()}
+        />
 
         <Show when={pluginNavItems().length > 0}>
           <span class="nc-nav__label">Plugins</span>
@@ -62,7 +96,9 @@ export function Sidebar(props: { app: ShellApp; onNavigate?: () => void }): JSX.
                 icon={item.icon as IconName | undefined}
                 href={item.href}
                 meta={badgeOf(item.id)}
-                current={item.view !== undefined && activeView() === item.view}
+                current={
+                  (item.view !== undefined && activeView() === item.view) || activePlugin() === item.plugin
+                }
                 onClick={() => props.onNavigate?.()}
               />
             )}

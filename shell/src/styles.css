@@ -122,4 +122,84 @@
   .nc-shell__status:empty {
     display: none;
   }
+
+  .crow-topbar__inbox {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+  }
+
+  .crow-split-list {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .crow-split-list__controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--line-subtle);
+    flex: none;
+  }
+
+  .crow-split-list__body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--space-2) 0;
+  }
+
+  .crow-detail-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    padding: var(--space-4);
+    overflow: auto;
+  }
+
+  .crow-detail-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    flex: 1;
+    min-height: 0;
+  }
+
+  .crow-job-log {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    flex: 1;
+    min-height: 240px;
+  }
+
+  .crow-progress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .crow-progress__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    color: var(--text-2);
+  }
+
+  .crow-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .crow-pad {
+    padding: var(--space-3);
+  }
 }
