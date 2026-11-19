@@ -1,7 +1,6 @@
-// Connecting GitHub: what a connection's "Test" says (who it is, what it can reach, how much of the rate
-// limit is left, whether webhooks can verify), and creating a GitHub App from Crow with GitHub's manifest
-// flow. The manifest flow needs no route of the kernel's: the shell page posts the manifest to GitHub, GitHub
-// sends the browser back to a Crow view with a code, and the view hands the code to `app.complete`.
+// Connecting GitHub: creating a GitHub App from Crow with GitHub's manifest flow. The manifest flow needs no
+// route of the kernel's: the shell page posts the manifest to GitHub, GitHub sends the browser back to a Crow
+// view with a code, and the view hands the code to `app.complete`.
 //
 // A host half cannot create a connection at the pinned SDK: `rookery.connections` lists, gets and resolves.
 // `app.complete` therefore answers with what the connection is made of, and the admin's browser creates it
@@ -10,65 +9,8 @@ import type { ConnectionCreate } from "@rookery/client"
 import { type Ctx, RookeryError } from "@rookery/sdk"
 import { explain } from "./errors"
 import { GitHubHttp, webBase } from "./http"
-import { normalizeBase, type Pool } from "./pool"
-import { remember } from "./repos"
-import type { ConnectionView } from "./sdk"
+import { normalizeBase } from "./pool"
 import type { Services } from "./sync"
-
-const clock = (s: number) => new Date(s * 1000).toISOString().slice(11, 16)
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
-
-export async function testConnection(
-  sv: Services,
-  ctx: Ctx,
-  c: ConnectionView,
-): Promise<{ ok: boolean; message: string; details?: unknown }> {
-  const gh = sv.pool.fromConnection(c)
-  try {
-    const host = new URL(gh.web).host
-    let who: string
-    let reach: { total: number; repos: Array<{ full_name: string }> }
-    const extra: string[] = []
-    if (c.type.endsWith("token")) {
-      const me = (await gh.api.user()).data
-      who = `Signed in to ${host} as ${me.login}${me.name ? ` (${me.name})` : ""}`
-      reach = await gh.api.userRepos()
-      await remember(sv, ctx, gh)
-    } else {
-      reach = await gh.api.installationRepos()
-      who = `App ${c.values.appId}${c.values.installationId ? `, installation ${c.values.installationId}` : ""} on ${host}`
-      extra.push(
-        c.values.webhookSecret
-          ? "Webhooks are verified with the stored secret at /hooks/code/events."
-          : "No webhook secret: repositories are polled, not pushed.",
-      )
-    }
-    const rate = (await gh.api.rateLimit()).resources.core
-    const names = reach.repos.slice(0, 3).map((r) => r.full_name)
-    const message = [
-      `${who}.`,
-      `Reaches ${plural(reach.total, "repository", "repositories")}${names.length ? ` (${names.join(", ")}${reach.total > names.length ? ", …" : ""})` : ""}.`,
-      `${rate.remaining.toLocaleString("en")} of ${rate.limit.toLocaleString("en")} requests left until ${clock(rate.reset)} UTC.`,
-      ...extra,
-    ].join(" ")
-    return {
-      ok: true,
-      message,
-      details: {
-        host,
-        repositories: reach.total,
-        rate: {
-          limit: rate.limit,
-          remaining: rate.remaining,
-          resetAt: new Date(rate.reset * 1000).toISOString(),
-        },
-      },
-    }
-  } catch (e) {
-    const x = explain(e, gh.who)
-    return { ok: false, message: `${x.message}${x.fix ? ` ${x.fix}` : ""}`, details: { reason: x.reason } }
-  }
-}
 
 // ── Creating an app from Crow ───────────────────────────────────────────────────────────────────────
 

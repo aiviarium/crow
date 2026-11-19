@@ -61,13 +61,7 @@ export default function Home(props: { rookery: ClientRookery; view: ViewHandle }
   const [envs] = createResource(() => rookery.env.list())
   const [picked, setPicked] = createSignal<string | null>(null)
   const env = () => picked() ?? envs()?.find((e) => e.state === "online")?.name ?? null
-  const [checkouts, { refetch }] = createResource(env, async (e) => {
-    // `env.checkouts` is part of Rookery's host methods (M3); a server without it shows none.
-    const r = await rookery.rpc
-      .call<{ checkouts: Checkout[] }>("env.checkouts", { env: e })
-      .catch(() => ({ checkouts: [] as Checkout[] }))
-    return r.checkouts
-  })
+  const [checkouts, { refetch }] = createResource(env, (e) => rookery.env.checkouts(e))
   const open = (envName: string, path: string) =>
     rookery.workbench.openView("workbench.open", { path: workspacePath(envName, path) })
 
@@ -81,10 +75,7 @@ export default function Home(props: { rookery: ClientRookery; view: ViewHandle }
     setCloning(true)
     setError(null)
     try {
-      const c = await rookery.rpc.call<Checkout>("env.clone", {
-        env: env0,
-        repository: url().trim(),
-      })
+      const c = await rookery.env.clone(env0, url().trim())
       setUrl("")
       refetch()
       open(env0, c.path)
@@ -102,11 +93,7 @@ export default function Home(props: { rookery: ClientRookery; view: ViewHandle }
     const env0 = env()
     if (!w || !env0 || !w.branch.trim()) return
     try {
-      const c = await rookery.rpc.call<Checkout>("env.worktree", {
-        env: env0,
-        checkout: w.checkout,
-        branch: w.branch.trim(),
-      })
+      const c = await rookery.env.worktree(env0, w.checkout, w.branch.trim())
       setWt(null)
       refetch()
       open(env0, c.path)

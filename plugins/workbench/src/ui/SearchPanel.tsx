@@ -79,11 +79,12 @@ export function SearchPanel(props: { w: Workspace }) {
       setResults(shown)
       const ms = Math.round(performance.now() - t0)
       const truncated = count > MAX
+      const display = r.truncated ? " · the host kept only the start of its output" : ""
       if (r.exitCode !== null && r.exitCode > 1 && !collected.length)
-        setSummary((r.stderr || `exited ${r.exitCode}`).trim().split("\n")[0]!)
+        setSummary(`${(r.stderr || `exited ${r.exitCode}`).trim().split("\n")[0]!}${display}`)
       else
         setSummary(
-          `${count} result${count === 1 ? "" : "s"} in ${collected.length} file${collected.length === 1 ? "" : "s"}${truncated ? ` (stopped at ${MAX})` : ""} · ${rg ? "ripgrep" : "git grep"} · ${ms} ms`,
+          `${count} result${count === 1 ? "" : "s"} in ${collected.length} file${collected.length === 1 ? "" : "s"}${truncated ? ` (stopped at ${MAX})` : ""} · ${rg ? "ripgrep" : "git grep"} · ${ms} ms${display}`,
         )
     } catch (e) {
       setSummary((e as Error).message)
