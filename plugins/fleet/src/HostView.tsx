@@ -1,5 +1,5 @@
 // Host detail view (`fleet.host`): state, type, profile summary, apply, host actions (returning
-// jobs), recent host jobs, and remove host. M1 scope only (excludes terminal actions).
+// jobs), recent host jobs, remove host, and the M3 parts: the desktop, port links, and sharing the host.
 import {
   Badge,
   Button,
@@ -18,9 +18,11 @@ import {
 } from "@aiviarium/nocturne"
 import type { JobInfo } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
-import { createEffect, createMemo, createSignal, For, type JSX, on, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, Show } from "solid-js"
 import { ActionDialog } from "./ActionDialog"
+import { allows, type Who } from "./access"
 import type { Action, HostCheckResult, HostInfo, HostProfile } from "./api"
+import { envUri } from "./env"
 import type { FleetStore } from "./FleetView"
 import type { FleetApi } from "./fleetApi"
 import {
@@ -36,6 +38,8 @@ import {
   profileFeatures,
   profileUserName,
 } from "./format"
+import { PortsCard } from "./Ports"
+import { ShareDialog } from "./ShareDialog"
 
 export function HostView(props: {
   view: ViewHandle
@@ -56,9 +60,30 @@ export function HostView(props: {
   const [runningAction, setRunningAction] = createSignal<string | null>(null)
   const [removeOpen, setRemoveOpen] = createSignal(false)
   const [removing, setRemoving] = createSignal(false)
+  const [shareOpen, setShareOpen] = createSignal(false)
+  // The host as an environment: its level, state and what it supports (`env.get`). Best effort: a server
+  // without `env.*` still shows the M1 host page, without the M3 parts.
+  const [env, { refetch: refetchEnv }] = createResource(
+    () => (hostName() ? envUri(hostName()) : undefined),
+    (uri) => props.api.env.get(uri).catch(() => undefined),
+  )
+  const who = (): Who => ({ level: env()?.level, admin: props.api.isAdmin() })
+  // Who has terminals running on the host: `view` is enough, and it shows nobody's terminal.
+  const [presence, { refetch: refetchPresence }] = createResource(
+    () => (hostName() ? envUri(hostName()) : undefined),
+    (uri) => props.api.env.presence(uri).catch(() => undefined),
+  )
+  const presenceText = () => {
+    const p = presence()
+    if (!p) return null
+    if (!p.users.length) return "Nobody"
+    return `${p.users.length} (${p.users.map((u) => u.name).join(", ")})`
+  }
 
   const load = async (name: string) => {
     if (!name) return
+    void refetchEnv()
+    void refetchPresence()
     setLoading(true)
     setError(null)
     try {
@@ -229,6 +254,7 @@ export function HostView(props: {
         label: "Power",
         value: h.power?.state ?? "unknown",
       },
+      { id: "presence", label: "On it now", value: presenceText() },
     ]
     return items
   })
@@ -305,6 +331,20 @@ export function HostView(props: {
               label: "Refresh host",
               icon: "refresh-cw",
               onClick: () => void load(hostName()),
+            },
+            {
+              id: "desktop",
+              label: "Desktop",
+              icon: "grid",
+              disabled: !env()?.supports.desktop || !allows(who(), "view"),
+              onClick: () => props.rookery.workbench.openView("fleet.desktop", { path: hostName() }),
+            },
+            {
+              id: "share",
+              label: "Share…",
+              icon: "users",
+              disabled: !allows(who(), "manage"),
+              onClick: () => setShareOpen(true),
             },
             {
               id: "remove",
@@ -488,8 +528,16 @@ export function HostView(props: {
                   </RowList>
                 </Show>
               </Card>
+
+              <Show when={env()}>
+                <PortsCard host={hostName()} env={env()} who={who()} rookery={props.rookery} />
+              </Show>
             </>
           )}
+        </Show>
+
+        <Show when={shareOpen()}>
+          <ShareDialog host={hostName()} rookery={props.rookery} onClose={() => setShareOpen(false)} />
         </Show>
 
         <ActionDialog

@@ -446,24 +446,19 @@ describe("@crow/plugin-fleet M1 views", () => {
     )
     await waitFor(() => (root.textContent ?? "").includes("Cancelled"), "Cancelled state")
 
-    // Cancelled job exposes Retry, which calls `jobs.retry` and navigates to the new job.
-    await waitFor(
-      () =>
-        Array.from(root.querySelectorAll("button")).some(
-          (b) => (b.textContent ?? "").trim() === "Retry" || b.getAttribute("aria-label") === "Retry",
-        ),
-      "Retry button visible",
-    )
-    const retryBtn = Array.from(root.querySelectorAll("button")).find(
-      (b) => (b.textContent ?? "").trim() === "Retry" || b.getAttribute("aria-label") === "Retry",
-    ) as HTMLButtonElement | undefined
-    expect(retryBtn).toBeDefined()
-    retryBtn!.click()
+    // Cancelled job exposes Retry, which calls `jobs.retry` and navigates to the new job. The button is
+    // looked up again on every tick: a job change re-renders it, and a click on the old node does nothing.
+    const retryButton = () =>
+      Array.from(root.querySelectorAll("button")).find(
+        (b) => (b.textContent ?? "").trim() === "Retry" || b.getAttribute("aria-label") === "Retry",
+      ) as HTMLButtonElement | undefined
 
-    await waitFor(
-      () => fake.calls.some((c) => c.method === "jobs.retry" && c.params.id === "job-live-1"),
-      "jobs.retry call",
-    )
+    await waitFor(() => retryButton() !== undefined, "Retry button visible")
+    await waitFor(() => {
+      if (fake.calls.some((c) => c.method === "jobs.retry" && c.params.id === "job-live-1")) return true
+      retryButton()?.click()
+      return fake.calls.some((c) => c.method === "jobs.retry" && c.params.id === "job-live-1")
+    }, "jobs.retry call")
     await waitFor(() => (root.textContent ?? "").includes("Retrying host.apply"), "retried job log")
   })
 })

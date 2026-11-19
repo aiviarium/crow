@@ -7,12 +7,16 @@
     "views": [
       { "id": "fleet.hosts", "title": "Hosts", "icon": "server" },
       { "id": "fleet.host", "title": "Host", "icon": "server" },
-      { "id": "fleet.job", "title": "Job", "icon": "activity" }
+      { "id": "fleet.job", "title": "Job", "icon": "activity" },
+      { "id": "fleet.desktop", "title": "Desktop", "icon": "grid" },
+      { "id": "fleet.port", "title": "Port", "icon": "link" }
     ],
     "routes": [
       { "path": "", "view": "fleet.hosts" },
       { "path": "hosts", "view": "fleet.hosts" },
       { "path": "hosts/:name", "view": "fleet.host" },
+      { "path": "hosts/:name/desktop", "view": "fleet.desktop" },
+      { "path": "hosts/:name/port/:port", "view": "fleet.port" },
       { "path": "jobs/:id", "view": "fleet.job" }
     ],
     "nav": [{ "id": "fleet.hosts", "title": "Fleet", "view": "fleet.hosts", "icon": "server" }],
