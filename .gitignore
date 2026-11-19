@@ -5,3 +5,4 @@ shell/dist/
 build/
 .DS_Store
 *.log
+shell/src/app/builtins.gen.ts

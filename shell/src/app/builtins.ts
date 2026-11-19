@@ -2,10 +2,7 @@
 // @rookery/client's `createPluginLoader` so `ROOKERY_SHELL_DIR` serves shell and fleet together.
 // Delete this module in M2 once Hatchery packages serve plugin client halves from Rookery.
 import type { Connection, PluginInfo, PluginList } from "@rookery/client"
-import agentsManifest from "../../../plugins/agents/plugin.json"
-import aiManifest from "../../../plugins/ai/plugin.json"
-import fleetManifest from "../../../plugins/fleet/plugin.json"
-import terminalManifest from "../../../plugins/terminal/plugin.json"
+import { BUILTIN_SOURCES } from "./builtins.gen"
 
 interface BuiltinPlugin {
   readonly id: string
@@ -16,68 +13,22 @@ interface BuiltinPlugin {
 
 const BUILTIN_PREFIX = "data:crow-builtin/"
 
-const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = [
-  {
-    id: fleetManifest.id,
-    scriptUrl: `${BUILTIN_PREFIX}${fleetManifest.id}`,
-    info: {
-      id: fleetManifest.id,
-      state: "active",
-      client: {
-        script: `${BUILTIN_PREFIX}${fleetManifest.id}`,
-        styles: null,
-        hash: `builtin-${fleetManifest.version}`,
-      },
-      manifest: fleetManifest,
-    } as unknown as PluginInfo,
-    load: () => import("../../../plugins/fleet/src/client"),
-  },
-  {
-    id: aiManifest.id,
-    scriptUrl: `${BUILTIN_PREFIX}${aiManifest.id}`,
-    info: {
-      id: aiManifest.id,
-      state: "active",
-      client: {
-        script: `${BUILTIN_PREFIX}${aiManifest.id}`,
-        styles: null,
-        hash: `builtin-${aiManifest.version}`,
-      },
-      manifest: aiManifest,
-    } as unknown as PluginInfo,
-    load: () => import("../../../plugins/ai/src/client"),
-  },
-  {
-    id: agentsManifest.id,
-    scriptUrl: `${BUILTIN_PREFIX}${agentsManifest.id}`,
-    info: {
-      id: agentsManifest.id,
-      state: "active",
-      client: {
-        script: `${BUILTIN_PREFIX}${agentsManifest.id}`,
-        styles: null,
-        hash: `builtin-${agentsManifest.version}`,
-      },
-      manifest: agentsManifest,
-    } as unknown as PluginInfo,
-    load: () => import("../../../plugins/agents/src/client"),
-  },
-  {
-    id: terminalManifest.id,
-    scriptUrl: `${BUILTIN_PREFIX}${terminalManifest.id}`,
-    info: {
-      id: terminalManifest.id,
-      state: "active",
-      client: {
-        script: `${BUILTIN_PREFIX}${terminalManifest.id}`,
-        styles: null,
-        hash: `builtin-${terminalManifest.version}`,
-      },
-      manifest: terminalManifest,
-    } as unknown as PluginInfo,
-    load: () => import("../../../plugins/terminal/src/client"),
-  },
-]
+// Every plugin in crow/plugins with a client half, found by scripts/builtins.ts.
+const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = BUILTIN_SOURCES.map(({ manifest, load }) => ({
+  id: manifest.id,
+  scriptUrl: `${BUILTIN_PREFIX}${manifest.id}`,
+  info: {
+    id: manifest.id,
+    state: "active",
+    client: {
+      script: `${BUILTIN_PREFIX}${manifest.id}`,
+      styles: null,
+      hash: `builtin-${manifest.version}`,
+    },
+    manifest,
+  } as unknown as PluginInfo,
+  load,
+}))
 
 const BY_SCRIPT = new Map(BUILTIN_PLUGINS.map((p) => [p.scriptUrl, p]))
 
