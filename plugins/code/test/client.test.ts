@@ -2,7 +2,7 @@
 // minimal client runtime. No shell, no server.
 import { describe, expect, test } from "bun:test"
 import { type ClientRuntime, createClientApi } from "@rookery/sdk/runtime/client"
-import manifest from "../plugin.json"
+import manifest from "../rookery/plugin.json"
 import client from "../src/client"
 
 function fakeRuntime() {

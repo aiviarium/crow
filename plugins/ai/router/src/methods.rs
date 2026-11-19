@@ -1,4 +1,4 @@
-//! The methods of the `router` service, as declared in `../methods.json`.
+//! The methods of the `router` service, as declared in `../rookery/methods.json`.
 
 use std::sync::Arc;
 

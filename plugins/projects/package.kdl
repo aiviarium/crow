@@ -1,0 +1,24 @@
+format 1
+
+package {
+  group crow
+  id projects
+  version "0.1.0"
+}
+
+about {
+  name "Projects"
+  summary "Project management in the style of Linear: issues with keys, states, labels, cycles, comments and links to docs and pull requests."
+  license MIT
+  license Apache-2.0
+  repository "https://github.com/aiviarium/crow"
+  keywords rookery-plugin
+}
+
+targets {
+  rookery {
+    requires {
+      rookery ">=0.6"
+    }
+  }
+}

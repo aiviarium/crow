@@ -1,15 +1,15 @@
 {
-  "id": "docs",
-  "name": "Docs",
-  "version": "0.1.0",
+  "$schema": "https://github.com/aiviarium/rookery/blob/main/schemas/plugin.schema.json",
   "apiVersion": "1",
+  "name": "Docs",
   "description": "Documents, planning and a knowledge base: a tree of pages per space, each a collaborative document with typed properties, comments, history and backlinks; inline databases, templates, and Markdown in and out.",
+  "host": "host/host.js",
+  "client": "client/client.js",
+  "styles": "client/client.css",
+  "provides": {
+    "services": ["docs"]
+  },
   "namespace": "docs",
-  "host": "src/host.ts",
-  "interface": "interface.ts",
-  "client": "src/client.tsx",
-  "styles": "src/client.css",
-  "provides": { "services": ["docs"] },
   "contributes": {
     "collections": [
       {
@@ -22,25 +22,85 @@
           "parent": "parent",
           "private": "private"
         },
-        "access": { "read": "view", "write": "use" },
+        "access": {
+          "read": "view",
+          "write": "use"
+        },
         "history": true,
         "trash": true,
         "fields": [
-          { "name": "title", "type": "text", "search": true, "required": true, "default": "Untitled" },
-          { "name": "icon", "type": "text" },
-          { "name": "cover", "type": "text" },
-          { "name": "parent", "type": "ref", "to": "doc", "index": true },
-          { "name": "rank", "type": "text", "default": "a0" },
-          { "name": "private", "type": "boolean", "default": false },
-          { "name": "document", "type": "text", "index": true },
-          { "name": "props", "type": "json" },
-          { "name": "schema", "type": "json" },
-          { "name": "localSchema", "type": "json" },
-          { "name": "links", "type": "refs" },
-          { "name": "template", "type": "boolean", "default": false, "index": true },
-          { "name": "trashedWith", "type": "text", "index": true },
-          { "name": "wide", "type": "boolean", "default": false },
-          { "name": "session", "type": "ref" }
+          {
+            "name": "title",
+            "type": "text",
+            "search": true,
+            "required": true,
+            "default": "Untitled"
+          },
+          {
+            "name": "icon",
+            "type": "text"
+          },
+          {
+            "name": "cover",
+            "type": "text"
+          },
+          {
+            "name": "parent",
+            "type": "ref",
+            "to": "doc",
+            "index": true
+          },
+          {
+            "name": "rank",
+            "type": "text",
+            "default": "a0"
+          },
+          {
+            "name": "private",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "document",
+            "type": "text",
+            "index": true
+          },
+          {
+            "name": "props",
+            "type": "json"
+          },
+          {
+            "name": "schema",
+            "type": "json"
+          },
+          {
+            "name": "localSchema",
+            "type": "json"
+          },
+          {
+            "name": "links",
+            "type": "refs"
+          },
+          {
+            "name": "template",
+            "type": "boolean",
+            "default": false,
+            "index": true
+          },
+          {
+            "name": "trashedWith",
+            "type": "text",
+            "index": true
+          },
+          {
+            "name": "wide",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "session",
+            "type": "ref"
+          }
         ],
         "indexes": [["parent", "template"]],
         "display": {
@@ -50,21 +110,55 @@
           "fields": ["parent"],
           "view": "docs.page",
           "create": true,
-          "filter": { "template": false }
+          "filter": {
+            "template": false
+          }
         }
       },
       {
         "name": "comments",
         "scope": "space",
-        "entity": { "scheme": "doc-comment", "title": "text", "parent": "page" },
-        "access": { "read": "view", "write": "view" },
+        "entity": {
+          "scheme": "doc-comment",
+          "title": "text",
+          "parent": "page"
+        },
+        "access": {
+          "read": "view",
+          "write": "view"
+        },
         "fields": [
-          { "name": "page", "type": "ref", "to": "doc", "index": true, "required": true },
-          { "name": "thread", "type": "text", "index": true },
-          { "name": "body", "type": "json" },
-          { "name": "text", "type": "text", "search": true, "required": true },
-          { "name": "anchor", "type": "json" },
-          { "name": "resolved", "type": "boolean", "default": false }
+          {
+            "name": "page",
+            "type": "ref",
+            "to": "doc",
+            "index": true,
+            "required": true
+          },
+          {
+            "name": "thread",
+            "type": "text",
+            "index": true
+          },
+          {
+            "name": "body",
+            "type": "json"
+          },
+          {
+            "name": "text",
+            "type": "text",
+            "search": true,
+            "required": true
+          },
+          {
+            "name": "anchor",
+            "type": "json"
+          },
+          {
+            "name": "resolved",
+            "type": "boolean",
+            "default": false
+          }
         ]
       }
     ],
@@ -99,8 +193,16 @@
         "description": "Creates a page in the current space and opens it.",
         "icon": "plus"
       },
-      { "id": "docs.open", "title": "Open Docs", "icon": "file" },
-      { "id": "docs.import", "title": "Import Markdown into Docs", "icon": "folder" },
+      {
+        "id": "docs.open",
+        "title": "Open Docs",
+        "icon": "file"
+      },
+      {
+        "id": "docs.import",
+        "title": "Import Markdown into Docs",
+        "icon": "folder"
+      },
       {
         "id": "docs.read",
         "title": "Read a page as Markdown",
@@ -175,18 +277,53 @@
         "description": "Set properties of a Docs page by name (Status, Owner, Review...). New names become properties of the page."
       }
     ],
-    "composer": [{ "type": "mention", "id": "docs.mention", "title": "Pages", "schemes": ["doc"] }],
     "views": [
-      { "id": "docs.home", "title": "Docs", "slot": "main", "icon": "file" },
-      { "id": "docs.page", "title": "Page", "slot": "main", "icon": "file" },
-      { "id": "docs.comment", "title": "Comment", "slot": "main", "icon": "chat" }
+      {
+        "id": "docs.home",
+        "title": "Docs",
+        "slot": "main",
+        "icon": "file"
+      },
+      {
+        "id": "docs.page",
+        "title": "Page",
+        "slot": "main",
+        "icon": "file"
+      },
+      {
+        "id": "docs.comment",
+        "title": "Comment",
+        "slot": "main",
+        "icon": "chat"
+      }
     ],
-    "nav": [{ "id": "docs.nav", "title": "Docs", "view": "docs.home", "icon": "book-open" }],
+    "nav": [
+      {
+        "id": "docs.nav",
+        "title": "Docs",
+        "view": "docs.home",
+        "icon": "book-open"
+      }
+    ],
     "routes": [
-      { "path": "/", "view": "docs.home", "context": "rookery.space" },
-      { "path": "/home/*path", "view": "docs.home", "context": "rookery.space" },
-      { "path": "/comment/:comment", "view": "docs.comment" },
-      { "path": "/:page", "view": "docs.page" }
+      {
+        "path": "/",
+        "view": "docs.home",
+        "context": "rookery.space"
+      },
+      {
+        "path": "/home/*path",
+        "view": "docs.home",
+        "context": "rookery.space"
+      },
+      {
+        "path": "/comment/:comment",
+        "view": "docs.comment"
+      },
+      {
+        "path": "/:page",
+        "view": "docs.page"
+      }
     ],
     "blocks": [
       {
@@ -195,16 +332,31 @@
         "description": "Table, board or list",
         "icon": "grid",
         "keywords": ["table", "board", "kanban", "list", "view", "inline"],
-        "width": { "default": "reading", "allowed": ["reading", "wide", "full"] },
+        "width": {
+          "default": "reading",
+          "allowed": ["reading", "wide", "full"]
+        },
         "attrs": {
           "type": "object",
           "properties": {
-            "source": { "type": ["object", "null"], "default": null },
+            "source": {
+              "type": ["object", "null"],
+              "default": null
+            },
             "view": {
               "type": "object",
-              "default": { "layout": "table", "groupBy": null, "sorts": [], "filters": [], "fields": [] }
+              "default": {
+                "layout": "table",
+                "groupBy": null,
+                "sorts": [],
+                "filters": [],
+                "fields": []
+              }
             },
-            "title": { "type": "string", "default": "" }
+            "title": {
+              "type": "string",
+              "default": ""
+            }
           }
         },
         "text": "{title}",
@@ -219,8 +371,14 @@
         "attrs": {
           "type": "object",
           "properties": {
-            "uri": { "type": "string", "default": "" },
-            "title": { "type": "string", "default": "" }
+            "uri": {
+              "type": "string",
+              "default": ""
+            },
+            "title": {
+              "type": "string",
+              "default": ""
+            }
           }
         },
         "text": "{title}",
@@ -232,12 +390,21 @@
         "description": "Anything with a card, live: a saved view as a table or a board",
         "icon": "layers",
         "keywords": ["embed", "view", "saved view", "table", "board", "card", "item"],
-        "width": { "default": "reading", "allowed": ["reading", "wide", "full"] },
+        "width": {
+          "default": "reading",
+          "allowed": ["reading", "wide", "full"]
+        },
         "attrs": {
           "type": "object",
           "properties": {
-            "uri": { "type": "string", "default": "" },
-            "title": { "type": "string", "default": "" }
+            "uri": {
+              "type": "string",
+              "default": ""
+            },
+            "title": {
+              "type": "string",
+              "default": ""
+            }
           }
         },
         "text": "{title}",
@@ -249,7 +416,10 @@
         "description": "The headings of this document",
         "icon": "list",
         "keywords": ["toc", "contents", "outline", "headings"],
-        "attrs": { "type": "object", "properties": {} },
+        "attrs": {
+          "type": "object",
+          "properties": {}
+        },
         "text": "",
         "markdown": ""
       },
@@ -262,8 +432,14 @@
         "attrs": {
           "type": "object",
           "properties": {
-            "document": { "type": "string", "default": "" },
-            "from": { "type": "string", "default": "" }
+            "document": {
+              "type": "string",
+              "default": ""
+            },
+            "from": {
+              "type": "string",
+              "default": ""
+            }
           }
         },
         "text": "",
@@ -277,12 +453,35 @@
         "description": "The pages of the space that changed last, live.",
         "icon": "file",
         "category": "Docs",
-        "sizes": { "default": { "w": 4, "h": 4 }, "min": { "w": 3, "h": 2 }, "max": { "w": 8, "h": 10 } },
+        "sizes": {
+          "default": {
+            "w": 4,
+            "h": 4
+          },
+          "min": {
+            "w": 3,
+            "h": 2
+          },
+          "max": {
+            "w": 8,
+            "h": 10
+          }
+        },
         "settings": {
           "type": "object",
           "properties": {
-            "heading": { "type": "string", "title": "Heading", "default": "Recent pages" },
-            "limit": { "type": "integer", "title": "Pages shown", "default": 8, "minimum": 1, "maximum": 30 }
+            "heading": {
+              "type": "string",
+              "title": "Heading",
+              "default": "Recent pages"
+            },
+            "limit": {
+              "type": "integer",
+              "title": "Pages shown",
+              "default": 8,
+              "minimum": 1,
+              "maximum": 30
+            }
           }
         }
       },
@@ -292,12 +491,33 @@
         "description": "One page, live, on a dashboard.",
         "icon": "file",
         "category": "Docs",
-        "sizes": { "default": { "w": 6, "h": 6 }, "min": { "w": 3, "h": 3 }, "max": { "w": 12, "h": 16 } },
+        "sizes": {
+          "default": {
+            "w": 6,
+            "h": 6
+          },
+          "min": {
+            "w": 3,
+            "h": 3
+          },
+          "max": {
+            "w": 12,
+            "h": 16
+          }
+        },
         "settings": {
           "type": "object",
           "properties": {
-            "page": { "type": "string", "title": "Page", "description": "The page's link (doc://…) or id." },
-            "editable": { "type": "boolean", "title": "Edit in place", "default": false }
+            "page": {
+              "type": "string",
+              "title": "Page",
+              "description": "The page's link (doc://…) or id."
+            },
+            "editable": {
+              "type": "boolean",
+              "title": "Edit in place",
+              "default": false
+            }
           }
         },
         "areas": ["dashboard", "home"]
@@ -313,7 +533,13 @@
           "params": {},
           "order": 10
         },
-        { "id": "docs.all", "title": "Open Docs", "icon": "file", "view": "docs.home", "order": 11 }
+        {
+          "id": "docs.all",
+          "title": "Open Docs",
+          "icon": "file",
+          "view": "docs.home",
+          "order": 11
+        }
       ]
     }
   }

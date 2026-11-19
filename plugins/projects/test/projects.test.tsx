@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import type { ClientRookery, SpaceInfo, ViewComponent, ViewHandle } from "@rookery/sdk/client"
 import { createRoot, createSignal } from "solid-js"
 import { render } from "solid-js/web"
-import manifest from "../plugin.json"
+import manifest from "../rookery/plugin.json"
 import projectsClient from "../src/client"
 import { disposeAll } from "../src/ui/store"
 

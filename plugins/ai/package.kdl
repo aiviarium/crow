@@ -1,0 +1,24 @@
+format 1
+
+package {
+  group crow
+  id ai
+  version "0.1.0"
+}
+
+about {
+  name "Models"
+  summary "Model services: text generation and speech to text through connections to model APIs, with tasks mapped to models, usage and limits."
+  license MIT
+  license Apache-2.0
+  repository "https://github.com/aiviarium/crow"
+  keywords rookery-plugin
+}
+
+targets {
+  rookery {
+    requires {
+      rookery ">=0.6"
+    }
+  }
+}

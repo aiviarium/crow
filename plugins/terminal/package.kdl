@@ -1,0 +1,24 @@
+format 1
+
+package {
+  group crow
+  id terminal
+  version "0.1.0"
+}
+
+about {
+  name "Terminal"
+  summary "Terminals on any host: an xterm.js viewer, sessions per host, the bottom panel with tabs and a split, and the host's screen."
+  license MIT
+  license Apache-2.0
+  repository "https://github.com/aiviarium/crow"
+  keywords rookery-plugin
+}
+
+targets {
+  rookery {
+    requires {
+      rookery ">=0.6"
+    }
+  }
+}

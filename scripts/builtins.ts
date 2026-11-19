@@ -3,8 +3,8 @@
 // generated before typecheck, test, build and dev, and is not committed.
 //
 // The packaged shell loads the plugins a Rookery server serves instead (`plugins.list`); see
-// `src/app/state.ts` for when these are used. A plugin is a Hatchery package once it has
-// `rookery/plugin.json`, and until then its `plugin.json` is the prototype's shape; either is read here.
+// `src/app/state.ts` for when these are used. A plugin's manifest is `rookery/plugin.json`, the target
+// Rookery's `schemas/plugin.schema.json` describes.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
@@ -12,10 +12,8 @@ const root = join(import.meta.dir, "..")
 
 /** The manifest of a plugin's folder, as it is in the source tree. */
 function manifestOf(name: string): string | null {
-  for (const path of ["rookery/plugin.json", "plugin.json"]) {
-    const file = join(root, "plugins", name, path)
-    if (existsSync(file)) return `../../../plugins/${name}/${path}`
-  }
+  const path = "rookery/plugin.json"
+  if (existsSync(join(root, "plugins", name, path))) return `../../../plugins/${name}/${path}`
   return null
 }
 
