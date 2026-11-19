@@ -1,12 +1,14 @@
-// Port links: a port on a host's loopback, through the server's proxy at `/env/<name>/port/<n>/`. The
-// card on the host's page keeps the ports a person opened there (in localStorage: a link is theirs), and
-// `fleet.port` shows one in a frame of its own. Ported from the prototype's workbench preview pane.
+// Port links: a port on a host's loopback, reached through Rookery at `/env/<name>/port/<n>/`, which
+// mints a one-use ticket and redirects to the port's own origin. The card on the host's page keeps the
+// ports a person opened there (in localStorage: a link is theirs), and `fleet.port` shows one in a frame
+// of its own, asking `env.portUrl` for the address the frame goes to. Ported from the prototype's
+// workbench preview pane.
 import { Button, Callout, Card, EmptyState, IconButton, TextField, ViewHeader } from "@aiviarium/nocturne"
-import type { EnvInfo } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { createResource, createSignal, For, type JSX, Show } from "solid-js"
 import { allows, type Who } from "./access"
-import { envName, type FleetEnvApi, portUrl } from "./env"
+import { envName, type FleetEnvApi, portPath } from "./env"
+import type { EnvInfo } from "./types"
 
 export interface PortLink {
   port: number
@@ -129,10 +131,10 @@ export function PortsCard(props: {
                   <li class="fleet-ports__row" data-port={link.port}>
                     <a
                       class="fleet-ports__link mono"
-                      href={portUrl(name(), link.port)}
+                      href={portPath(name(), link.port)}
                       target="_blank"
                       rel="noopener"
-                      title={portUrl(name(), link.port)}
+                      title={portPath(name(), link.port)}
                     >
                       {link.port}
                     </a>
@@ -179,10 +181,20 @@ export function PortPage(props: {
   )
   const [draft, setDraft] = createSignal(port() ? String(port()) : "")
   const [nonce, setNonce] = createSignal(0)
-  const [env] = createResource(() => props.envs.get(`env://${host()}`).catch(() => undefined))
+  const [env] = createResource(() => props.envs.get(host()).catch(() => undefined))
   const who = (): Who => ({ level: env()?.level, admin: props.admin })
   props.view.setTitle(port() ? `Port ${port()} on ${host()}` : `Ports on ${host()}`)
-  const url = () => (port() ? portUrl(host(), port()!) : null)
+  // The frame goes to `env.portUrl`'s one-use address on the ports' own origin. A server without it, or
+  // a refusal, falls back to Rookery's own `/env/<name>/port/<n>/`, which mints the ticket itself.
+  const [address, { refetch: refetchAddress }] = createResource(
+    () => (port() && allows(who(), "use") ? ([host(), port()!] as const) : null),
+    ([h, p]) =>
+      props.envs
+        .portUrl(h, p)
+        .then((u) => u.url)
+        .catch(() => portPath(h, p)),
+  )
+  const href = () => (port() ? portPath(host(), port()!) : null)
   const go = (e?: Event) => {
     e?.preventDefault()
     const n = Number(draft())
@@ -223,10 +235,17 @@ export function PortPage(props: {
         <Button type="submit" size="sm">
           Show
         </Button>
-        <Show when={url()}>
+        <Show when={href()}>
           {(u) => (
             <>
-              <IconButton label="Reload" icon="activity" onClick={() => setNonce(nonce() + 1)} />
+              <IconButton
+                label="Reload"
+                icon="activity"
+                onClick={() => {
+                  setNonce(nonce() + 1)
+                  void refetchAddress()
+                }}
+              />
               <Button size="sm" variant="secondary" href={u()}>
                 Open in a new tab
               </Button>
@@ -235,7 +254,7 @@ export function PortPage(props: {
         </Show>
       </form>
       <Show
-        when={url()}
+        when={address()}
         fallback={
           <EmptyState
             icon="link"

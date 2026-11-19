@@ -1,10 +1,10 @@
 // The terminal session list per host: the person's terminals there (with the host's text preview of the
-// session's screen), the host's other terminal sessions, which can be adopted as Rookery terminals, and a
-// form to open a new terminal in a directory.
+// session's screen), the host's other terminal sessions, which a host's manager can adopt as Rookery
+// terminals, and a form to open a new terminal in a directory.
 //
 // Ported from the prototype's `plugins/terminal/sessions.tsx`, minus the berth kind and the terminal
-// sharing the prototype had: terminals are private to their owner (see `env.presence`), so a terminal is
-// not shared and only its link is copied.
+// sharing the prototype had: terminals are private to their owner (see `env.presence`), so a `view`
+// holder sees only the counts and never another person's terminal or screen.
 import {
   Button,
   Card,
@@ -20,12 +20,14 @@ import {
   TextField,
   ViewHeader,
 } from "@aiviarium/nocturne"
-import type { Checkout, EnvInfo, EnvSession, TerminalInfo } from "@rookery/client"
+import type { EnvInfo } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { createEffect, createResource, createSignal, For, type JSX, on, onCleanup, Show } from "solid-js"
-import { createHostsApi, envName, type HostsApi } from "./hosts"
+import { envName } from "./env"
+import { createHostsApi, type HostsApi } from "./hosts"
 import { addToPanel, openPanel } from "./panel"
 import type { TerminalsApi } from "./termApi"
+import type { EnvSession, TerminalInfo } from "./types"
 
 const LAST_ENV = "crow.terminal.env"
 
@@ -58,7 +60,6 @@ export function NewTerminalForm(props: {
   rookery: ClientRookery
   terminals: TerminalsApi
   env: string
-  checkouts: Checkout[]
   onOpened?: (t: TerminalInfo) => void
 }): JSX.Element {
   const [cwd, setCwd] = createSignal("")
@@ -94,11 +95,7 @@ export function NewTerminalForm(props: {
         placeholder="home folder"
         value={cwd()}
         onInput={(e) => setCwd(e.currentTarget.value)}
-        list="term-checkouts"
       />
-      <datalist id="term-checkouts">
-        <For each={props.checkouts}>{(c) => <option value={c.path}>{c.branch ?? c.name}</option>}</For>
-      </datalist>
       <TextField
         label="Command"
         mono
@@ -109,19 +106,6 @@ export function NewTerminalForm(props: {
       <Button type="submit" variant="primary" icon="terminal" loading={busy()} disabled={!props.env}>
         Open terminal
       </Button>
-      <Show when={props.checkouts.length}>
-        <div class="term-new__checkouts">
-          <span class="nc-meta">Checkouts</span>
-          <For each={props.checkouts}>
-            {(c) => (
-              <Button size="sm" variant="secondary" onClick={() => setCwd(c.path)} title={c.path}>
-                {c.name}
-                {c.branch ? ` · ${c.branch}` : ""}
-              </Button>
-            )}
-          </For>
-        </div>
-      </Show>
     </form>
   )
 }
@@ -162,11 +146,6 @@ export function SessionsView(props: {
     ([e]) => props.terminals.sessions(e as string, { preview: true }).catch(() => [] as EnvSession[]),
     { initialValue: [] as EnvSession[] },
   )
-  const [checkouts] = createResource(
-    () => (current()?.level === "use" || current()?.level === "manage" ? env() : null),
-    (e) => hosts.checkouts(e as string).catch(() => [] as Checkout[]),
-    { initialValue: [] as Checkout[] },
-  )
   const offT = props.terminals.onChanged(() => setTick(tick() + 1))
   const offE = hosts.onChanged(() => refetchEnvs())
   const timer = setInterval(() => setTick(tick() + 1), 5000)
@@ -176,11 +155,10 @@ export function SessionsView(props: {
     clearInterval(timer)
   })
   const previewOf = (t: TerminalInfo) => sessions().find((s) => s.id === t.sessionId)?.preview
+  // The server says which sessions are already a terminal (`adopted`) and names the one this caller may
+  // see (`terminal`); a session with neither is one a manager may take over with `terminals.adopt`.
   const others = () =>
-    sessions().filter(
-      (s) =>
-        s.kind === "terminal" && !s.terminal && !s.ended && !terminals().some((t) => t.sessionId === s.id),
-    )
+    sessions().filter((s) => s.kind === "terminal" && !s.adopted && !s.terminal && !s.ended)
   const adopt = async (s: EnvSession) => {
     try {
       openTerminal(props.rookery, await props.terminals.adopt(env(), s.id))
@@ -238,7 +216,6 @@ export function SessionsView(props: {
               rookery={props.rookery}
               terminals={props.terminals}
               env={env()}
-              checkouts={checkouts()}
               onOpened={() => setTick(tick() + 1)}
             />
           </Card>
@@ -336,9 +313,19 @@ export function SessionsView(props: {
                         <span class="nc-meta term-card__meta">
                           {s.user} · {ago(s.started)}
                         </span>
-                        <Button size="sm" variant="secondary" onClick={() => adopt(s)}>
-                          Open
-                        </Button>
+                        <Show
+                          when={current()?.level === "manage"}
+                          fallback={
+                            <span class="nc-meta">
+                              Taking one over needs manage on {env()}; you have{" "}
+                              {current()?.level ?? "no access"}.
+                            </span>
+                          }
+                        >
+                          <Button size="sm" variant="secondary" onClick={() => adopt(s)}>
+                            Open
+                          </Button>
+                        </Show>
                       </div>
                       <Show when={s.preview}>
                         <pre class="term-card__preview mono">{s.preview}</pre>

@@ -132,13 +132,6 @@
     gap: var(--space-3);
   }
 
-  .term-new__checkouts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    align-items: center;
-  }
-
   .term-sessions__list {
     display: flex;
     flex-direction: column;

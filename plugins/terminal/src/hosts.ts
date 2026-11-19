@@ -1,25 +1,25 @@
 // The hosts the terminal plugin works on, through `env.*` (hosts as environments, `env://NAME`). Only
-// what the terminal views need: the list for the picker, the checkouts under the new-terminal form, and
-// the `env.changed` topic that keeps the picker current.
-import type { Checkout, EnvInfo } from "@rookery/client"
+// what the terminal views need: the list for the picker, and the `env.changed` topic that keeps the
+// picker current. `env.checkouts` is not among them: it is deferred to M5 on the server, so the
+// new-terminal form takes a typed directory instead of suggesting one.
+import type { EnvInfo } from "@rookery/client"
 import type { ClientRookery } from "@rookery/sdk/client"
+import { envUri } from "./env"
 
 export interface HostsApi {
   list(): Promise<EnvInfo[]>
   get(env: string): Promise<EnvInfo>
-  /** Git checkouts on the host, to suggest as a terminal's directory. */
-  checkouts(env: string): Promise<Checkout[]>
-  /** `env.changed`: an environment's state or access changed. Returns a function that stops listening. */
-  onChanged(fn: (env: EnvInfo) => void): () => void
+  /** `env.changed`: an environment's state or access changed, or it was removed. Returns a function that stops listening. */
+  onChanged(fn: (e: EnvChanged) => void): () => void
 }
 
-/** `env.changed` carries the environment that changed. */
+/** The payload of `rookery/env.changed`, as rookery#42 sends it: `env://NAME`, and the environment until
+ * it is removed. */
 export interface EnvChanged {
-  environment: EnvInfo
-}
-
-export function envName(env: string): string {
-  return env.replace(/^env:\/\//, "")
+  /** `env://<name>`. */
+  env: string
+  environment?: EnvInfo
+  removed?: boolean
 }
 
 export function createHostsApi(rookery: ClientRookery): HostsApi {
@@ -28,18 +28,14 @@ export function createHostsApi(rookery: ClientRookery): HostsApi {
       const res = await rookery.rpc.call<{ environments: EnvInfo[] }>("env.list", {})
       return res.environments ?? []
     },
-    get: (env) => rookery.rpc.call<EnvInfo>("env.get", { env }),
-    checkouts: async (env) => {
-      const res = await rookery.rpc.call<{ checkouts: Checkout[] }>("env.checkouts", { env })
-      return res.checkouts ?? []
-    },
+    get: (env) => rookery.rpc.call<EnvInfo>("env.get", { env: envUri(env) }),
     onChanged(fn) {
       let off: (() => void) | undefined
       let stopped = false
       void rookery.events
         .subscribe("rookery/env.changed", (payload) => {
           const e = payload as EnvChanged | undefined
-          if (e?.environment) fn(e.environment)
+          if (e?.env) fn(e)
         })
         .then((d) => {
           if (stopped) d.dispose()

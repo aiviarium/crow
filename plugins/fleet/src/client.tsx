@@ -58,7 +58,13 @@ export default defineClient(async (rookery) => {
   rookery.views.register("fleet.job", (props) => <JobView view={props.view} rookery={rookery} api={api} />)
 
   rookery.views.register("fleet.desktop", (props) => (
-    <DesktopPage view={props.view} rookery={rookery} envs={api.env} admin={api.isAdmin()} />
+    <DesktopPage
+      view={props.view}
+      rookery={rookery}
+      envs={api.env}
+      admin={api.isAdmin()}
+      screenshot={api.screenshot}
+    />
   ))
   rookery.views.register("fleet.port", (props) => (
     <PortPage view={props.view} rookery={rookery} envs={api.env} admin={api.isAdmin()} />
