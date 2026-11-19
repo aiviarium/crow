@@ -9,7 +9,9 @@
       { "id": "fleet.host", "title": "Host", "icon": "server" },
       { "id": "fleet.job", "title": "Job", "icon": "activity" },
       { "id": "fleet.desktop", "title": "Desktop", "icon": "grid" },
-      { "id": "fleet.port", "title": "Port", "icon": "link" }
+      { "id": "fleet.port", "title": "Port", "icon": "link" },
+      { "id": "fleet.provisioners", "title": "Provisioners", "icon": "package" },
+      { "id": "fleet.admin", "title": "Admin", "icon": "settings" }
     ],
     "routes": [
       { "path": "", "view": "fleet.hosts" },
@@ -17,15 +19,28 @@
       { "path": "hosts/:name", "view": "fleet.host" },
       { "path": "hosts/:name/desktop", "view": "fleet.desktop" },
       { "path": "hosts/:name/port/:port", "view": "fleet.port" },
+      { "path": "provisioners", "view": "fleet.provisioners" },
+      { "path": "admin", "view": "fleet.admin" },
+      { "path": "admin/:section", "view": "fleet.admin" },
       { "path": "jobs/:id", "view": "fleet.job" }
     ],
     "nav": [{ "id": "fleet.hosts", "title": "Fleet", "view": "fleet.hosts", "icon": "server" }],
     "commands": [
       { "id": "fleet.hosts", "title": "Open Fleet", "category": "Fleet" },
-      { "id": "fleet.addHost", "title": "Add host", "category": "Fleet" }
+      { "id": "fleet.addHost", "title": "Add host", "category": "Fleet" },
+      { "id": "fleet.newMachine", "title": "New machine", "category": "Fleet" },
+      { "id": "fleet.provisioners", "title": "Open provisioners", "category": "Fleet" },
+      { "id": "fleet.admin", "title": "Open server admin", "category": "Fleet" }
     ],
     "collections": [],
     "settings": [],
-    "adminPages": []
+    "adminPages": [
+      {
+        "id": "fleet.admin",
+        "title": "Fleet",
+        "icon": "server",
+        "view": "fleet.admin"
+      }
+    ]
   }
 }

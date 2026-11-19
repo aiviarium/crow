@@ -19,13 +19,16 @@ import { AddHostDialog } from "./AddHostDialog"
 import type { HostInfo } from "./api"
 import type { FleetApi } from "./fleetApi"
 import { errorMessage, type HostStatusKind, hostStatus, hostTypeLabel, hostTypeTone } from "./format"
+import { NewMachineDialog } from "./NewMachineDialog"
 
 export interface FleetStore {
   readonly hosts: Accessor<HostInfo[]>
   readonly loading: Accessor<boolean>
   readonly error: Accessor<string | null>
   readonly addOpen: Accessor<boolean>
+  readonly machineOpen: Accessor<boolean>
   setAddOpen(open: boolean): void
+  setMachineOpen(open: boolean): void
   refresh(): Promise<void>
 }
 
@@ -75,7 +78,7 @@ export function FleetView(props: {
     })
   })
 
-  const openHost = (host: HostInfo) => {
+  const openHost = (host: { name: string }) => {
     props.rookery.workbench.openView("fleet.host", { params: { name: host.name } })
   }
 
@@ -194,6 +197,19 @@ export function FleetView(props: {
               onClick: () => void props.store.refresh(),
             },
             {
+              id: "new-machine",
+              label: "New machine",
+              icon: "plus",
+              onClick: () => props.store.setMachineOpen(true),
+            },
+            {
+              id: "provisioners",
+              label: "Provisioners",
+              icon: "package",
+              overflow: true,
+              onClick: () => props.rookery.workbench.openView("fleet.provisioners"),
+            },
+            {
               id: "add-host",
               label: "Add host",
               icon: "plus",
@@ -273,6 +289,19 @@ export function FleetView(props: {
               openHost(host)
             }
           }}
+        />
+
+        <NewMachineDialog
+          open={props.store.machineOpen()}
+          api={props.api}
+          onClose={() => props.store.setMachineOpen(false)}
+          onCreated={({ host }) => {
+            props.store.setMachineOpen(false)
+            void props.store.refresh()
+            openHost({ name: host })
+          }}
+          onOpenProvisioners={() => props.rookery.workbench.openView("fleet.provisioners")}
+          onOpenJob={(jobId) => openJob(jobId)}
         />
       </div>
     </ViewLayout>
