@@ -11,8 +11,8 @@ export interface PluginRegistry {
   kind: string
   location: string
   name: string
-  /** The groups it may serve; any when empty. */
-  only: string[]
+  /** The groups it may serve; any when empty. The server leaves it out when it serves any. */
+  only?: string[]
   key?: string | null
   min_age?: string | null
   unsigned_tags?: boolean
