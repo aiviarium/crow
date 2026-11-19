@@ -209,6 +209,9 @@ export function createAgentsStore(rookery: ClientRookery): AgentsStore {
     let connecting: Promise<ParrotConnection> | null = null
     let indexSubId: string | null = null
     let offUpdate: (() => void) | null = null
+    // Every `connect` takes a number of its own: a handshake that ends after a newer one began,
+    // or after `close`, is closed instead of kept, so a forced reconnect replaces the old stream.
+    let generation = 0
 
     const applyIndexUpdate = (u: Update) => {
       switch (u.type) {
@@ -235,6 +238,8 @@ export function createAgentsStore(rookery: ClientRookery): AgentsStore {
     }
 
     const tearDown = () => {
+      // A handshake still running is now superseded, so it closes when it arrives.
+      generation++
       offUpdate?.()
       offUpdate = null
       indexSubId = null
@@ -271,12 +276,18 @@ export function createAgentsStore(rookery: ClientRookery): AgentsStore {
       }
       if (!force && connecting) return connecting
       if (force) tearDown()
+      const mine = ++generation
 
       setStatus("connecting")
       setError(null)
 
       const promise = (async () => {
         const conn = await connectParrot(rookery, host)
+        // A newer connect began, or the store closed, while this handshake ran.
+        if (mine !== generation) {
+          conn.close()
+          throw new Error("a newer connection replaced this one")
+        }
         activeConn = conn
 
         offUpdate = conn.client.on("update", (params) => {
@@ -298,8 +309,22 @@ export function createAgentsStore(rookery: ClientRookery): AgentsStore {
           }
         }
 
-        try {
-          const sub = await conn.client.subscribe({ index: true })
+        // A stream that lost its place is closed and never used: the newer connect owns the store.
+        const superseded = () => {
+          if (mine === generation) return false
+          if (activeConn === conn) {
+            offUpdate?.()
+            offUpdate = null
+            activeConn = null
+            indexSubId = null
+          }
+          conn.close()
+          return true
+        }
+
+        const sub = await conn.client.subscribe({ index: true }).catch(() => null)
+        if (superseded()) throw new Error("a newer connection replaced this one")
+        if (sub) {
           indexSubId = sub.subscription
           if (sub.snapshot?.index) {
             batch(() => {
@@ -310,15 +335,18 @@ export function createAgentsStore(rookery: ClientRookery): AgentsStore {
             // Best-effort workspace list (not part of IndexSnapshot).
             conn.client
               .call("workspace/list", {})
-              .then((res) => setWorkspaces(res.workspaces))
+              .then((res) => {
+                if (!superseded()) setWorkspaces(res.workspaces)
+              })
               .catch(() => {})
           } else {
             await hydrateLists(conn)
           }
-        } catch {
-          // If a runtime doesn't support index subscriptions yet, fall back to RPC lists.
+        } else {
+          // A runtime that does not support index subscriptions yet gets the RPC lists.
           await hydrateLists(conn)
         }
+        if (superseded()) throw new Error("a newer connection replaced this one")
 
         setStatus("connected")
         return conn
@@ -328,9 +356,12 @@ export function createAgentsStore(rookery: ClientRookery): AgentsStore {
       try {
         return await promise
       } catch (err) {
-        setStatus("error")
-        setError(errorMessage(err))
-        tearDown()
+        // Only the newest attempt reports, so a handshake it replaced does not end it.
+        if (mine === generation) {
+          setStatus("error")
+          setError(errorMessage(err))
+          tearDown()
+        }
         throw err
       } finally {
         if (connecting === promise) connecting = null

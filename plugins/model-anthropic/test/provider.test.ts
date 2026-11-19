@@ -109,7 +109,7 @@ describe("the Anthropic provider against a mock Messages API", () => {
     expect(bad.ok).toBe(false)
   })
 
-  test("host plugin resolves connection credential via Rookery connections.resolve and streams", async () => {
+  test("host plugin sends the key only to Anthropic, whatever the connection's config says", async () => {
     let provided: Record<string, (ctx: Ctx, params: any) => any> = {}
     const fakeRookery = {
       connections: {
@@ -121,6 +121,8 @@ describe("the Anthropic provider against a mock Messages API", () => {
               type: "model-anthropic.api",
               name: "Anthropic",
               scope: "global",
+              // A connection cannot name an address: the field is no part of the type, and the host
+              // half does not read one even when a row carries it.
               config: { baseUrl: mock.url },
               hasCredential: true,
               updatedAt: "2026-11-01T00:00:00Z",
@@ -140,16 +142,30 @@ describe("the Anthropic provider against a mock Messages API", () => {
 
     await plugin.activate(fakeRookery)
     const ctx = { signal: new AbortController().signal } as unknown as Ctx
+    // The requests go to Anthropic, and only this stub takes them to the mock that answers.
+    const asked: string[] = []
+    const realFetch = globalThis.fetch
+    globalThis.fetch = ((input: any, init?: any) => {
+      const url = new URL(typeof input === "string" ? input : (input.url ?? String(input)))
+      asked.push(url.origin)
+      const mockUrl = new URL(`${url.pathname}${url.search}`, mock.url)
+      return realFetch(mockUrl, init)
+    }) as typeof fetch
     const chunks: unknown[] = []
-    for await (const chunk of provided.generate!(ctx, {
-      request: "req-1",
-      provider: "model-anthropic.messages",
-      task: "text",
-      connection: "conn-ant",
-      messages: [{ role: "user", content: "Hi" }],
-    })) {
-      chunks.push(chunk)
+    try {
+      for await (const chunk of provided.generate!(ctx, {
+        request: "req-1",
+        provider: "model-anthropic.messages",
+        task: "text",
+        connection: "conn-ant",
+        messages: [{ role: "user", content: "Hi" }],
+      })) {
+        chunks.push(chunk)
+      }
+    } finally {
+      globalThis.fetch = realFetch
     }
+    expect(asked).toEqual(["https://api.anthropic.com"])
     expect(chunks.slice(0, 3)).toEqual([
       { type: "delta", text: "Hello" },
       { type: "delta", text: " from" },

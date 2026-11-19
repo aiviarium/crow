@@ -13,13 +13,13 @@ Host discovery lives in [`src/api.ts`](./src/api.ts); stream transport and Parro
 
 ## Rookery binary streams
 
-| Method           | Params            | Frames                                                                                                                    | Required level                                                                                                          | Notes                                                                                                                                                                                                                                                                                |
-| ---------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `agents.connect` | `{ env: string }` | Bidirectional UTF-8 NDJSON carrying Parrot JSON-RPC 2.0 messages (`\n`-delimited; `\r\n` tolerated, blank lines ignored). | `use` on `env` (or `view` if Rookery maps read-only callers to a `read`-scoped Parrot connection — see Open Questions). | Opens a single authorised stream from Crow to `parrot serve` on the target host (`env` is canonical `env://<host>`). Rookery authenticates the caller, checks access to `env`, ensures or dials the host's `parrot serve`, and relays bytes bidirectionally over the Rookery stream. |
+| Method           | Params            | Frames                                                                                                                    | Required level  | Notes                                                                                                                                                                                                                                                                                |
+| ---------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `agents.connect` | `{ env: string }` | Bidirectional UTF-8 NDJSON carrying Parrot JSON-RPC 2.0 messages (`\n`-delimited; `\r\n` tolerated, blank lines ignored). | `use` on `env`. | Opens a single authorised stream from Crow to `parrot serve` on the target host (`env` is canonical `env://<host>`). Rookery authenticates the caller, checks access to `env`, ensures or dials the host's `parrot serve`, and relays bytes bidirectionally over the Rookery stream. |
 
 ### `agents.connect` framing & lifecycle
 
-1. **Opening**: The client calls `rookery.streams.open("agents.connect", { env: "env://<host>" })`. Rookery replies with `{ stream: number }` (`StreamOpened`) or a JSON-RPC error (`NOT_FOUND` for unknown host, `PERMISSION_DENIED` for insufficient level, `UNAVAILABLE` if the host or its `parrot serve` is offline/uninstalled).
+1. **Opening**: The client calls `rookery.streams.open("agents.connect", { env: "env://<host>" })`. Rookery replies with `{ stream: number }` (`StreamOpened`) or a JSON-RPC error (`NOT_FOUND` for unknown host, `FORBIDDEN` for insufficient level, `UNAVAILABLE` if the host or its `parrot serve` is offline/uninstalled).
 2. **Binary framing**: Standard Rookery stream wire format over `/ws` — each binary WebSocket frame is `uint32be(streamId)` followed by raw UTF-8 payload bytes, with Rookery credit flow control (`streams.credit`, `streams.eof`, `streams.close`).
 3. **Message framing**: Inside the byte stream, messages are newline-delimited JSON-RPC 2.0 objects (`JSON.stringify(msg) + "\n"`), matching `parrot serve`'s native NDJSON stdio/socket transport. A single Rookery binary chunk may contain multiple lines or split a UTF-8 character/line across chunks; [`rookeryStreamTransport`](./src/transport.ts) uses streaming `TextDecoder` reassembly and serializes outgoing writes so backpressure never reorders frames.
 4. **Handshake**: Immediately after `agents.connect` opens, `@aiviarium/parrot-client` sends Parrot's `initialize` request (`{ peer: { kind: "client", name: "crow-agents", version: "0.1.0" } }`) and receives `InitializeResult` (`runtime`, `protocol`, `connection`, `scopes`, `capabilities`).
@@ -42,13 +42,16 @@ For reference, the plugin calls these Parrot methods over the `agents.connect` s
 - **Interactive requests & controls**: `request/answer`, `option/set`, `action/invoke`
 - **TUI fallback**: `session/screen`, `session/keys`
 
-## Open questions for the Rookery server contract
+## Rookery host access
 
-1. **Agent host capability flag**: `EnvInfo.supports` in `@rookery/client` currently has `{ exec, files, terminal, connect, desktop, workspaces, process, checkouts, privileged, persistentSessions, deploy }` — no `agents` boolean. Should Rookery add `supports.agents: boolean` to `EnvInfo` (reflecting whether the host has the `agents` egg / `parrot serve`), or should the plugin discover capability lazily when `agents.connect` returns `UNAVAILABLE`? (The plugin already reads `supports.agents` if present and still lets users attempt connection otherwise.)
-2. **Authorisation level → Parrot scope mapping**: `plans/design.md` specifies `use` on `env` for `agents.connect`. Should a caller with only `view` on `env` be refused at `agents.connect`, or allowed to connect with Rookery clamping the Parrot connection's `scopes` to `["read"]` so they can inspect transcripts without prompting or answering approvals?
-3. **Principal propagation**: When Rookery dials `parrot serve` on behalf of a Crow user, how does it pass the authenticated Rookery principal so Parrot's `session.origin.principal` and `subscribers` reflect the human user rather than a generic service identity?
-4. **On-demand `parrot serve` startup**: If `parrot serve` is installed on a host (via the agent egg) but not yet running, does `agents.connect` start it lazily (e.g. via systemd socket activation or host agent spawn) and keep the stream open until it responds, or return `UNAVAILABLE`?
-5. **Environment change events**: `crow/plugins/agents` subscribes to `rookery/hosts.changed` for live refresh. Once `env.list` is the primary API, will Rookery emit `rookery/env.changed` (or keep `hosts.changed` as the topic for host environments)?
+The server requires `use` on the environment and opens the stream over its link to the controller.
+Systemd activates Parrot on the host. A host reports its broker through `supports.agents` on
+`EnvInfo`, with `hosts.list` supplying the capability when the environments API is unavailable or
+has an older response. Crow refreshes discovery on `rookery/hosts.changed`.
+
+Parrot currently uses a shared host agent account. The Parrot connection has session scopes
+and the Rookery audit log identifies the caller. The broker protocol carries no separate human
+identity. The Terminals view lists the same sessions and opens each in Agents.
 
 ## Parrot protocol / `@aiviarium/parrot-client` gaps
 

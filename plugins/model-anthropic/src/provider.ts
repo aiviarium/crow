@@ -39,6 +39,24 @@ export const MODELS: ModelInfo[] = [
   { id: "claude-haiku-5-5", title: "Claude Haiku 5.5", tasks: ["fast"] },
 ]
 
+/** A connection names no address, so a key only ever goes to Anthropic. The one other address a
+ *  host half may give is an HTTPS origin, or the loopback a test serves, and never plain HTTP
+ *  elsewhere. */
+export function baseUrlOf(values: Record<string, unknown>): string {
+  const asked = typeof values.baseUrl === "string" ? values.baseUrl.trim() : ""
+  if (!asked) return DEFAULT_BASE_URL
+  let url: URL
+  try {
+    url = new URL(asked)
+  } catch {
+    throw new RookeryError("INVALID", "the Anthropic base URL is not an address")
+  }
+  const loopback = url.hostname === "127.0.0.1" || url.hostname === "::1" || url.hostname === "localhost"
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback))
+    throw new RookeryError("INVALID", "Anthropic requests go to an HTTPS address")
+  return asked.replace(/\/+$/, "")
+}
+
 /** Models with server-side refusal fallbacks (`fallbacks: "default"`). */
 const FALLBACK_MODELS = new Set([
   "claude-opus-5-5",
@@ -50,9 +68,12 @@ const FALLBACK_MODELS = new Set([
 export function client(values: Record<string, unknown>): Anthropic {
   const apiKey = typeof values.apiKey === "string" ? values.apiKey : ""
   if (!apiKey) throw new RookeryError("UNAVAILABLE", "the Anthropic connection has no API key")
-  const baseURL =
-    typeof values.baseUrl === "string" && values.baseUrl.trim() ? values.baseUrl.trim() : DEFAULT_BASE_URL
-  return new Anthropic({ apiKey, baseURL: baseURL.replace(/\/+$/, ""), maxRetries: 1 })
+  return new Anthropic({
+    apiKey,
+    baseURL: baseUrlOf(values),
+    maxRetries: 1,
+    fetchOptions: { redirect: "error" },
+  })
 }
 
 /** An SDK error as one of the protocol's codes. */
