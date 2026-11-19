@@ -19,6 +19,7 @@ import {
 import type { ConnectionInfo } from "@rookery/sdk/client"
 import { createMemo, createResource, createSignal, For, type JSX, Show } from "solid-js"
 import type { Calls, Limits, MappingInfo, Task, UsageBy, UsageRow } from "./calls"
+import { ANTHROPIC_TYPE, type ManagedModels } from "./managed"
 import type { ClientRookeryWithAi } from "./types"
 
 const TASKS: Array<{ task: Task; title: string }> = [
@@ -35,13 +36,17 @@ export function ModelsPage(props: {
   rookery: ClientRookeryWithAi
   calls: Calls
   refreshTasks: () => void
+  managed: ManagedModels
 }): JSX.Element {
   const { rookery, calls } = props
   const [mappings, { refetch }] = createResource(() => calls.mappings())
   const [providers] = createResource(() => calls.providers())
-  const [connections] = createResource(() =>
+  const [connections, { refetch: refetchConnections }] = createResource(() =>
     rookery.connections.list().then((list) => list.filter((c) => c.scope === "global")),
   )
+  const [managed] = createResource(props.managed.available)
+  const [admin] = createResource(() => props.managed.asAdmin().catch(() => false))
+  const supportedTasks = () => TASKS.filter((t) => !managed() || t.task !== "transcription")
   // Bumped after each try, so the usage includes it.
   const [usageVersion, setUsageVersion] = createSignal(0)
   const changed = () => {
@@ -57,13 +62,16 @@ export function ModelsPage(props: {
   }
   return (
     <div class="ai__page" data-part="admin-models">
+      <Show when={managed() && admin()}>
+        <AddAnthropic rookery={rookery} onAdded={() => void refetchConnections()} />
+      </Show>
       <Show
         when={(connections()?.length ?? 1) > 0 || (mappings()?.length ?? 0) > 0}
         fallback={<EmptyState icon="cpu" title="No model API connected" />}
       >
         <section class="ai__section">
           <SectionHeading title="Tasks" />
-          <For each={TASKS}>
+          <For each={supportedTasks()}>
             {(t) => (
               <TaskRow
                 calls={calls}
@@ -81,11 +89,59 @@ export function ModelsPage(props: {
           calls={calls}
           available={(task) => Boolean(global(task))}
           onRan={() => setUsageVersion((v) => v + 1)}
+          streaming={!managed()}
         />
-        <Usage rookery={rookery} calls={calls} version={usageVersion()} />
-        <LimitsPanel rookery={rookery} calls={calls} />
+        <Show when={!managed()}>
+          <Usage rookery={rookery} calls={calls} version={usageVersion()} />
+          <LimitsPanel rookery={rookery} calls={calls} />
+        </Show>
       </Show>
     </div>
+  )
+}
+
+function AddAnthropic(props: { rookery: ClientRookeryWithAi; onAdded: () => void }): JSX.Element {
+  const [name, setName] = createSignal("Anthropic")
+  const [saving, setSaving] = createSignal(false)
+  const [status, setStatus] = createSignal("")
+  const add = async (e: SubmitEvent) => {
+    e.preventDefault()
+    const form = e.currentTarget as HTMLFormElement
+    const input = new FormData(form).get("apiKey")
+    if (typeof input !== "string" || !input.trim()) return
+    setSaving(true)
+    setStatus("")
+    try {
+      await props.rookery.connections.create({
+        type: ANTHROPIC_TYPE,
+        name: name().trim(),
+        scope: "global",
+        config: {},
+        credential: input.trim(),
+      })
+      form.reset()
+      setStatus("Connection added")
+      props.onAdded()
+    } catch (err) {
+      setStatus(message(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <section class="ai__section">
+      <SectionHeading title="Add an Anthropic connection" />
+      <form class="ai__control" onSubmit={add}>
+        <TextField label="Name" value={name()} onInput={(e) => setName(e.currentTarget.value)} required />
+        <TextField label="API key" name="apiKey" type="password" autocomplete="off" required />
+        <Button size="sm" variant="primary" type="submit" loading={saving()}>
+          Connect
+        </Button>
+      </form>
+      <Show when={status()}>
+        <p role="status">{status()}</p>
+      </Show>
+    </section>
   )
 }
 
@@ -249,7 +305,12 @@ function Privacy(props: { mappings: MappingInfo[] }): JSX.Element {
 }
 
 /** A box per task to see that it works. */
-function TryIt(props: { calls: Calls; available: (task: Task) => boolean; onRan: () => void }): JSX.Element {
+function TryIt(props: {
+  calls: Calls
+  available: (task: Task) => boolean
+  onRan: () => void
+  streaming: boolean
+}): JSX.Element {
   const [task, setTask] = createSignal<Task>("text")
   const [prompt, setPrompt] = createSignal("Write one sentence about the sea.")
   const [out, setOut] = createSignal("")
@@ -320,7 +381,7 @@ function TryIt(props: { calls: Calls; available: (task: Task) => boolean; onRan:
               >
                 Run
               </Button>
-              <Show when={running()}>
+              <Show when={running() && props.streaming}>
                 <Button variant="ghost" size="sm" onClick={() => abort?.abort()}>
                   Stop
                 </Button>

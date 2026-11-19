@@ -52,7 +52,12 @@ export function client(values: Record<string, unknown>): Anthropic {
   if (!apiKey) throw new RookeryError("UNAVAILABLE", "the Anthropic connection has no API key")
   const baseURL =
     typeof values.baseUrl === "string" && values.baseUrl.trim() ? values.baseUrl.trim() : DEFAULT_BASE_URL
-  return new Anthropic({ apiKey, baseURL: baseURL.replace(/\/+$/, ""), maxRetries: 1 })
+  return new Anthropic({
+    apiKey,
+    baseURL: baseURL.replace(/\/+$/, ""),
+    maxRetries: 1,
+    ...(values.rejectRedirects === true ? { fetchOptions: { redirect: "error" } } : {}),
+  })
 }
 
 /** An SDK error as one of the protocol's codes. */

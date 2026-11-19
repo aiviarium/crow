@@ -2,6 +2,7 @@
 // listing) with a fallback to `hosts.list` for pre-env servers, and normalizes host names and
 // `env://<name>` URIs.
 import type { ClientRookery } from "@rookery/sdk/client"
+import type { AgentHostCapability } from "./rookery-wire"
 
 export type AgentHostState = "online" | "offline" | "connecting" | "unknown"
 
@@ -17,7 +18,7 @@ export interface AgentHost {
   agentsSupported?: boolean | null
 }
 
-interface LegacyHostInfo {
+interface LegacyHostInfo extends AgentHostCapability {
   name: string
   address?: string | null
   reachable?: boolean
@@ -48,7 +49,7 @@ export function errorMessage(err: unknown): string {
   return String(err)
 }
 
-function isMethodMissing(err: unknown): boolean {
+export function isMethodMissing(err: unknown): boolean {
   if (!err || typeof err !== "object") return false
   const code = (err as { code?: unknown }).code
   if (code === "NOT_FOUND" || code === "UNIMPLEMENTED" || code === -32601) return true
@@ -77,10 +78,14 @@ function sortHosts(list: AgentHost[]): AgentHost[] {
 export async function listAgentHosts(rookery: ClientRookery): Promise<AgentHost[]> {
   try {
     const envs = await rookery.env.list()
+    const legacy = envs.some((e) => (e.supports as AgentHostCapability | undefined)?.agents === undefined)
+      ? await listLegacyAgentHosts(rookery).catch(() => [])
+      : []
+    const flags = new Map(legacy.map((h) => [h.name, h.agentsSupported]))
     return sortHosts(
       envs.map((e) => {
-        const supports = e.supports as Record<string, unknown> | undefined
-        const agentsSupported = typeof supports?.agents === "boolean" ? supports.agents : null
+        const supports: typeof e.supports & AgentHostCapability = e.supports
+        const agentsSupported = supports?.agents ?? flags.get(e.name) ?? null
         return {
           name: e.name,
           env: e.uri || toEnvUri(e.name),
@@ -95,6 +100,10 @@ export async function listAgentHosts(rookery: ClientRookery): Promise<AgentHost[
     if (!isMethodMissing(err)) throw err
   }
 
+  return listLegacyAgentHosts(rookery)
+}
+
+export async function listLegacyAgentHosts(rookery: ClientRookery): Promise<AgentHost[]> {
   const res = await rookery.rpc.call<{ hosts?: LegacyHostInfo[] }>("hosts.list", {})
   const hosts = res?.hosts ?? []
   return sortHosts(
@@ -105,7 +114,7 @@ export async function listAgentHosts(rookery: ClientRookery): Promise<AgentHost[
       kind: h.type ?? "host",
       address: h.address ?? null,
       error: h.error ?? null,
-      agentsSupported: null,
+      agentsSupported: h.agents ?? null,
     })),
   )
 }

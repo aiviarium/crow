@@ -7,6 +7,14 @@ Each item is marked:
 - **exists in Rookery now** — implemented in `rookery/` today (`rookery-proto`, `rookery-facilities`, `rookery-server`, or `@rookery/sdk`).
 - **needed** — not yet implemented on the Rookery server or SDK runtime (primarily M2 plugin/app-service runtime, plugin-owned connection types, collections/migrations, and spaces).
 
+## Configure an Anthropic connection
+
+Run `bun scripts/pack-model-provider.ts` from Crow, then install the staged plugin with
+`rookery plugin add dist/model-anthropic` against an M5 server. In the Models page, an
+administrator can add an Anthropic API key, map the Text or Fast task to a model and run a test
+prompt. Rookery stores the key as a sealed connection credential and the task mappings as global
+settings. The provider sends requests to Anthropic's Messages API and returns completed text.
+
 ---
 
 ## 1. JSON-RPC Methods (`rookery-facilities` / `rookery-server`)

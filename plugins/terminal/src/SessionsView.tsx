@@ -23,6 +23,9 @@ import {
 import type { EnvInfo } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { createEffect, createResource, createSignal, For, type JSX, on, onCleanup, Show } from "solid-js"
+import type { AgentHostCapability } from "../../agents/src/rookery-wire"
+import { formatChatPath } from "../../agents/src/store"
+import { connectParrot } from "../../agents/src/transport"
 import { envName } from "./env"
 import { createHostsApi, type HostsApi } from "./hosts"
 import { addToPanel, openPanel } from "./panel"
@@ -146,6 +149,34 @@ export function SessionsView(props: {
     ([e]) => props.terminals.sessions(e as string, { preview: true }).catch(() => [] as EnvSession[]),
     { initialValue: [] as EnvSession[] },
   )
+  const agentHost = () => {
+    const host = current()
+    const supports: (EnvInfo["supports"] & AgentHostCapability) | undefined = host?.supports
+    return host?.state === "online" && host.level !== "view" && supports?.agents ? host.name : undefined
+  }
+  const [listedAgents] = createResource(
+    () => {
+      const name = agentHost()
+      return name ? { name, revision: tick() } : false
+    },
+    async ({ name }) => {
+      try {
+        const connection = await connectParrot(props.rookery, name)
+        try {
+          const listed = await connection.client.call("session/list", { archived: false, limit: 200 })
+          return { host: name, sessions: listed.sessions }
+        } finally {
+          connection.close()
+        }
+      } catch {
+        return undefined
+      }
+    },
+  )
+  const agentSessions = () => {
+    const list = listedAgents.latest
+    return list && list.host === agentHost() ? list.sessions : []
+  }
   const offT = props.terminals.onChanged(() => setTick(tick() + 1))
   const offE = hosts.onChanged(() => refetchEnvs())
   const timer = setInterval(() => setTick(tick() + 1), 5000)
@@ -220,7 +251,7 @@ export function SessionsView(props: {
             />
           </Card>
           {/* With no terminals and no other sessions the list is not there at all: the form beside it makes one. */}
-          <Show when={terminals().length || others().length}>
+          <Show when={terminals().length || others().length || agentSessions().length}>
             <section class="term-sessions__list" data-part="terminal-list">
               <Show when={terminals().length}>
                 {/* The tab says "Terminals": the heading is only there to tell them from the other sessions. */}
@@ -301,6 +332,29 @@ export function SessionsView(props: {
                       </ContextMenu>
                     )
                   }}
+                </For>
+              </Show>
+              <Show when={agentSessions().length}>
+                <SectionHeading title="Agent sessions" />
+                <For each={agentSessions()}>
+                  {(session) => (
+                    <Card class="term-card" data-session-row={session.id}>
+                      <div class="term-card__head">
+                        <button
+                          type="button"
+                          class="term-card__title body"
+                          onClick={() =>
+                            props.rookery.workbench.openView("agents.chat", {
+                              path: formatChatPath(env(), session.id),
+                            })
+                          }
+                        >
+                          {session.title || session.agent || session.id}
+                        </button>
+                        <span class="nc-meta term-card__meta">{session.state}</span>
+                      </div>
+                    </Card>
+                  )}
                 </For>
               </Show>
               <Show when={others().length}>
