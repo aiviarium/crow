@@ -1,0 +1,191 @@
+{
+  "tasks": {
+    "description": "Which tasks the caller can use where they are, with where requests for each go.",
+    "params": { "type": "object", "properties": { "space": { "type": "string" } } },
+    "result": {
+      "type": "object",
+      "required": ["tasks"],
+      "properties": { "tasks": { "type": "array", "items": { "$ref": "#/definitions/taskInfo" } } }
+    },
+    "timeoutSecs": 20
+  },
+  "generate": {
+    "description": "Text from the model mapped to a task, streamed: `delta` events with each piece, then one `done` event with the whole answer. Leaving the stream cancels the request upstream.",
+    "params": { "$ref": "#/definitions/generateParams" },
+    "result": { "$ref": "#/definitions/generateEvent" },
+    "stream": true,
+    "timeoutSecs": 180
+  },
+  "complete": {
+    "description": "Text from the model mapped to a task, the whole answer at once (with a schema: the checked object as well).",
+    "params": { "$ref": "#/definitions/generateParams" },
+    "result": { "$ref": "#/definitions/generated" },
+    "timeoutSecs": 180
+  },
+  "transcribe": {
+    "description": "Speech to text of a whole clip, sent as base64.",
+    "params": {
+      "type": "object",
+      "required": ["audio", "mime"],
+      "properties": {
+        "audio": { "type": "string", "description": "The clip, base64." },
+        "mime": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "language": { "type": "string" },
+        "request": { "type": "string" },
+        "plugin": { "type": "string" },
+        "space": { "type": "string" }
+      }
+    },
+    "result": { "$ref": "#/definitions/transcribed" },
+    "timeoutSecs": 120
+  },
+  "dictate": {
+    "description": "A dictation: events while the audio sent with dictateAudio arrives (`partial` where the mapping shows live text), then one `transcribed` event.",
+    "params": {
+      "type": "object",
+      "required": ["request", "mime"],
+      "properties": {
+        "request": { "type": "string", "minLength": 1 },
+        "mime": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "language": { "type": "string" },
+        "plugin": { "type": "string" },
+        "space": { "type": "string" }
+      }
+    },
+    "result": { "$ref": "#/definitions/dictateEvent" },
+    "stream": true,
+    "timeoutSecs": 300
+  },
+  "dictateAudio": {
+    "description": "More audio for a dictation, base64; `end` closes the recording.",
+    "params": {
+      "type": "object",
+      "required": ["request"],
+      "properties": {
+        "request": { "type": "string", "minLength": 1 },
+        "data": { "type": "string" },
+        "end": { "type": "boolean" }
+      }
+    },
+    "result": { "type": "object" },
+    "timeoutSecs": 30
+  },
+  "mappings": {
+    "description": "The mappings the caller may see.",
+    "params": {
+      "type": "object",
+      "properties": { "scope": { "$ref": "#/definitions/scope" }, "space": { "type": "string" } }
+    },
+    "result": {
+      "type": "object",
+      "required": ["mappings"],
+      "properties": { "mappings": { "type": "array", "items": { "$ref": "#/definitions/mappingInfo" } } }
+    },
+    "timeoutSecs": 20
+  },
+  "setMapping": {
+    "description": "Maps a task: for everyone (admins), for a space (managers of it) or for the caller.",
+    "params": {
+      "type": "object",
+      "required": ["task", "scope", "connection", "model"],
+      "properties": {
+        "task": { "$ref": "#/definitions/task" },
+        "scope": { "$ref": "#/definitions/scope" },
+        "space": { "type": "string" },
+        "connection": { "type": "string" },
+        "model": { "type": "string" },
+        "live": { "type": "boolean" }
+      }
+    },
+    "result": { "$ref": "#/definitions/mappingInfo" },
+    "timeoutSecs": 20
+  },
+  "removeMapping": {
+    "description": "Removes a mapping the caller may set.",
+    "params": {
+      "type": "object",
+      "required": ["task", "scope"],
+      "properties": {
+        "task": { "$ref": "#/definitions/task" },
+        "scope": { "$ref": "#/definitions/scope" },
+        "space": { "type": "string" }
+      }
+    },
+    "result": { "type": "object" },
+    "timeoutSecs": 20
+  },
+  "providers": {
+    "description": "The providers: the built-in one and each contribution to ai.providers.",
+    "params": { "type": "object" },
+    "result": {
+      "type": "object",
+      "required": ["providers"],
+      "properties": { "providers": { "type": "array", "items": { "$ref": "#/definitions/providerInfo" } } }
+    },
+    "timeoutSecs": 20
+  },
+  "models": {
+    "description": "The models a connection's provider offers.",
+    "params": {
+      "type": "object",
+      "required": ["connection"],
+      "properties": { "connection": { "type": "string" } }
+    },
+    "result": {
+      "type": "object",
+      "required": ["models"],
+      "properties": { "models": { "type": "array", "items": { "$ref": "#/definitions/modelInfo" } } }
+    },
+    "timeoutSecs": 30
+  },
+  "usage": {
+    "description": "Requests in the last days, grouped. Admins only.",
+    "params": {
+      "type": "object",
+      "required": ["by"],
+      "properties": {
+        "by": { "enum": ["user", "plugin", "task", "model", "day"] },
+        "days": { "type": "integer", "minimum": 1, "maximum": 366 }
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": ["rows", "since"],
+      "properties": {
+        "rows": { "type": "array", "items": { "$ref": "#/definitions/usageRow" } },
+        "since": { "type": "string" }
+      }
+    },
+    "timeoutSecs": 30
+  },
+  "limits": {
+    "description": "The limits per user and day. Admins only.",
+    "params": { "type": "object" },
+    "result": { "$ref": "#/definitions/limitsInfo" },
+    "timeoutSecs": 20
+  },
+  "setLimits": {
+    "description": "Sets the default limits, or one user's; empty limits remove a user's own. Admins only.",
+    "params": {
+      "type": "object",
+      "required": ["limits"],
+      "properties": { "user": { "type": "string" }, "limits": { "$ref": "#/definitions/limits" } }
+    },
+    "result": { "$ref": "#/definitions/limitsInfo" },
+    "timeoutSecs": 20
+  },
+  "test": {
+    "description": "The test of an OpenAI-compatible connection: ask the server for its models.",
+    "params": {
+      "type": "object",
+      "required": ["connection"],
+      "properties": { "connection": { "type": "object" } }
+    },
+    "result": {
+      "type": "object",
+      "required": ["ok", "message"],
+      "properties": { "ok": { "type": "boolean" }, "message": { "type": "string" }, "details": {} }
+    },
+    "timeoutSecs": 30
+  }
+}

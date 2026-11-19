@@ -1,0 +1,72 @@
+{
+  "id": "model-anthropic",
+  "name": "Anthropic models",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "description": "Anthropic's Messages API as a provider of the Models plugin for the text and fast tasks, with streaming and structured output.",
+  "host": "src/host.ts",
+  "dependencies": {
+    "ai": "^0.1"
+  },
+  "interface": "interface.ts",
+  "provides": {
+    "services": ["anthropic"]
+  },
+  "contributes": {
+    "connectionTypes": [
+      {
+        "id": "model-anthropic.api",
+        "title": "Anthropic API",
+        "description": "Claude models through Anthropic's Messages API. Requests carry the text you send to Anthropic.",
+        "icon": "sparkle",
+        "fields": {
+          "type": "object",
+          "required": ["apiKey"],
+          "properties": {
+            "apiKey": {
+              "type": "string",
+              "title": "API key",
+              "minLength": 1
+            },
+            "baseUrl": {
+              "type": "string",
+              "title": "Base URL",
+              "description": "Leave as it is unless requests go through a proxy.",
+              "default": "https://api.anthropic.com"
+            }
+          }
+        },
+        "secret": ["apiKey"],
+        "test": true
+      }
+    ],
+    "extensions": {
+      "ai.providers": [
+        {
+          "id": "model-anthropic.messages",
+          "title": "Anthropic Messages API",
+          "connectionType": "model-anthropic.api",
+          "tasks": ["text", "fast"],
+          "models": [
+            {
+              "id": "claude-opus-5-5",
+              "title": "Claude Opus 5.5",
+              "tasks": ["text"]
+            },
+            {
+              "id": "claude-sonnet-5-5",
+              "title": "Claude Sonnet 5.5",
+              "tasks": ["text", "fast"]
+            },
+            {
+              "id": "claude-haiku-5-5",
+              "title": "Claude Haiku 5.5",
+              "tasks": ["fast"]
+            }
+          ],
+          "service": "anthropic"
+        }
+      ]
+    }
+  }
+}

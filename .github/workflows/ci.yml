@@ -10,6 +10,37 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      router: ${{ steps.filter.outputs.router }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "router=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+          fi
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "router=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$BASE" "${{ github.sha }}" | grep -qE '^(plugins/ai/router/|deps\.json$|scripts/sync-deps\.ts$|\.github/workflows/ci\.yml$)'; then
+            echo "router=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "router=false" >> "$GITHUB_OUTPUT"
+          fi
+
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -24,3 +55,26 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Lint, typecheck, test, and build
         run: bun run check
+
+  router:
+    needs: changes
+    if: needs.changes.outputs.router == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+      - name: Sync pinned cross-repo dependencies
+        run: bun run sync-deps
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/ai/router
+      - name: Test and lint ai-router
+        run: |
+          cargo test --manifest-path plugins/ai/router/Cargo.toml
+          cargo clippy --manifest-path plugins/ai/router/Cargo.toml --all-targets -- -D warnings

@@ -30,6 +30,6 @@
     }
   },
   "files": {
-    "includes": ["shell/**", "plugins/**", "scripts/**", "!**/*.css", "!**/dist/**"]
+    "includes": ["shell/**", "plugins/**", "scripts/**", "!**/*.css", "!**/dist/**", "!**/target/**"]
   }
 }

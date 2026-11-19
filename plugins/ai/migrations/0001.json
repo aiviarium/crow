@@ -1,0 +1,4 @@
+{
+  "onInstall": true,
+  "steps": [{ "op": "transform", "name": "importLegacy" }]
+}
