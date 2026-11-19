@@ -1,0 +1,1476 @@
+/* The workbench. Nocturne tokens and nc-* classes only; Monaco's own colours come from the same tokens at run
+   time (src/monaco/index.ts). Layout follows board 13 (LayoutWorkbench): a rail, the side panel on bg-1, editors
+   on bg-0 inside a bg-1 frame, the terminal panel below. */
+
+/* The shell hosts a view in `.crow-view-host`; a workbench fills it and scrolls nothing itself (the editor,
+   the side panel and the review each scroll). */
+:where(.wb),
+:where(.wb-home) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+:where(.wb-home) {
+  overflow: auto;
+}
+
+.wb {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--bg-0);
+  color: var(--text-1);
+}
+
+.wb-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-lg);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg-1);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.wb-head__name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+.wb-head__where {
+  white-space: nowrap;
+}
+.wb-head__branch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--control-sm);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-0);
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.wb-head__branch:hover {
+  color: var(--text-1);
+  border-color: var(--line);
+}
+.wb-head__spacer {
+  flex: 1;
+  min-width: 0;
+}
+.wb-error {
+  margin: var(--space-2);
+}
+
+.wb-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+.wb-body > .nc-split {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The rail: Files, Search, Source control, History; the assistant at the bottom. */
+/* The activity bar sits in the layout's strip at the left (Nocturne ViewLayout's rail). */
+.wb-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+.wb-rail__item {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--control-md);
+  height: var(--control-md);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.wb-rail__item:hover {
+  color: var(--text-1);
+  background: var(--bg-3);
+}
+.wb-rail__item[aria-pressed="true"] {
+  color: var(--text-1);
+  background: var(--bg-4);
+}
+.wb-rail__item--ai {
+  color: var(--accent-text);
+}
+.wb-rail__badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: var(--radius-full);
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font: inherit;
+  line-height: 14px;
+  text-align: center;
+  transform: scale(0.75);
+}
+.wb-rail__spacer {
+  flex: 1;
+}
+
+.wb-side {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wb-main {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wb-main > .nc-split {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Side panels */
+.wb-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.wb-panel__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-lg);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  flex-shrink: 0;
+}
+.wb-panel__title {
+  flex: 1;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.wb-panel__note {
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+}
+
+/* The tree */
+.wb-tree {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.wb-tree > .nc-list {
+  flex: 1;
+  min-height: 0;
+  outline: none;
+}
+.wb-tree .nc-list__row {
+  padding: 0;
+}
+.wb-tree .nc-list__row:hover,
+.wb-tree .nc-list__row[data-active] {
+  background: transparent;
+}
+.wb-tree__row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 100%;
+  padding-right: var(--space-2);
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  margin: 0 var(--space-1);
+}
+.wb-tree__row:hover {
+  background: var(--bg-3);
+}
+.wb-tree__row[data-selected] {
+  background: var(--bg-4);
+  color: var(--text-1);
+}
+.nc-list:focus-visible .wb-tree__row[data-selected] {
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+.wb-tree__row[data-drop] {
+  background: var(--accent-tint);
+}
+.wb-tree__chev {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  flex-shrink: 0;
+  color: var(--text-4);
+}
+.wb-tree__icon {
+  color: var(--info);
+  flex-shrink: 0;
+}
+.wb-tree__row[data-dir] .wb-tree__icon {
+  color: var(--line-strong);
+}
+/* File icons by kind, as on board 13: code in info, data and config in warning, prose muted. */
+.wb-tree__row[data-kind="data"] .wb-tree__icon {
+  color: var(--warning);
+}
+.wb-tree__row[data-kind="prose"] .wb-tree__icon {
+  color: var(--text-3);
+}
+.wb-tree__row[data-kind="image"] .wb-tree__icon {
+  color: var(--label-orchid);
+}
+
+/* Changes against HEAD in the editor's gutter: added, modified, deleted above. */
+.wb-gutter-added {
+  border-left: 3px solid var(--success);
+  margin-left: 3px;
+}
+.wb-gutter-modified {
+  border-left: 3px solid var(--info);
+  margin-left: 3px;
+}
+.monaco-editor .wb-gutter-deleted {
+  margin-left: 2px;
+  border-left: 5px solid transparent;
+  border-top: 4px solid var(--danger);
+  height: 0;
+}
+.wb-tree__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-tree__row[data-open-file] .wb-tree__name {
+  color: var(--text-1);
+}
+.wb-tree__status {
+  width: 12px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.wb-tree__row[data-status="M"] .wb-tree__status,
+.wb-tree__row[data-status="M"] .wb-tree__name,
+.wb-tree__row[data-status="R"] .wb-tree__status,
+.wb-tree__row[data-status="R"] .wb-tree__name {
+  color: var(--info);
+}
+.wb-tree__row[data-status="A"] .wb-tree__status,
+.wb-tree__row[data-status="A"] .wb-tree__name,
+.wb-tree__row[data-status="U"] .wb-tree__status,
+.wb-tree__row[data-status="U"] .wb-tree__name {
+  color: var(--success);
+}
+.wb-tree__row[data-status="D"] .wb-tree__status,
+.wb-tree__row[data-status="!"] .wb-tree__status,
+.wb-tree__row[data-status="!"] .wb-tree__name {
+  color: var(--danger);
+}
+.wb-tree__row[data-status="D"] .wb-tree__name {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+.wb-tree__row[data-status="•"] .wb-tree__status {
+  color: var(--info);
+}
+.wb-tree__row[data-ignored] {
+  opacity: 0.5;
+}
+
+/* Search */
+.wb-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-2);
+}
+.wb-search__row {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+:where(.wb-search__row) > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.wb-search__toggles {
+  display: inline-flex;
+  gap: 2px;
+}
+.wb-toggle {
+  height: var(--control-sm);
+  min-width: var(--control-sm);
+  padding: 0 var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.wb-toggle:hover {
+  color: var(--text-1);
+}
+.wb-toggle[aria-pressed="true"] {
+  color: var(--accent-text);
+  background: var(--accent-tint);
+  border-color: var(--accent-line);
+}
+.wb-results {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: var(--space-3);
+}
+.wb-results__head {
+  display: flex;
+  align-items: center;
+  padding-right: var(--space-2);
+}
+.wb-results__toggle {
+  justify-content: flex-start;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  text-align: left;
+}
+.wb-results__name {
+  white-space: nowrap;
+}
+.wb-results__dir {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-results__match {
+  display: flex;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 2px var(--space-2) 2px calc(var(--space-6) + var(--space-1));
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.wb-results__match:hover {
+  background: var(--bg-3);
+}
+.wb-results__line {
+  min-width: 2.5em;
+  text-align: right;
+}
+.wb-results__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-results__hit {
+  background: var(--warning-tint);
+  color: var(--text-1);
+  border-radius: var(--radius-xs);
+}
+.wb-replace-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: 60vh;
+  overflow: auto;
+}
+
+/* Source control */
+.wb-scm__branch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-2) var(--space-3);
+}
+.wb-scm__branch-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  height: var(--control-sm);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-0);
+  color: var(--text-1);
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.wb-scm__state {
+  margin: 0 var(--space-3) var(--space-2);
+}
+.wb-scm__state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+.wb-commit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--line-soft);
+}
+.wb-commit__message {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 64px;
+}
+.wb-commit__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.wb-changes {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-2) 0;
+}
+.wb-section__head {
+  display: flex;
+  align-items: center;
+  padding-right: var(--space-2);
+}
+.wb-section__toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: left;
+}
+.wb-section__actions {
+  display: inline-flex;
+}
+.wb-change {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--row-compact);
+  padding: 0 var(--space-2) 0 var(--space-5);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.wb-change:hover {
+  background: var(--bg-3);
+}
+.wb-change__letter {
+  width: 12px;
+  flex-shrink: 0;
+  color: var(--info);
+}
+.wb-change__letter[data-letter="A"],
+.wb-change__letter[data-letter="U"] {
+  color: var(--success);
+}
+.wb-change__letter[data-letter="D"],
+.wb-change__letter[data-letter="!"] {
+  color: var(--danger);
+}
+.wb-change__name {
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-change__dir {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-change__actions {
+  display: none;
+}
+.wb-change:hover .wb-change__actions,
+.wb-change:focus-within .wb-change__actions {
+  display: inline-flex;
+}
+.wb-scm__foot {
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--line-soft);
+}
+.wb-branches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+:where(.wb-branches .nc-row) > :first-child {
+  flex: 1;
+}
+.wb-branches__list {
+  height: min(420px, 60vh);
+  display: flex;
+}
+.wb-branches__list > .nc-list {
+  flex: 1;
+}
+.wb-branch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 100%;
+  min-width: 0;
+}
+.wb-branch__name {
+  white-space: nowrap;
+}
+.wb-branch__subject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-branch__actions {
+  display: none;
+}
+.wb-branch:hover .wb-branch__actions,
+.nc-list__row[data-active] .wb-branch__actions {
+  display: inline-flex;
+}
+.wb-pr {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.wb-pr textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.wb-pr__providers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.wb-pr__provider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Editors: bg-0 inside a bg-1 frame. */
+.wb-editors {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  background: var(--bg-1);
+}
+.wb-editors > * {
+  flex: 1;
+  min-width: 0;
+}
+.wb-group {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-0);
+  border-left: 1px solid var(--line-soft);
+}
+.wb-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: var(--control-lg);
+  padding: 0 var(--space-1);
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line-soft);
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+.wb-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-md);
+  padding-left: var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.wb-tab[data-selected] {
+  background: var(--bg-4);
+  color: var(--text-1);
+}
+.wb-group:not([data-focused]) .wb-tab[data-selected] {
+  background: var(--bg-3);
+}
+.wb-tab:hover {
+  color: var(--text-1);
+}
+.wb-tab__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+.wb-tab__label .nc-icon {
+  color: var(--info);
+}
+.wb-tab[data-status="A"] .wb-tab__label .nc-icon,
+.wb-tab[data-status="U"] .wb-tab__label .nc-icon {
+  color: var(--success);
+}
+.wb-tab[data-kind="data"] .wb-tab__label .nc-icon {
+  color: var(--warning);
+}
+.wb-tab[data-kind="prose"] .wb-tab__label .nc-icon {
+  color: var(--text-3);
+}
+.wb-tab[data-kind="image"] .wb-tab__label .nc-icon {
+  color: var(--label-orchid);
+}
+.wb-tab__dirty {
+  display: none;
+  width: 6px;
+  height: 6px;
+  margin-left: var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--text-2);
+}
+.wb-tab[data-dirty] .wb-tab__dirty {
+  display: inline-block;
+}
+.wb-tab[data-ondisk] .wb-tab__label {
+  color: var(--warning);
+}
+.wb-tab__close {
+  transform: scale(0.8);
+}
+.wb-group__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wb-group__body > .nc-empty {
+  margin: auto;
+}
+.wb-file,
+.wb-diff,
+.wb-conflict,
+.wb-history,
+.wb-commitview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wb-file__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-md);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.wb-file__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.wb-file__state {
+  color: var(--warning);
+}
+.wb-file__banner {
+  margin: var(--space-2);
+  flex-shrink: 0;
+}
+.wb-file__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wb-file__body > .nc-empty {
+  margin: auto;
+}
+.wb-file__panes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.wb-file__panes[hidden] {
+  display: none;
+}
+.wb-monaco {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+.wb-markdown {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: var(--space-4) var(--space-6);
+  border-left: 1px solid var(--line-soft);
+  color: var(--text-1);
+}
+.wb-markdown code,
+.wb-markdown pre {
+  font-family: var(--font-mono);
+}
+.wb-markdown pre {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-2);
+  overflow: auto;
+}
+.wb-markdown a {
+  color: var(--accent-text);
+}
+.wb-markdown img {
+  max-width: 100%;
+}
+.wb-image {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  overflow: auto;
+}
+.wb-image img {
+  max-width: 100%;
+  max-height: 80%;
+  border: 1px solid var(--line-soft);
+  background: var(--bg-2);
+}
+.wb-flip {
+  transform: rotate(180deg);
+}
+.wb-conflict-labels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 0 var(--space-3) var(--space-1);
+}
+
+/* Three-way merge */
+.wb-conflict__top {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--line-soft);
+}
+.wb-conflict__pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+.wb-conflict__pane + .wb-conflict__pane {
+  border-left: 1px solid var(--line-soft);
+}
+.wb-conflict__result {
+  flex: 1.3;
+}
+.wb-conflict__label {
+  padding: var(--space-1) var(--space-3);
+  color: var(--text-3);
+  border-bottom: 1px solid var(--line-subtle);
+}
+.wb-conflict__label--ours {
+  color: var(--info);
+}
+.wb-conflict__label--theirs {
+  color: var(--success);
+}
+.wb-conflict-ours {
+  background: var(--info-tint);
+}
+.wb-conflict-theirs {
+  background: var(--success-tint);
+}
+
+/* History */
+.wb-history__list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.wb-history__list > .nc-list {
+  flex: 1;
+}
+.wb-history .nc-list__row {
+  padding: 0 var(--space-3);
+}
+.wb-commit-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 100%;
+  min-width: 0;
+  cursor: pointer;
+}
+.wb-commit-row__subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  color: var(--text-1);
+}
+.wb-commit-row__author,
+.wb-commit-row__age {
+  white-space: nowrap;
+}
+.wb-graph {
+  flex-shrink: 0;
+}
+.wb-commitview {
+  overflow: auto;
+}
+.wb-commitview__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--line-soft);
+}
+.wb-commitview__body {
+  margin: var(--space-2) 0 0;
+  white-space: pre-wrap;
+  font-family: var(--font-sans);
+  color: var(--text-2);
+}
+.wb-commitview__meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.wb-link {
+  border: 0;
+  background: transparent;
+  color: var(--accent-text);
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Review */
+.wb-review {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+  align-items: start;
+}
+.wb-review > .nc-empty {
+  grid-column: 1 / -1;
+  margin: var(--space-8) auto;
+}
+.wb-review__error {
+  grid-column: 1 / -1;
+  margin: var(--space-2) var(--space-3);
+  color: var(--danger);
+}
+.wb-review__files {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow: auto;
+  padding: var(--space-2);
+  border-right: 1px solid var(--line-soft);
+}
+.wb-review__files-head {
+  justify-content: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  text-align: left;
+}
+.wb-review__file {
+  justify-content: flex-start;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: left;
+}
+.wb-review__file:hover {
+  background: var(--bg-3);
+}
+.wb-review__file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.wb-review__file[data-viewed] .wb-review__file-name {
+  color: var(--text-3);
+}
+.wb-review__plus {
+  color: var(--success);
+}
+.wb-review__minus {
+  color: var(--danger);
+}
+.wb-review__diffs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  min-width: 0;
+}
+.wb-review__card {
+  overflow: hidden;
+  padding: 0;
+}
+.wb-review__card-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line-soft);
+}
+.wb-review__card[data-viewed] .wb-review__card-head {
+  opacity: 0.75;
+}
+.wb-review__path {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.wb-hunk__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-3);
+  background: var(--info-tint);
+  color: var(--info);
+}
+.wb-hunk__action {
+  border: 0;
+  border-radius: var(--radius-xs);
+  padding: 0 var(--space-2);
+  background: var(--bg-2);
+  color: var(--text-1);
+  cursor: pointer;
+}
+.wb-hunk__action:hover {
+  background: var(--bg-4);
+}
+.wb-hunk .nc-diff {
+  overflow-x: auto;
+}
+.wb-hunk .nc-diff__line[data-selected] {
+  box-shadow: inset 3px 0 0 var(--text-3);
+  background: var(--bg-4);
+}
+.wb-hunk .nc-diff__text {
+  padding-right: var(--space-3);
+}
+
+.wb-reviewview {
+  container-type: inline-size;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-0);
+}
+.wb-reviewview__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-2);
+}
+.wb-reviewview__title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.wb-reviewview__ranges {
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--line-soft);
+  overflow-x: auto;
+}
+.wb-reviewview__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.wb-reviewview__body > .wb-review {
+  min-height: 100%;
+}
+.wb-reviewview__foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--line-soft);
+  background: var(--bg-1);
+}
+.wb-reviewview__commit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+:where(.wb-reviewview__commit) > :first-child {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Terminal panel and the right pane */
+.wb-terminal {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  border-top: 1px solid var(--line-soft);
+}
+.wb-terminal__tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-md);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border-bottom: 1px solid var(--line-soft);
+}
+.wb-terminal__label {
+  margin-right: var(--space-2);
+}
+.wb-terminal__tab {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+.wb-terminal__tab button[role="tab"] {
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 0 var(--space-2);
+}
+.wb-terminal__tab[data-selected] {
+  background: var(--bg-4);
+}
+.wb-terminal__tab[data-selected] button[role="tab"] {
+  color: var(--text-1);
+}
+.wb-terminal__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.wb-terminal__view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wb-right {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.wb-right__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-lg);
+  padding: 0 var(--space-2);
+  border-bottom: 1px solid var(--line-soft);
+}
+.wb-right__tab {
+  height: var(--control-sm);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.wb-right__tab[aria-pressed="true"] {
+  background: var(--bg-4);
+  color: var(--text-1);
+}
+.wb-right__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+:where(.wb-right__bar) > :first-child {
+  flex: 1;
+}
+.wb-right__frame {
+  flex: 1;
+  border: 0;
+  background: var(--bg-0);
+}
+.wb-right__assistant {
+  flex: 1;
+  min-height: 0;
+}
+.wb-right > .nc-empty {
+  margin: auto;
+}
+
+/* Quick open */
+/* As wide as the dialog it is in (the large size): wider, the field and the list ran out of its edge. */
+.wb-quick {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wb-quick__input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-3);
+}
+.wb-quick__field {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+}
+.wb-quick__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 100%;
+  padding: 0 var(--space-3);
+  min-width: 0;
+}
+.wb-quick__name {
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.wb-quick__dir {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Home */
+.wb-home > .nc-view-header {
+  margin: calc(-1 * var(--space-6)) 0 0;
+  padding-inline: 0;
+  border-bottom: 0;
+}
+.wb-home {
+  max-width: 920px;
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  box-sizing: border-box;
+  overflow: auto;
+}
+.wb-home__head p {
+  margin: var(--space-1) 0 0;
+}
+.wb-home__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+.wb-home__section > * {
+  align-self: stretch;
+}
+.wb-home__section > .nc-btn {
+  align-self: flex-start;
+}
+.wb-home__list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-1);
+}
+.wb-home__row,
+.wb-home__open {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--row-default);
+  padding: 0 var(--space-3);
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+.wb-home__row + .wb-home__row {
+  border-top: 1px solid var(--line-subtle);
+}
+.wb-home__row:hover,
+.wb-home__open:hover {
+  background: var(--bg-3);
+}
+.wb-home__row--checkout {
+  padding: 0 var(--space-2) 0 0;
+}
+.wb-home__open {
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+}
+/* On a narrow screen the name and the branch give way (with an ellipsis) before the badge and the path do. */
+.wb-home__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-home__open > .nc-badge,
+.wb-home__open > .nc-icon {
+  flex: none;
+}
+.wb-home__branch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-home__where {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+.wb-home__envs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.wb-home__env {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-1);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.wb-home__env[aria-selected="true"] {
+  border-color: var(--line-strong);
+  background: var(--bg-4);
+  color: var(--text-1);
+}
+.wb-home__form {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+:where(.wb-home__form) > :first-child {
+  flex: 1;
+  min-width: 240px;
+}
+
+/* A phone: one pane at a time, the rail at the bottom, controls 44px. */
+.wb-phone {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.wb[data-phone] .wb-rail__item {
+  width: 44px;
+  height: 44px;
+}
+.wb[data-phone] .wb-rail__spacer {
+  display: none;
+}
+.wb[data-phone] .wb-side {
+  border-right: 0;
+}
+.wb[data-phone] .wb-head__where {
+  display: none;
+}
+.wb[data-phone] .wb-change {
+  height: 44px;
+}
+.wb[data-phone] .wb-change__actions {
+  display: inline-flex;
+}
+.wb[data-phone] .wb-tree__row {
+  font-size: inherit;
+}
+/* A review in a narrow frame (a split, a phone) stacks: the file list above the diffs. */
+@container (max-width: 760px) {
+  .wb-review {
+    display: flex;
+    flex-direction: column;
+  }
+  .wb-review__files {
+    position: static;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+    max-height: none;
+  }
+  .wb-review__diffs {
+    padding: var(--space-2) 0;
+    align-self: stretch;
+  }
+  .wb-reviewview__head {
+    flex-wrap: wrap;
+  }
+  .wb-reviewview__title .mono {
+    overflow-wrap: anywhere;
+  }
+}
+@media (max-width: 720px) {
+  .wb-review {
+    display: flex;
+    flex-direction: column;
+  }
+  .wb-review__files {
+    position: static;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+    max-height: none;
+  }
+  .wb-review__diffs {
+    padding: var(--space-2) 0;
+    align-self: stretch;
+  }
+  .wb-review__card {
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+  .wb-reviewview__head {
+    padding: var(--space-2) var(--space-3);
+  }
+  .wb-reviewview__ranges {
+    padding: 0 var(--space-2);
+  }
+  .wb-reviewview__foot {
+    padding: var(--space-2);
+  }
+  .wb-reviewview__commit .nc-btn {
+    min-height: 44px;
+  }
+  .wb-home {
+    padding: var(--space-4) var(--space-3);
+  }
+  .wb-home__where {
+    display: none;
+  }
+}
+
+/* The side panel, the editor's tab row and its file bar clip and run edge to edge, and the checkouts' list clips to
+   its rounded edge: what is focused in them draws its ring inside. */
+[data-part="workbench-side"] :is(.nc-icon-btn, .nc-btn, [data-part="list"]):focus-visible,
+.wb-tabs :is(.nc-icon-btn, .nc-btn):focus-visible,
+.wb-file__bar :is(.nc-icon-btn, .nc-btn):focus-visible,
+.wb-home__open:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring-inset);
+}
