@@ -1,0 +1,318 @@
+{
+  "id": "workbench",
+  "name": "Workbench",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "namespace": "workbench",
+  "description": "The editor, diffs and version control for a checkout or worktree on a host: files, Monaco, search, source control, history, blame, review of a range of commits, pull requests, a terminal and previews beside the code.",
+  "host": "src/host.ts",
+  "client": "src/client.tsx",
+  "styles": "src/client.css",
+  "extensionPoints": [
+    {
+      "id": "workbench.pullRequestProviders",
+      "description": "Ways to open a pull request for a branch. The provider's command gets { env, path, remote, branch, base, title, body, draft } and returns { url } or { message }. The workbench offers every provider whose `available` command (if any) answers { available: true } for the workspace.",
+      "schema": {
+        "type": "object",
+        "required": ["id", "title", "command"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "command": { "type": "string" },
+          "available": {
+            "type": "string",
+            "description": "A command that gets { env, path, remote } and returns { available, reason? }."
+          },
+          "order": { "type": "number" }
+        }
+      }
+    },
+    {
+      "id": "workbench.assistant",
+      "description": "The assistant beside the code: a view the workbench mounts in its right pane, with params env, path (the workspace) and file (the active file, relative).",
+      "schema": {
+        "type": "object",
+        "required": ["id", "title", "view"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "view": { "type": "string" },
+          "icon": { "type": "string" },
+          "order": { "type": "number" }
+        }
+      }
+    }
+  ],
+  "contributes": {
+    "entityTypes": [
+      {
+        "scheme": "code",
+        "title": "File",
+        "icon": "file",
+        "view": "workbench.file",
+        "description": "A file in a checkout: code://<env>/<absolute path>"
+      },
+      {
+        "scheme": "commit",
+        "title": "Commit",
+        "icon": "branch",
+        "view": "workbench.commit",
+        "description": "A commit in a checkout: commit://<env>/<absolute path of the repository>@<sha>"
+      }
+    ],
+    "views": [
+      {
+        "id": "workbench.home",
+        "title": "Workbench",
+        "slot": "main",
+        "icon": "edit",
+        "description": "Pick a host and a checkout or worktree to work on."
+      },
+      {
+        "id": "workbench.open",
+        "title": "Workbench",
+        "slot": "main",
+        "icon": "edit",
+        "description": "A workspace: /workbench/open/<env>/<absolute path>."
+      },
+      {
+        "id": "workbench.review",
+        "title": "Review",
+        "slot": "main",
+        "icon": "check",
+        "description": "The changes of a range, file by file: /workbench/review/<env>/<path>?base=&head=."
+      },
+      { "id": "workbench.file", "title": "File", "slot": "main", "icon": "file" },
+      { "id": "workbench.commit", "title": "Commit", "slot": "main", "icon": "branch" }
+    ],
+    "nav": [{ "id": "workbench.nav", "title": "Workbench", "view": "workbench.home", "icon": "edit" }],
+    "routes": [
+      { "path": "", "view": "workbench.home" },
+      { "path": "open/*path", "view": "workbench.open" },
+      { "path": "review/*path", "view": "workbench.review" },
+      { "path": "file/*path", "view": "workbench.file" },
+      { "path": "commit/*path", "view": "workbench.commit" }
+    ],
+    "commands": [
+      {
+        "id": "workbench.openWorkspace",
+        "title": "Open a workspace",
+        "description": "A host's checkout or worktree in the workbench.",
+        "category": "Workbench",
+        "icon": "edit"
+      },
+      {
+        "id": "workbench.review",
+        "title": "Review changes",
+        "description": "Review a range of commits file by file: { env, path, base, head }.",
+        "category": "Workbench",
+        "icon": "check"
+      },
+      {
+        "id": "workbench.quickOpen",
+        "title": "Open file by name",
+        "category": "Workbench",
+        "icon": "search"
+      },
+      { "id": "workbench.save", "title": "Save", "category": "Workbench", "icon": "check" },
+      { "id": "workbench.saveAll", "title": "Save all", "category": "Workbench", "icon": "check" },
+      { "id": "workbench.format", "title": "Format document", "category": "Workbench", "icon": "edit" },
+      {
+        "id": "workbench.gotoLine",
+        "title": "Go to line",
+        "category": "Workbench",
+        "icon": "arrow-right"
+      },
+      {
+        "id": "workbench.find",
+        "title": "Find and replace in the file",
+        "category": "Workbench",
+        "icon": "search"
+      },
+      {
+        "id": "workbench.splitEditor",
+        "title": "Split editor",
+        "category": "Workbench",
+        "icon": "sidebar"
+      },
+      {
+        "id": "workbench.closeEditor",
+        "title": "Close the editor",
+        "category": "Workbench",
+        "icon": "close"
+      },
+      {
+        "id": "workbench.toggleSidebar",
+        "title": "Toggle the side bar",
+        "category": "Workbench",
+        "icon": "sidebar"
+      },
+      {
+        "id": "workbench.toggleTerminal",
+        "title": "Toggle the terminal panel",
+        "category": "Workbench",
+        "icon": "terminal"
+      },
+      {
+        "id": "workbench.togglePreview",
+        "title": "Toggle the preview pane",
+        "category": "Workbench",
+        "icon": "eye"
+      },
+      {
+        "id": "workbench.toggleAssistant",
+        "title": "Toggle the assistant",
+        "category": "Workbench",
+        "icon": "sparkle"
+      },
+      {
+        "id": "workbench.toggleMinimap",
+        "title": "Toggle the minimap",
+        "category": "Workbench",
+        "icon": "eye"
+      },
+      {
+        "id": "workbench.toggleWordWrap",
+        "title": "Toggle word wrap",
+        "category": "Workbench",
+        "icon": "edit"
+      },
+      { "id": "workbench.toggleBlame", "title": "Toggle blame", "category": "Workbench", "icon": "user" },
+      { "id": "workbench.files", "title": "Show files", "category": "Workbench", "icon": "file" },
+      {
+        "id": "workbench.search",
+        "title": "Search in the workspace",
+        "category": "Workbench",
+        "icon": "search"
+      },
+      {
+        "id": "workbench.sourceControl",
+        "title": "Show source control",
+        "category": "Workbench",
+        "icon": "branch"
+      },
+      {
+        "id": "workbench.revealFile",
+        "title": "Reveal the file in the tree",
+        "category": "Workbench",
+        "icon": "file"
+      },
+      {
+        "id": "workbench.refresh",
+        "title": "Refresh files and status",
+        "category": "Workbench",
+        "icon": "activity"
+      },
+      {
+        "id": "workbench.copyLink",
+        "title": "Copy a link to the file",
+        "category": "Workbench",
+        "icon": "link"
+      },
+      { "id": "workbench.commit", "title": "Commit", "category": "Git", "icon": "check" },
+      { "id": "workbench.stageAll", "title": "Stage all changes", "category": "Git", "icon": "plus" },
+      { "id": "workbench.push", "title": "Push", "category": "Git", "icon": "arrow-up-right" },
+      { "id": "workbench.pull", "title": "Pull", "category": "Git", "icon": "chevron-down" },
+      { "id": "workbench.fetch", "title": "Fetch", "category": "Git", "icon": "activity" },
+      { "id": "workbench.switchBranch", "title": "Switch branch", "category": "Git", "icon": "branch" },
+      { "id": "workbench.newBranch", "title": "Create a branch", "category": "Git", "icon": "branch" },
+      { "id": "workbench.stash", "title": "Stash changes", "category": "Git", "icon": "archive" },
+      { "id": "workbench.history", "title": "History", "category": "Git", "icon": "clock" },
+      { "id": "workbench.fileHistory", "title": "History of the file", "category": "Git", "icon": "clock" },
+      {
+        "id": "workbench.openPullRequest",
+        "title": "Open a pull request",
+        "category": "Git",
+        "icon": "arrow-up-right"
+      },
+      {
+        "id": "workbench.gh.createPullRequest",
+        "title": "Open a pull request with the GitHub CLI",
+        "description": "Pushes the branch and runs gh pr create on the host.",
+        "category": "Git",
+        "icon": "arrow-up-right"
+      },
+      { "id": "workbench.gh.available", "title": "Is the GitHub CLI signed in", "category": "Git" }
+    ],
+    "keybindings": [
+      { "command": "workbench.quickOpen", "key": "mod+p" },
+      { "command": "workbench.save", "key": "mod+s" },
+      { "command": "workbench.saveAll", "key": "mod+alt+s" },
+      { "command": "workbench.format", "key": "shift+alt+f" },
+      { "command": "workbench.toggleSidebar", "key": "mod+b" },
+      { "command": "workbench.files", "key": "mod+shift+e" },
+      { "command": "workbench.search", "key": "mod+shift+f" },
+      { "command": "workbench.sourceControl", "key": "mod+shift+g" },
+      { "command": "workbench.toggleTerminal", "key": "mod+shift+j" },
+      { "command": "workbench.splitEditor", "key": "mod+alt+backslash" }
+    ],
+    "settings": [
+      {
+        "key": "workbench.minimap",
+        "title": "Minimap",
+        "type": "boolean",
+        "default": true,
+        "category": "Workbench",
+        "description": "Show the minimap beside the editor.",
+        "scopes": ["global", "user"]
+      },
+      {
+        "key": "workbench.wordWrap",
+        "title": "Word wrap",
+        "type": "enum",
+        "enum": ["off", "on", "bounded"],
+        "default": "off",
+        "category": "Workbench",
+        "scopes": ["global", "user"]
+      },
+      {
+        "key": "workbench.formatOnSave",
+        "title": "Format on save",
+        "type": "boolean",
+        "default": false,
+        "category": "Workbench",
+        "description": "Where Monaco can format the language.",
+        "scopes": ["global", "user"]
+      },
+      {
+        "key": "workbench.signOff",
+        "title": "Sign off commits",
+        "type": "boolean",
+        "default": false,
+        "category": "Workbench",
+        "description": "Add a Signed-off-by line to commits by default.",
+        "scopes": ["global", "user"]
+      },
+      {
+        "key": "workbench.largeFileBytes",
+        "title": "Large file limit",
+        "type": "integer",
+        "default": 5242880,
+        "unit": "bytes",
+        "category": "Workbench",
+        "description": "Files above this open read-only in a simple viewer instead of the editor.",
+        "scopes": ["global", "user"]
+      }
+    ],
+    "extensions": {
+      "workbench.pullRequestProviders": [
+        {
+          "id": "gh",
+          "title": "GitHub CLI",
+          "command": "workbench.gh.createPullRequest",
+          "available": "workbench.gh.available",
+          "order": 100
+        }
+      ],
+      "home.actions": [
+        {
+          "id": "workbench.open",
+          "title": "Open a workspace",
+          "icon": "edit",
+          "view": "workbench.home",
+          "order": 30
+        }
+      ]
+    }
+  }
+}
