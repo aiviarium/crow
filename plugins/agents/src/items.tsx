@@ -410,8 +410,8 @@ function QuestionRequestCard(props: { request: Request; ctx: TurnCtx }) {
     setSending(true)
     try {
       const qs = questions()
-      // Standard single Parrot choice question: send `{ choice }` when a choice was picked and no free text.
-      if (qs.length === 1 && (req().choices?.length ?? 0) > 0) {
+      // A single Parrot choice question: send `{ choice }` when a choice was picked and no free text.
+      if (!req().questions?.length && (req().choices?.length ?? 0) > 0) {
         const q = qs[0]!
         const free = other()[q.id]?.trim()
         const sel = picked()[q.id] ?? []
@@ -426,22 +426,31 @@ function QuestionRequestCard(props: { request: Request; ctx: TurnCtx }) {
         return
       }
 
-      // Multi-question or free-form input: send `{ value: Record<string, string> }` or `{ value: string }`.
-      const answers: Record<string, string> = {}
-      for (const q of qs) {
-        const free = other()[q.id]?.trim()
-        const selectedLabels = (picked()[q.id] ?? []).map(
-          (id) => q.options.find((o) => o.id === id)?.label ?? id,
-        )
-        const combined = [...selectedLabels, ...(free ? [free] : [])]
-        if (combined.length) answers[q.question] = combined.join(", ")
+      // One entry per question, by id: a choice id, a list of them, or text.
+      if (req().questions?.length) {
+        const answers: Record<string, unknown> = {}
+        for (const q of qs) {
+          const free = other()[q.id]?.trim()
+          const sel = picked()[q.id] ?? []
+          if (q.multiSelect) {
+            const labels = sel.map((id) => q.options.find((o) => o.id === id)?.label ?? id)
+            if (labels.length || free) answers[q.id] = free ? [...labels, free] : labels
+          } else if (sel.length === 1 && !free) {
+            answers[q.id] = sel[0]
+          } else {
+            const labelled = sel.map((id) => q.options.find((o) => o.id === id)?.label ?? id)
+            const parts = [...labelled, ...(free ? [free] : [])]
+            if (parts.length) answers[q.id] = parts.join(", ")
+          }
+        }
+        await props.ctx.store.answerRequest(props.ctx.host, req().id, { answers })
+        return
       }
-      const singleFree = qs.length === 1 ? answers[qs[0]!.question] : undefined
-      await props.ctx.store.answerRequest(
-        props.ctx.host,
-        req().id,
-        qs.length === 1 && singleFree !== undefined ? { value: singleFree } : { value: answers },
-      )
+
+      // A free-text question without choices.
+      const q = qs[0]!
+      const free = other()[q.id]?.trim()
+      await props.ctx.store.answerRequest(props.ctx.host, req().id, free ? { value: free } : {})
     } catch (e) {
       setErr(errorMessage(e))
     } finally {

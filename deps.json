@@ -1,7 +1,7 @@
 {
   "rookery": {
     "repo": "https://github.com/aiviarium/rookery.git",
-    "commit": "31f7a92e77a0bc71bd10d201a4064f9212435eb0",
+    "commit": "5708f844624b9b7a1339bcaffef89dd0e394e136",
     "ref": "main",
     "sibling": "../rookery",
     "probe": "client/package.json"
@@ -15,7 +15,7 @@
   },
   "parrot": {
     "repo": "https://github.com/aiviarium/parrot.git",
-    "commit": "b889817a377b5a8ced18a913fc81289b4cef6cbe",
+    "commit": "1eca23d2cbcab6b626e27fc9ac359005b65bcd28",
     "ref": "main",
     "sibling": "../parrot",
     "probe": "packages/parrot-client/package.json"

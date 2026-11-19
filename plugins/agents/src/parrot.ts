@@ -1,10 +1,22 @@
 // Discriminated Parrot item types, `ItemPatch` application (matching `parrot-proto/src/patch.rs`),
 // and helpers for Parrot `ConfigOption` schemas and `Request` payloads.
 //
-// Note: `@aiviarium/parrot-client`'s generated `ItemBody` omits the `kind` discriminant tag that
-// Parrot's Rust wire format (`#[serde(tag = "kind", rename_all = "snake_case")]`) always sends.
-// `ParrotItem` restores that discriminated union so the UI can switch exhaustively on `item.kind`.
+// `@aiviarium/parrot-client`'s generated `ItemBody` carries the wire's `kind` discriminant, so
+// `ParrotItem` is the body plus the streaming flags' update patches add; a `notice` is the one kind
+// the client makes up, for what a session says outside an item.
 import type {
+  Choice,
+  ConfigOption,
+  ItemBody,
+  ItemPatch,
+  NoticeLevel,
+  OptionRole,
+  Question,
+  Request,
+  Subject,
+} from "@aiviarium/parrot-client"
+
+export type {
   Action,
   Agent,
   Answer,
@@ -20,6 +32,7 @@ import type {
   FileChangeItem,
   HandoffItem,
   HookItem,
+  ItemBody,
   ItemCommon,
   ItemKind,
   ItemPatch,
@@ -28,6 +41,7 @@ import type {
   Origin,
   PlanEntry,
   PlanItem,
+  Question,
   QueueState,
   ReasoningItem,
   Request,
@@ -51,53 +65,6 @@ import type {
   Workspace,
 } from "@aiviarium/parrot-client"
 
-export type {
-  Action,
-  Agent,
-  Answer,
-  Background,
-  Choice,
-  CommandItem,
-  CompactionItem,
-  ConfigOption,
-  Control,
-  Environment,
-  ErrorItem,
-  FileChange,
-  FileChangeItem,
-  HandoffItem,
-  HookItem,
-  ItemCommon,
-  ItemKind,
-  ItemPatch,
-  NoticeLevel,
-  OptionRole,
-  Origin,
-  PlanEntry,
-  PlanItem,
-  QueueState,
-  ReasoningItem,
-  Request,
-  ReviewItem,
-  RunStatus,
-  ScriptItem,
-  Session,
-  SessionSnapshot,
-  SessionSummary,
-  State,
-  SubagentItem,
-  Subject,
-  TextItem,
-  ToolItem,
-  ToolStatus,
-  Turn,
-  Update,
-  Usage,
-  UserItem,
-  WebItem,
-  Workspace,
-}
-
 export interface StreamFlags {
   streaming?: boolean
   removed?: boolean
@@ -113,23 +80,7 @@ export interface NoticeItem {
   streaming?: false
 }
 
-export type ParrotItem =
-  | (UserItem & { kind: "user" } & StreamFlags)
-  | (TextItem & { kind: "assistant" } & StreamFlags)
-  | (ReasoningItem & { kind: "reasoning" } & StreamFlags)
-  | (ToolItem & { kind: "tool" } & StreamFlags)
-  | (ScriptItem & { kind: "script" } & StreamFlags)
-  | (CommandItem & { kind: "command" } & StreamFlags)
-  | (FileChangeItem & { kind: "file_change" } & StreamFlags)
-  | (PlanItem & { kind: "plan" } & StreamFlags)
-  | (SubagentItem & { kind: "subagent" } & StreamFlags)
-  | (WebItem & { kind: "web" } & StreamFlags)
-  | (ReviewItem & { kind: "review" } & StreamFlags)
-  | (CompactionItem & { kind: "compaction" } & StreamFlags)
-  | (HookItem & { kind: "hook" } & StreamFlags)
-  | (HandoffItem & { kind: "handoff" } & StreamFlags)
-  | (ErrorItem & { kind: "error" } & StreamFlags)
-  | NoticeItem
+export type ParrotItem = (ItemBody & StreamFlags) | NoticeItem
 
 const HEADER_FIELDS = ["turn", "binding", "parent", "source", "ref", "origin"] as const
 
@@ -138,13 +89,12 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * Normalizes a raw item body from a `SessionSnapshot` or `session/read` result into a
- * `ParrotItem`. Returns `null` if the object lacks an `id` or `kind`.
+ * Normalizes a raw item body from a `SessionSnapshot` or `session/read` result into a `ParrotItem`.
+ * Returns `null` if the object lacks an `id`.
  */
-export function normalizeItem(raw: unknown): ParrotItem | null {
-  if (!isRecord(raw)) return null
-  if (typeof raw.id !== "string" || typeof raw.kind !== "string") return null
-  return { ...raw } as unknown as ParrotItem
+export function normalizeItem(raw: ItemBody): ParrotItem | null {
+  if (!raw?.id) return null
+  return raw
 }
 
 /**
@@ -333,24 +283,19 @@ export interface StructuredQuestion {
  * 3. Fallback single free-text question using `request.title` / `request.description`.
  */
 export function extractQuestions(req: Request): StructuredQuestion[] {
-  if (isRecord(req.input) && Array.isArray(req.input.questions) && req.input.questions.length > 0) {
-    return req.input.questions
-      .filter((q): q is Record<string, unknown> => isRecord(q) && typeof q.question === "string")
-      .map((q) => ({
-        id: typeof q.id === "string" ? q.id : (q.question as string),
-        header: typeof q.header === "string" ? q.header : undefined,
-        question: q.question as string,
-        multiSelect: Boolean(q.multiSelect),
-        options: Array.isArray(q.options)
-          ? q.options
-              .filter((o): o is Record<string, unknown> => isRecord(o) && typeof o.label === "string")
-              .map((o) => ({
-                id: typeof o.id === "string" ? o.id : (o.label as string),
-                label: o.label as string,
-                description: typeof o.description === "string" ? o.description : undefined,
-              }))
-          : [],
-      }))
+  const asked = req.questions ?? []
+  if (asked.length > 0) {
+    return asked.map((q: Question) => ({
+      id: q.id,
+      header: q.header ?? undefined,
+      question: q.question,
+      multiSelect: q.multiSelect ?? false,
+      options: (q.options ?? []).map((c) => ({
+        id: c.id,
+        label: c.label,
+        description: c.description ?? undefined,
+      })),
+    }))
   }
 
   const options = (req.choices ?? []).map((c) => ({
@@ -372,6 +317,13 @@ export function extractQuestions(req: Request): StructuredQuestion[] {
 export function formatAnswer(req: Request): string {
   const ans = req.answer
   if (!ans) return "—"
+  if (isRecord(ans.answers)) {
+    const vals = Object.values(ans.answers)
+      .flatMap((v) => (Array.isArray(v) ? v : [v]))
+      .filter((v) => v != null && String(v).trim() !== "")
+      .map((v) => String(v))
+    if (vals.length) return vals.join(" · ")
+  }
   if (ans.choice) {
     const match = req.choices?.find((c) => c.id === ans.choice)
     return match?.label ?? ans.choice

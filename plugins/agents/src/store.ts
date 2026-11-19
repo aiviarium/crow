@@ -112,11 +112,7 @@ export interface AgentsStore {
   archiveSession(host: string, sessionId: string, archived: boolean): Promise<void>
   setOptions(host: string, sessionId: string, values: Record<string, unknown>): Promise<ConfigOption[]>
   invokeAction(host: string, sessionId: string, action: string, args?: string): Promise<void>
-  rebindSession(
-    host: string,
-    sessionId: string,
-    params: Omit<SessionRebindParams, "session"> & { control?: Control },
-  ): Promise<void>
+  rebindSession(host: string, sessionId: string, params: Omit<SessionRebindParams, "session">): Promise<void>
   getScreen(host: string, sessionId: string): Promise<BindingScreenResult>
   sendKeys(host: string, sessionId: string, keys: { text?: string; press?: string[] }): Promise<void>
   allSessions(): Array<{ host: string; session: SessionSummary }>
@@ -134,6 +130,8 @@ function summaryFromSession(s: Session): SessionSummary {
     parent: s.parent?.session ?? null,
     agent: s.binding?.agent ?? null,
     env: s.binding?.env ?? null,
+    cwd: s.cwd,
+    workspace: s.workspace,
     task: null,
     archived: s.archived,
     updated: s.updated,
@@ -592,18 +590,16 @@ export function createAgentsStore(rookery: ClientRookery): AgentsStore {
       ...(input.options && Object.keys(input.options).length > 0 ? { options: input.options } : {}),
       ...(input.title ? { title: input.title } : {}),
       ...(input.control ? { control: input.control } : {}),
+      // A first prompt is queued by `session/new`, so no empty session shows between the two calls.
+      ...(input.prompt?.trim() ? { prompt: input.prompt } : {}),
+      ...(input.context?.length ? { context: input.context } : {}),
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     }
     const created = await conn.client.call("session/new", params)
     // `session/new` returns an auto-subscription; release it because `Conversation` creates its own
     // scoped follower subscription when the session opens.
     if (created.subscription) {
       void conn.client.unsubscribe(created.subscription).catch(() => {})
-    }
-    if (input.prompt?.trim()) {
-      await conn.client.prompt(created.session.id, input.prompt, {
-        ...(input.context?.length ? { context: input.context } : {}),
-        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-      })
     }
     // Refresh session index if the server didn't push a summary synchronously.
     if (!rt.sessions().some((s) => s.id === created.session.id)) {
@@ -678,10 +674,10 @@ export function createAgentsStore(rookery: ClientRookery): AgentsStore {
   const rebindSession = async (
     rawHost: string,
     sessionId: string,
-    params: Omit<SessionRebindParams, "session"> & { control?: Control },
+    params: Omit<SessionRebindParams, "session">,
   ) => {
     const conn = await hostRuntime(rawHost).connect()
-    await conn.client.request("session/rebind", { session: sessionId, ...params })
+    await conn.client.call("session/rebind", { session: sessionId, ...params })
   }
 
   const getScreen = async (rawHost: string, sessionId: string): Promise<BindingScreenResult> => {
@@ -691,9 +687,7 @@ export function createAgentsStore(rookery: ClientRookery): AgentsStore {
 
   const sendKeys = async (rawHost: string, sessionId: string, keys: { text?: string; press?: string[] }) => {
     const conn = await hostRuntime(rawHost).connect()
-    // `parrot-client`'s generated schema types `session/keys` as `SessionRef` (missing `text`/`press`);
-    // use `request` directly until the Parrot schema fixes `SessionKeysParams`.
-    await conn.client.request("session/keys", {
+    await conn.client.call("session/keys", {
       session: sessionId,
       ...(keys.text ? { text: keys.text } : {}),
       ...(keys.press?.length ? { press: keys.press } : {}),

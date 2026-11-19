@@ -49,7 +49,7 @@ export function createFleetEnvApi(rookery: ClientRookery): FleetEnvApi {
       let off: (() => void) | undefined
       let stopped = false
       void rookery.events
-        .subscribe("env.changed", (payload) => {
+        .subscribe("rookery/env.changed", (payload) => {
           const e = payload as EnvChanged | undefined
           if (e?.environment) fn(e.environment)
         })

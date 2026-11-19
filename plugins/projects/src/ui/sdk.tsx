@@ -163,8 +163,12 @@ export function draftsOf(rookery: ClientRookery): ClientDrafts {
   if (native) return native
   return {
     get: <T = unknown>(key: string) => rookery.storage.get<T>(`draft:${key}`, { scope: "user" }),
-    set: (key: string, value: unknown) => rookery.storage.set(`draft:${key}`, value, { scope: "user" }),
-    clear: (key: string) => rookery.storage.delete(`draft:${key}`, { scope: "user" }),
+    set: async (key: string, value: unknown) => {
+      await rookery.storage.set(`draft:${key}`, value, { scope: "user" })
+    },
+    clear: async (key: string) => {
+      await rookery.storage.delete(`draft:${key}`, { scope: "user" })
+    },
   }
 }
 

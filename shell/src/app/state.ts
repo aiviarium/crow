@@ -100,7 +100,7 @@ function defaultWsUrl(baseUrl?: string): string {
   return wsUrlFromLocation()
 }
 
-const DEFAULT_SIGN_IN: SignInOptions = { devLogin: false, local: false, sso: null }
+const DEFAULT_SIGN_IN: SignInOptions = { devLogin: false, local: false, sso: null, auth: "local" }
 
 export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
   const baseUrl = opts.baseUrl

@@ -28,9 +28,9 @@ Host discovery lives in [`src/api.ts`](./src/api.ts); stream transport and Parro
 
 ## Rookery event topics (optional live refresh)
 
-| Topic           | Payload                                                        | Notes                                                                                                                                                                           |
-| --------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hosts.changed` | `{ host: string, info?: HostInfo \| null, removed?: boolean }` | Subscribed opportunistically (`rookery.events.on("hosts.changed", ...)`). Triggers `refreshHosts()` so newly added or online hosts appear in the host picker without reloading. |
+| Topic                   | Payload                                                        | Notes                                                                                                                                                                                                                                             |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rookery/hosts.changed` | `{ host: string, info?: HostInfo \| null, removed?: boolean }` | Subscribed opportunistically (`rookery.events.subscribe("rookery/hosts.changed", ...)`; a name with a `/` is the server's, taken as it is). Triggers `refreshHosts()` so newly added or online hosts appear in the host picker without reloading. |
 
 ## Parrot JSON-RPC surface used over `agents.connect`
 
@@ -48,18 +48,41 @@ For reference, the plugin calls these Parrot methods over the `agents.connect` s
 2. **Authorisation level → Parrot scope mapping**: `plans/design.md` specifies `use` on `env` for `agents.connect`. Should a caller with only `view` on `env` be refused at `agents.connect`, or allowed to connect with Rookery clamping the Parrot connection's `scopes` to `["read"]` so they can inspect transcripts without prompting or answering approvals?
 3. **Principal propagation**: When Rookery dials `parrot serve` on behalf of a Crow user, how does it pass the authenticated Rookery principal so Parrot's `session.origin.principal` and `subscribers` reflect the human user rather than a generic service identity?
 4. **On-demand `parrot serve` startup**: If `parrot serve` is installed on a host (via the agent egg) but not yet running, does `agents.connect` start it lazily (e.g. via systemd socket activation or host agent spawn) and keep the stream open until it responds, or return `UNAVAILABLE`?
-5. **Environment change events**: `crow/plugins/agents` subscribes to `hosts.changed` for live refresh. Once `env.list` is the primary API, will Rookery emit `env.changed` (or keep `hosts.changed` as the topic for host environments)?
+5. **Environment change events**: `crow/plugins/agents` subscribes to `rookery/hosts.changed` for live refresh. Once `env.list` is the primary API, will Rookery emit `rookery/env.changed` (or keep `hosts.changed` as the topic for host environments)?
 
-## Parrot protocol / `@aiviarium/parrot-client` gaps (for a Parrot PR)
+## Parrot protocol / `@aiviarium/parrot-client` gaps
 
-Issues encountered while porting Crow's `agents` UI onto `@aiviarium/parrot-client` (`b889817a`):
+### Delivered by parrot#49 (`1eca23d`)
 
-1. **`ItemBody` omits the wire `kind` discriminant**: `parrot-proto/src/item.rs` serializes `ItemBody` with `#[serde(tag = "kind", rename_all = "snake_case")]`, so wire items carry `{ id, kind, turn, ... }`, but the generated TypeScript `ItemBody` union in `parrot-client/src/schema.ts` drops the `kind` tag. Clients must currently define their own discriminated union ([`src/parrot.ts`](./src/parrot.ts)) and narrow manually.
-2. **Browser bundling broken by unconditional `stdio.ts` import**: `parrot-client/src/client.ts` and `src/index.ts` unconditionally import `stdioTransport` from `./stdio.ts`, which imports `node:child_process` and `node:readline`. Vite browser builds fail unless `./stdio` is stubbed (currently worked around via a Vite plugin in `crow/shell/vite.config.ts`). Split `stdio` into a separate entry point (`@aiviarium/parrot-client/stdio`) or use conditional `package.json` `exports`.
-3. **`session/keys` params typed as `SessionRef`**: In `parrot-client/src/schema.ts`, `Methods["session/keys"].params` is typed as `SessionRef` (`{ session: string }`) instead of accepting `{ session: string; text?: string | null; press?: string[] | null }`, forcing a cast for TUI key forwarding.
-4. **`SessionRebindParams` omits `control`**: Switching a session between `"native"` and `"tui"` control passes `control` on `session/rebind`, but `SessionRebindParams` in `schema.ts` only lists `{ session, agent, env, isolation, level, network }`.
-5. **`session/new` does not accept an initial prompt**: Starting a chat from the new-session composer requires two sequential RPCs (`session/new` followed by `session/prompt`). Accepting optional `prompt` / `context` / `attachments` on `session/new` would eliminate the intermediate empty-session state and avoid an extra round-trip over WAN links.
-6. **`SessionSummary` omits `cwd` / workspace info**: The sidebar and assistant pane cannot show or filter sessions by directory/checkout/branch without fetching full `Session` records via `session/get` or cross-referencing `workspace/list`. Including `cwd?: string | null` (and optional `branch` / `workspace`) on `SessionSummary` would make host session lists much more informative.
-7. **Multi-question `Request` payload is untyped**: For `kind: "question"`, `Request` provides `choices?: Choice[]` for a single question, while harnesses like Claude Code ask multiple questions (each with its own header, options, and multi-select flag) inside untyped `input?: unknown`. Formalizing structured questions on `Request` and matching answer payloads on `Answer` would remove heuristic parsing in [`src/parrot.ts`](./src/parrot.ts).
-8. **No session-level diff or per-turn checkpoint revert RPC**: The prototype offered a turn-level "Files changed" diff modal and per-turn revert (`revert`). Parrot models individual `file_change` items and has `session/rewind` (`{ session, turn, files }`), but lacks a `session/diff` (or turn-aggregated diff) RPC for viewing net workspace changes across a turn or session.
-9. **Approval subject & edit diff metadata**: `Request` (`kind: "approval"`) carries `title`, `summary`, `item`, and untyped `input?: unknown`, without a standardized typed command/diff field or a structured "remember / allow always" scope indicator beyond free-form `choices`. Standardizing `command` / `diff` / `kind` metadata on approval requests would let UIs render rich approval cards consistently across Claude Code, Codex, and other drivers.
+The workarounds Crow carried for these are gone: `ParrotItem` is `ItemBody` plus the streaming flags,
+the stdio transport is imported (only) from `@aiviarium/parrot-client/stdio` so the root entry is
+browser-safe, key forwarding, rebinding control and the first prompt call the typed methods, and the
+session list reads `SessionSummary.cwd`.
+
+1. **`ItemBody` had no wire `kind` discriminant.** The generated union carries `kind`
+   (`"user"`, `"assistant"`, …), so [`src/parrot.ts`](./src/parrot.ts) aliases it rather than
+   redeclaring each variant.
+2. **The root entry imported `./stdio`**, and with it `node:child_process` and `node:readline`, so a
+   browser build needed a Vite stub (which is removed from `crow/shell/vite.config.ts`).
+   `stdioClient`/`stdioTransport` now live in `@aiviarium/parrot-client/stdio`.
+3. **`session/keys` was typed as `SessionRef`.** `SessionKeysParams` has `text` and `press`, so TUI
+   key forwarding uses `client.call`.
+4. **`SessionRebindParams` lacked `control`.** Switching between `"native"` and `"tui"` is typed.
+5. **`session/new` did not accept an initial prompt.** `SessionNewParams` has `prompt`, `context` and
+   `attachments`; the new-session composer sends the first prompt with the creation, not after it.
+6. **`SessionSummary` had no `cwd` or workspace.** Both are on the summary, and the session list filters
+   on `cwd`.
+7. **Multi-question `Request`s were untyped.** `Request.questions` is `Question[]` and the answer is
+   `Answer.answers` by question id; `extractQuestions` reads them instead of guessing at `input`.
+
+### Still open
+
+8. **No session-level diff or per-turn checkpoint revert RPC**: The prototype offered a turn-level
+   "Files changed" diff modal and per-turn revert (`revert`). Parrot models individual `file_change` items
+   and has `session/rewind` (`{ session, turn, files }`), but lacks a `session/diff` (or turn-aggregated
+   diff) RPC for viewing net workspace changes across a turn or session.
+9. **Approval subject & edit diff metadata**: `Request` (`kind: "approval"`) carries `title`, `summary`,
+   `item`, and untyped `input?: unknown`, without a standardized typed command/diff field or a structured
+   "remember / allow always" scope indicator beyond free-form `choices`. Standardizing `command` / `diff`
+   / `kind` metadata on approval requests would let UIs render rich approval cards consistently across
+   Claude Code, Codex, and other drivers.

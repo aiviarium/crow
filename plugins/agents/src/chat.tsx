@@ -153,6 +153,7 @@ function filterSessions(sessions: readonly SessionSummary[], query: string): Ses
     (s) =>
       (s.title ?? "").toLowerCase().includes(q) ||
       (s.agent ?? "").toLowerCase().includes(q) ||
+      (s.cwd ?? "").toLowerCase().includes(q) ||
       s.id.toLowerCase().includes(q),
   )
 }

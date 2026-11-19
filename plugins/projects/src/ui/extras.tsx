@@ -264,20 +264,25 @@ export function ImportView(props: {
           setJob((cur) => {
             if (!cur) return cur
             const next = { ...cur, lines: [...cur.lines] }
-            const p = (it.payload ?? it) as {
-              progress?: { done: number; total: number }
-              text?: string
-              state?: string
+            // A line's text is the log line; `data`, when a worker sends any, carries the progress.
+            const data =
+              it.data && typeof it.data === "object" ? (it.data as Record<string, unknown>) : undefined
+            const progress =
+              data?.progress && typeof data.progress === "object"
+                ? (data.progress as Record<string, unknown>)
+                : data
+            if (typeof progress?.done === "number") {
+              const total = typeof progress.total === "number" ? progress.total : undefined
+              Object.assign(next, { done: progress.done, ...(total !== undefined ? { total } : {}) })
             }
-            if (p.progress) Object.assign(next, { done: p.progress.done, total: p.progress.total })
-            if (p.text) next.lines.push(p.text)
-            if (p.state) next.state = p.state
+            if (it.text) next.lines.push(it.text)
+            if (typeof data?.state === "string") next.state = data.state
             return next
           })
         },
         {
-          onDone(state) {
-            setJob((cur) => (cur ? { ...cur, state } : cur))
+          onDone(end) {
+            setJob((cur) => (cur ? { ...cur, state: end.state } : cur))
           },
         },
       )

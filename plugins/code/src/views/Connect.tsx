@@ -33,7 +33,7 @@ export function ConnectView(props: ViewProps) {
       const r = await c.connections.test(id)
       setTests({
         ...tests(),
-        [id]: { ok: r.ok, message: r.ok ? "The connection works." : (r.error ?? "It does not work.") },
+        [id]: { ok: r.ok, message: r.ok ? "The connection works." : r.message || "It does not work." },
       })
     } catch (e) {
       setTests({ ...tests(), [id]: { ok: false, message: describe(e).message } })

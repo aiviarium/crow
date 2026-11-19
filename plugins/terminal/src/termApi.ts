@@ -337,7 +337,7 @@ export function createTerminalsApi(rookery: ClientRookery): TerminalsApi {
       let off: (() => void) | undefined
       let stopped = false
       void rookery.events
-        .subscribe("terminals.changed", (payload) => {
+        .subscribe("rookery/terminals.changed", (payload) => {
           const e = payload as TerminalChanged | undefined
           if (e?.terminal) fn(e.terminal)
         })

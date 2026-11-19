@@ -6,7 +6,7 @@ import type {
   CommandList,
   Count,
   ErrorBody,
-  Event,
+  EventNotice,
   EventSubscribed,
   JobChanged,
   JobDetail,
@@ -158,7 +158,7 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
   const followRequests: Array<{ id: string; after: number }> = []
   const sockets = new Set<any>()
   const followStreams = new Map<number, ActiveFollowStream>()
-  const eventSubs = new Map<string, { ws: any; topic: string }>()
+  const eventSubs = new Map<string, { ws: any; names: string[] }>()
   let nextStreamId = 1
   let nextJobSeq = 100
   let nextSubSeq = 1
@@ -319,7 +319,10 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
 
           case "events.subscribe": {
             const subId = `sub-${nextSubSeq++}`
-            eventSubs.set(subId, { ws, topic: String(params.topic ?? "") })
+            const names = Array.isArray(params.names)
+              ? params.names.map(String)
+              : [String(params.names ?? "")]
+            eventSubs.set(subId, { ws, names })
             const subscribed: EventSubscribed = { subscription: subId }
             sendReply(ws, msg.id, subscribed)
             return
@@ -648,8 +651,10 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
         hosts.set(event.info.name, structuredClone(event.info))
       }
       for (const [subscription, sub] of eventSubs.entries()) {
-        if (sub.topic === "hosts.changed") {
-          const notice: Event = { subscription, topic: "hosts.changed", payload: event }
+        const name = "rookery/hosts.changed"
+        const wanted = sub.names.some((n) => (n.endsWith("*") ? name.startsWith(n.slice(0, -1)) : n === name))
+        if (wanted) {
+          const notice: EventNotice = { subscription, name, payload: event }
           sub.ws.send(JSON.stringify({ jsonrpc: "2.0", method: "events.event", params: notice }))
         }
       }

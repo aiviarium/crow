@@ -4,7 +4,7 @@ Every Rookery method, facility, manifest contribution, collection feature, host/
 cross-plugin integration this plugin uses, each marked:
 
 - **exists in Rookery now** — implemented in `rookery/` or `@rookery/sdk` at the commit pinned in
-  `crow/deps.json` (`31f7a92`).
+  `crow/deps.json` (`5708f844`).
 - **needed (M2)** — arrives with the plugin/extension-host/package runtime (Rookery's host halves, client
   halves served with their hashes, manifest contribution types).
 - **needed (M2b)** — arrives with the datastore, spaces, documents, entities, search, schedules and webhooks.

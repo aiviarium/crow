@@ -28,10 +28,12 @@ Every Rookery JSON-RPC method, binary stream, and event topic that `crow/plugins
 
 ## Event topics (optional live refresh)
 
-| Topic           | Payload                                                        | Notes                                             |
-| --------------- | -------------------------------------------------------------- | ------------------------------------------------- |
-| `hosts.changed` | `{ host: string, info?: HostInfo \| null, removed?: boolean }` | Refreshes fleet views in place when hosts change. |
-| `jobs.changed`  | `{ job: JobInfo }`                                             | Updates job state in place while viewing a job.   |
+| Topic                   | Payload                                                        | Notes                                             |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------------------- |
+| `rookery/hosts.changed` | `{ host: string, info?: HostInfo \| null, removed?: boolean }` | Refreshes fleet views in place when hosts change. |
+| `rookery/jobs.changed`  | `{ job: JobInfo }`                                             | Updates job state in place while viewing a job.   |
+
+A topic with a `/` is the server's, taken as it is; a bare name would be `fleet/…`, this plugin's own.
 
 ## Core types
 
@@ -66,10 +68,12 @@ mismatch is real and is question 1 below.
 | `env.presence`  | `{ env: string }`                                                             | `{ users: PresenceUser[] }`                                | `view`               | "On it now" on the host page. Terminal counts per person, never their terminals. **[adopted]**                                                                                                                                                   |
 | `env.checkouts` | `{ env: string }`                                                             | `{ checkouts: Checkout[] }`                                | `use`                | Not needed by M3 but already in the M1 page's data (`Checkout`); read only if the host page grows a worktree list. **[adopted]**                                                                                                                 |
 | `access.grants` | `{ resource: string }`                                                        | `{ resource, owner: string \| null, grants: GrantInfo[] }` | `manage` on the host | Who holds what. `owner` is the owner's **user id** (not a principal); `GrantInfo` is `{ principal, level, createdBy, createdAt }` and `principal` is `user:<id>`, `group:<id>` or `everyone`. **[adopted]** (`rookery-facilities/src/access.rs`) |
-| `access.grant`  | `{ resource: string, principal: string, level: "view" \| "use" \| "manage" }` | `GrantInfo`                                                | `manage` on the host | Adds a grant or changes its level. Note the generated `GrantSet` type says `{ uri, principal, level: Level }`; the server's `AccessGrant` is `{ resource, principal, level: Grant }` and that is what this client sends. **[adopted]**           |
+| `access.grant`  | `{ resource: string, principal: string, level: "view" \| "use" \| "manage" }` | `GrantInfo`                                                | `manage` on the host | Adds a grant or changes its level. The grant is the server's `AccessGrant` (`{ resource, principal, level }`); the generated `GrantSet` (`{ uri, principal, level }`) is a stale prototype type and is not used. **[adopted]**                   |
 | `access.revoke` | `{ resource: string, principal: string }`                                     | `{}`                                                       | `manage` on the host | Removes a grant. `NOT_FOUND` when there was none. **[adopted]**                                                                                                                                                                                  |
 | `access.level`  | `{ resource: string }`                                                        | `{ level: "view" \| "use" \| "manage" \| null }`           | the caller's own     | Kept for the desktop and port views' gates; the host's `level` in `EnvInfo` is what the UI reads. **[adopted]**                                                                                                                                  |
-| `admin.users`   | `{}`                                                                          | `{ users: AdminUser[], groups: AdminGroup[] }`             | `admin`              | Only to name people in the share dialog and to offer a picker. A non-admin manager types a principal instead (see question 2). **[adopted]**                                                                                                     |
+| `admin.users`   | `{}`                                                                          | `UserList` (`{ users: UserInfo[] }`)                       | `admin`              | Names the people in the share dialog's picker and its "who has access" list. One call, not a combined users-and-groups answer. **[adopted]**                                                                                                     |
+| `admin.groups`  | `{}`                                                                          | `GroupList` (`{ groups: GroupInfo[] }`)                    | `admin`              | Names `group:<id>` grants and offers groups in the picker, beside `admin.users`. **[adopted]**                                                                                                                                                   |
+| `users.search`  | `{ query: string }` → `{ users: UserInfo[] }`                                 | —                                                          | `manage` on the host | **Pending (M2b)**: what a manager who is not an admin needs to find a person. Until it lands the dialog takes a typed `user:<id>` or `everyone`; see question 2.                                                                                 |
 | `hosts.check`   | `{ host: string, capability: string }`                                        | `{ allowed, refusal }`                                     | `view` on the host   | M1 already calls it for `apply`; M3 expects the capabilities `terminal`, `desktop` and `ports` to answer. `env.get.supports` is the field the UI actually reads. **[adopted]** for the method, **[new]** for the three capability names          |
 | `auth.me`       | `{}`                                                                          | `Me`                                                       | self                 | The person's id (for "you" in the grants list) and `admin`, which holds manage on every host. **[adopted]**                                                                                                                                      |
 
@@ -94,9 +98,9 @@ noVNC use relative or same-host URLs.
 
 ## Event topics
 
-| Topic         | Payload                    | Notes                                                                                                                                                                                                       |
-| ------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `env.changed` | `{ environment: EnvInfo }` | Refreshes the host page's state, `supports` and level. **[prototype]**: the prototype had `env.changed`; Rookery has no `EnvChanged` wire type yet, so it is an `events.subscribe` topic with this payload. |
+| Topic                 | Payload                    | Notes                                                                                                                                                                                                       |
+| --------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rookery/env.changed` | `{ environment: EnvInfo }` | Refreshes the host page's state, `supports` and level. **[prototype]**: the prototype had `env.changed`; Rookery has no `EnvChanged` wire type yet, so it is an `events.subscribe` topic with this payload. |
 
 ## Core types
 
@@ -123,7 +127,8 @@ Declared by the plugin: `PortLink` (`{ port, label? }`), and the local storage k
    only) lists people; `entities.search` (the prototype's way to find a user) is out of scope for the first
    version (`plans/design.md`, decision 22). So a manager who is not an admin types a user id. A
    `users.search` for anyone with manage on a resource would close this; until then the dialog says what it
-   wants.
+   wants. **Pending (M2b)**: `users.search` at `manage`, and the dialog's picker switches to it for a
+   non-admin manager.
 3. **`access.grants` needs manage.** The prototype's share dialog showed the grants to anyone who could
    see the resource; Rookery's `access.grants` requires manage. This client follows the server: a `view`
    holder gets 403 and a sentence. If a `view` holder should see _who_ (not what they do), that is a server

@@ -295,6 +295,8 @@ export class FakeParrotHost {
       parent: s.parent?.session ?? null,
       agent: s.binding?.agent ?? null,
       env: s.binding?.env ?? null,
+      cwd: s.cwd,
+      workspace: s.workspace,
       task: null,
       archived: s.archived,
       updated: s.updated,
@@ -395,6 +397,51 @@ export class FakeParrotHost {
 
   emitNotice(rec: FakeSessionRecord, level: "info" | "warning" | "error", text: string) {
     this.broadcastSession(rec.session.id, { type: "notice", level, text })
+  }
+
+  private beginPrompt(rec: FakeSessionRecord, params: SessionPromptParams) {
+    const msgId = `msg-${++this.msgSeq}`
+    const turnId = `turn-${++this.turnSeq}`
+    if (!rec.session.title) {
+      rec.session.title = params.text.slice(0, 48)
+    }
+
+    this.emitItem(rec, {
+      id: msgId,
+      kind: "user",
+      turn: turnId,
+      set: { text: params.text, status: "sent" },
+    })
+    this.emitState(rec, "running")
+
+    const ctx: PromptScenarioContext = {
+      host: this,
+      record: rec,
+      prompt: params,
+      turnId,
+      emitItem: (patch) => this.emitItem(rec, patch),
+      emitRequest: (req) => this.emitRequest(rec, req),
+      emitState: (state, detail) => this.emitState(rec, state, detail),
+      emitUsage: (usage) => this.emitUsage(rec, usage),
+      emitNotice: (level, text) => this.emitNotice(rec, level, text),
+    }
+
+    if (this.onPrompt) {
+      void Promise.resolve(this.onPrompt(ctx))
+    } else {
+      // Default echo reply when no custom scenario is supplied.
+      queueMicrotask(() => {
+        const replyId = `asst-${++this.msgSeq}`
+        this.emitItem(rec, {
+          id: replyId,
+          kind: "assistant",
+          turn: turnId,
+          set: { text: `Echo from ${rec.session.binding?.agent}: ${params.text}` },
+          streaming: false,
+        })
+        this.emitState(rec, "idle")
+      })
+    }
   }
 
   handleMessage(stream: ActiveParrotStream, raw: string) {
@@ -523,55 +570,23 @@ export class FakeParrotHost {
         stream.subs.set(subId, { target: { session: id } })
         this.broadcastIndex({ type: "summary", session: this.summaryOf(rec) })
         reply({ session: structuredClone(rec.session), subscription: subId, head: String(this.seq) })
+        // A first prompt is queued on creation, so the session starts with it rather than empty.
+        if (params.prompt?.trim()) {
+          this.beginPrompt(rec, {
+            session: id,
+            text: params.prompt,
+            ...(params.context ? { context: params.context } : {}),
+            ...(params.attachments ? { attachments: params.attachments } : {}),
+          })
+        }
         return
       }
       case "session/prompt": {
         const params = p as SessionPromptParams
         const rec = this.sessions.get(params.session)
         if (!rec) return fail(-32004, `session not found: ${params.session}`)
-        const msgId = `msg-${++this.msgSeq}`
-        const turnId = `turn-${++this.turnSeq}`
-        if (!rec.session.title) {
-          rec.session.title = params.text.slice(0, 48)
-        }
-        reply({ message: msgId, disposition: "started" })
-
-        this.emitItem(rec, {
-          id: msgId,
-          kind: "user",
-          turn: turnId,
-          set: { text: params.text, status: "sent" },
-        })
-        this.emitState(rec, "running")
-
-        const ctx: PromptScenarioContext = {
-          host: this,
-          record: rec,
-          prompt: params,
-          turnId,
-          emitItem: (patch) => this.emitItem(rec, patch),
-          emitRequest: (req) => this.emitRequest(rec, req),
-          emitState: (state, detail) => this.emitState(rec, state, detail),
-          emitUsage: (usage) => this.emitUsage(rec, usage),
-          emitNotice: (level, text) => this.emitNotice(rec, level, text),
-        }
-
-        if (this.onPrompt) {
-          void Promise.resolve(this.onPrompt(ctx))
-        } else {
-          // Default echo reply when no custom scenario is supplied.
-          queueMicrotask(() => {
-            const replyId = `asst-${++this.msgSeq}`
-            this.emitItem(rec, {
-              id: replyId,
-              kind: "assistant",
-              turn: turnId,
-              set: { text: `Echo from ${rec.session.binding?.agent}: ${params.text}` },
-              streaming: false,
-            })
-            this.emitState(rec, "idle")
-          })
-        }
+        reply({ message: `msg-${this.msgSeq + 1}`, disposition: "started" })
+        this.beginPrompt(rec, params)
         return
       }
       case "request/answer": {
