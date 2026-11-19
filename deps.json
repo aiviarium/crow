@@ -1,0 +1,16 @@
+{
+  "rookery": {
+    "repo": "https://github.com/aiviarium/rookery.git",
+    "commit": "44a4c77efa6f21a0e47b2e552b2b1d297c5e835e",
+    "ref": "feat/ts-client-sdk",
+    "sibling": "../rookery",
+    "probe": "client/package.json"
+  },
+  "nocturne": {
+    "repo": "https://github.com/aiviarium/nocturne.git",
+    "commit": "1de5ff166de9add253a9106080a828ad931369b9",
+    "ref": "main",
+    "sibling": "../nocturne",
+    "probe": "package.json"
+  }
+}

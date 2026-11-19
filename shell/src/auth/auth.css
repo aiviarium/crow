@@ -1,0 +1,81 @@
+/* Sign-in and account menu styles. Nocturne tokens and nc-* classes only. */
+@layer shell {
+  .crow-signin {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100%;
+    padding: var(--space-6);
+  }
+
+  .crow-signin[data-state="ended"] {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: color-mix(in srgb, var(--bg-0) 82%, transparent);
+    backdrop-filter: blur(2px);
+  }
+
+  .crow-signin__card {
+    width: 100%;
+    max-width: 420px;
+    padding: var(--space-6);
+  }
+
+  .crow-signin__form {
+    gap: var(--space-4);
+  }
+
+  .crow-signin__local,
+  .crow-signin__dev,
+  .crow-signin__chips {
+    gap: var(--space-2);
+  }
+
+  .crow-signin__chips {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .crow-user {
+    width: 100%;
+  }
+
+  .crow-user__lead {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .crow-account__who {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+  }
+
+  .crow-account__text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .crow-account__name,
+  .crow-account__email {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .crow-about {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: var(--space-2) var(--space-5);
+    margin: 0;
+  }
+
+  .crow-about dd {
+    margin: 0;
+  }
+}
