@@ -1,0 +1,11 @@
+{
+  "$schema": "https://github.com/aiviarium/rookery/blob/main/schemas/plugin.schema.json",
+  "apiVersion": "1",
+  "name": "Crow",
+  "description": "The web shell a Rookery server serves: hosts, jobs, the inbox and the plugins' own pages.",
+  "contributes": {
+    "shell": {
+      "entry": "web/index.html"
+    }
+  }
+}

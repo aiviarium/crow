@@ -1,0 +1,24 @@
+format 1
+
+package {
+  group crow
+  id fleet
+  version "0.1.0"
+}
+
+about {
+  name "Fleet"
+  summary "Hosts, machines, provisioners, jobs, desktops and ports, with the server's admin pages."
+  license MIT
+  license Apache-2.0
+  repository "https://github.com/aiviarium/crow"
+  keywords rookery-plugin
+}
+
+targets {
+  rookery {
+    requires {
+      rookery ">=0.6"
+    }
+  }
+}

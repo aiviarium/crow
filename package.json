@@ -10,13 +10,14 @@
     "sync-deps": "bun scripts/sync-deps.ts",
     "bootstrap": "bun run sync-deps && bun install",
     "dev": "bun run builtins && bun --cwd shell dev",
-    "build": "bun run builtins && bun --cwd shell build",
+    "build": "bun --cwd shell build",
     "lint": "biome ci shell plugins scripts",
     "format": "biome format --write shell plugins scripts",
     "typecheck": "bun run builtins && bun scripts/typecheck.ts",
     "test": "bun run builtins && bun test --timeout 30000 shell/test plugins",
     "check": "bun run lint && bun run typecheck && bun run test && bun run build",
-    "builtins": "bun scripts/builtins.ts"
+    "builtins": "bun scripts/builtins.ts",
+    "pack": "bun scripts/pack.ts"
   },
   "devDependencies": {
     "@babel/core": "^7.29.13",

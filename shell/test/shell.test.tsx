@@ -322,6 +322,75 @@ describe("@crow/shell authenticated chrome, navigation, plugins, and connection 
     app.setAboutOpen(false)
   })
 
+  test("with the built-ins off, loads every plugin the server lists and none of its own", async () => {
+    publishSharedModules({ "@aiviarium/nocturne": nocturne })
+    const bundle = (id: string) => `
+      const mods = globalThis[${JSON.stringify(SHARED_MODULE_GLOBAL)}].modules;
+      const { defineClient } = mods["@rookery/sdk/client"];
+      export default defineClient((rookery) => {
+        rookery.views.register("${id}.main", (props) => {
+          props.view.setTitle("${id} page");
+          const div = document.createElement("div");
+          div.setAttribute("data-plugin-view", "${id}");
+          div.textContent = "${id} from the server";
+          return div;
+        });
+      });
+    `
+    const served = {
+      id: "served",
+      state: "active",
+      client: { script: "/plugins/served/hash-a/main.js", styles: null, hash: "hash-a" },
+      manifest: {
+        id: "served",
+        name: "Served",
+        version: "1.0.0",
+        contributes: {
+          views: [{ id: "served.main", title: "Served" }],
+          routes: [{ path: "/", view: "served.main" }],
+          nav: [{ id: "served.nav", title: "Served", view: "served.main" }],
+          commands: [],
+          collections: [],
+          settings: [],
+          adminPages: [],
+        },
+      },
+    } as unknown as PluginInfo
+
+    const fake = startFakeRookery({
+      authenticated: true,
+      plugins: [served],
+      bundles: { "/plugins/served/hash-a/main.js": bundle("served") },
+    })
+    cleanup.push(() => fake.stop())
+
+    const app = createShellApp({
+      baseUrl: fake.baseUrl,
+      wsUrl: fake.wsUrl,
+      initialUrl: "/served",
+      reconnect: false,
+      includeBuiltins: false,
+      importModule: async (url) => {
+        const res = await fetch(url)
+        const src = await res.text()
+        return import(`data:text/javascript;base64,${Buffer.from(src).toString("base64")}`)
+      },
+    })
+    cleanup.push(() => app.dispose())
+
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    cleanup.push(render(() => <App app={app} />, host))
+
+    await app.boot()
+    await app.loader.clientsSettled(3000)
+
+    // The one plugin the server listed, and no built-in one from `plugins/`.
+    expect(Object.keys(app.loader.plugins)).toEqual(["served"])
+    expect(host.querySelector("[data-plugin-view='served']")?.textContent).toBe("served from the server")
+    expect(host.textContent).not.toContain("Fleet")
+  })
+
   test("navigates to plugin view, reflects connection drop/recovery, and overlays ended session", async () => {
     publishSharedModules({ "@aiviarium/nocturne": nocturne })
     const pluginBundle = `

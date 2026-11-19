@@ -54,6 +54,7 @@ export default definePlugin((rookery) => {
     connections.test?.(type, async (ctx, c) => testConnection(sv, ctx, await viewOfConnection(rookery, c)))
 
   rookery.rpc.handle("me", {
+    level: "own",
     async run(ctx) {
       const logins: Array<{ host: string; login: string }> = []
       if (ctx.user) {
@@ -75,6 +76,7 @@ export default definePlugin((rookery) => {
   })
 
   rookery.rpc.handle("connections", {
+    level: "own",
     async run(ctx) {
       const list = await pool.available(ctx)
       const rates = new Map(pool.rates().map((r) => [r.connection, r.rate]))
@@ -100,6 +102,7 @@ export default definePlugin((rookery) => {
   })
 
   rookery.rpc.handle("app.manifest", {
+    level: "own",
     params: z.object({
       origin: z.string(),
       apiBase: z.string().optional(),
@@ -109,6 +112,7 @@ export default definePlugin((rookery) => {
     run: (ctx, p) => appManifest(sv, ctx, p),
   })
   rookery.rpc.handle("app.complete", {
+    level: "own",
     params: z.object({ code: z.string(), state: z.string() }),
     run: (ctx, p) => appComplete(sv, ctx, p),
   })
@@ -116,6 +120,7 @@ export default definePlugin((rookery) => {
   // ── Repositories ─────────────────────────────────────────────────────────────────────────────────
 
   rookery.rpc.handle("candidates", {
+    level: "own",
     params: z.object({ connection: z.string() }),
     async run(_ctx, { connection }) {
       const ghClient = pool.fromConnection(await connectionView(rookery, connection))
@@ -139,6 +144,7 @@ export default definePlugin((rookery) => {
     pollSecs: z.number().int().optional(),
   })
   rookery.rpc.handle("attach", {
+    level: "own",
     params: AttachParams.extend({
       project: z
         .string()
@@ -153,15 +159,18 @@ export default definePlugin((rookery) => {
     run: (ctx, p) => attach(sv, ctx, p),
   })
   rookery.rpc.handle("detach", {
+    level: "own",
     params: z.object({ repo: z.string(), space: z.string().optional() }),
     run: (ctx, p) => detach(sv, ctx, p),
   })
   rookery.rpc.handle("setPoll", {
+    level: "own",
     params: z.object({ repo: z.string(), space: z.string().optional(), pollSecs: z.number() }),
     run: (ctx, p) => setPoll(sv, ctx, p),
   })
 
   rookery.rpc.handle("schedule", {
+    level: "own",
     params: z.object({ repo: z.string() }),
     async run(_ctx, { repo }) {
       const s = (await rookery.schedules.list()).find((x) => x.name === scheduleName(repo))
@@ -226,7 +235,7 @@ export default definePlugin((rookery) => {
   // ── What the views ask for ───────────────────────────────────────────────────────────────────────
 
   const rpc = <S extends z.ZodType>(name: string, params: S, run: (ctx: Ctx, p: z.infer<S>) => unknown) =>
-    rookery.rpc.handle(name, { params: params as never, run: run as never })
+    rookery.rpc.handle(name, { level: "own", params: params as never, run: run as never })
   rpc("pr.files", Uri, (ctx, p) => read.files(sv, ctx, p))
   rpc("pr.commits", Uri, (ctx, p) => read.commits(sv, ctx, p))
   rpc("item.timeline", Uri, (ctx, p) => read.timeline(sv, ctx, p))
@@ -338,6 +347,7 @@ export default definePlugin((rookery) => {
   // ── Issues are Projects issues ───────────────────────────────────────────────────────────────────
 
   rookery.rpc.handle("projects", {
+    level: "own",
     params: z.object({ space: z.string().optional(), repo: z.string().optional() }),
     async run(ctx, p) {
       const space = p.space ?? ctx.space
@@ -367,6 +377,7 @@ export default definePlugin((rookery) => {
 
   // What `#<number>` in a pull request of a repository names: its pull request, or the Projects issue.
   rookery.rpc.handle("resolveNumber", {
+    level: "own",
     params: z.object({ repo: z.string(), number: z.number().int() }),
     async run(ctx, p) {
       const repo = await lookupEntity(rookery, ctx, `gh-repo://${p.repo}`)
@@ -410,6 +421,7 @@ export default definePlugin((rookery) => {
     }
   }
   rookery.rpc.handle("tool", {
+    level: "own",
     params: z.object({ id: z.string(), params: z.record(z.string(), z.unknown()).default({}) }),
     async run(ctx, { id, params }) {
       const t = tools(sv).find((x) => x.id === id)
