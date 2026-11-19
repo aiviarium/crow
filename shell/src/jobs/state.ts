@@ -6,26 +6,22 @@ import type {
   Connection,
   JobChanged,
   JobDetail,
+  JobEnd,
   JobInfo,
   JobList,
-  JobListQuery,
-  JobLogItem,
+  JobQuery,
+  JobRetry,
   JobState,
+  LogItem,
 } from "@rookery/client"
 import { type Accessor, createSignal } from "solid-js"
-
-export interface JobFollowDone {
-  state: JobState
-  result?: unknown
-  error?: string | null
-}
 
 export interface JobsStore {
   readonly jobs: Accessor<JobInfo[]>
   readonly loading: Accessor<boolean>
   readonly error: Accessor<string | null>
   readonly activeCount: Accessor<number>
-  refresh(query?: JobListQuery): Promise<void>
+  refresh(query?: JobQuery): Promise<void>
   get(id: string): Promise<JobDetail>
   cancel(id: string): Promise<void>
   retry(id: string, attempts?: number): Promise<JobInfo>
@@ -70,37 +66,48 @@ export function formatTimeAgo(iso: string | null | undefined, nowMs = Date.now()
   return `${day}d ago`
 }
 
-export function jobLogItemToEntry(item: JobLogItem): LogEntry | null {
-  const payload = item.payload
-  if (payload.type === "output") {
-    const raw = (payload.level ?? "info").toLowerCase()
-    const level: LogLevel =
-      raw === "error" || raw === "err" || raw === "stderr"
-        ? "error"
-        : raw === "warn" || raw === "warning"
-          ? "warn"
-          : raw === "debug"
-            ? "debug"
-            : "info"
-    return { id: item.seq, at: item.at, level, text: payload.text }
+const LEVELS: Record<string, LogLevel> = {
+  error: "error",
+  err: "error",
+  stderr: "error",
+  warn: "warn",
+  warning: "warn",
+  debug: "debug",
+  trace: "debug",
+}
+
+/** Maps a job log line's `level` to a Nocturne log level. */
+export function logLevel(level: string | undefined): LogLevel {
+  return LEVELS[(level ?? "info").toLowerCase()] ?? "info"
+}
+
+/** Converts a Rookery `LogItem` into a Nocturne `LogEntry`. */
+export function jobLogItemToEntry(item: LogItem): LogEntry {
+  return { id: item.seq, at: item.at, level: logLevel(item.level), text: item.text }
+}
+
+/** A job's title in a list: its kind. */
+export function jobTitle(job: JobInfo): string {
+  return job.kind
+}
+
+/** A job's second line: its subject, or its id when it has none. */
+export function jobSubtitle(job: JobInfo): string {
+  return job.subject ?? job.id
+}
+
+export type JobProgressInfo = { done: number; total: number; message?: string }
+
+/** Reads `{ done, total, message }` out of a job's untyped `progress`, if it has that shape. */
+export function jobProgress(progress: unknown): JobProgressInfo | null {
+  if (!progress || typeof progress !== "object") return null
+  const p = progress as Record<string, unknown>
+  if (typeof p.done !== "number" || typeof p.total !== "number" || p.total <= 0) return null
+  return {
+    done: p.done,
+    total: p.total,
+    ...(typeof p.message === "string" ? { message: p.message } : {}),
   }
-  if (payload.type === "state") {
-    const suffix = payload.error ? `: ${payload.error}` : ""
-    return {
-      id: item.seq,
-      at: item.at,
-      level: payload.state === "failed" ? "error" : "state",
-      text: `State -> ${payload.state} (attempt ${payload.attempt})${suffix}`,
-    }
-  }
-  if (payload.type === "progress" && payload.message) {
-    const pct =
-      payload.done !== null && payload.done !== undefined && payload.total
-        ? ` (${payload.done}/${payload.total})`
-        : ""
-    return { id: item.seq, at: item.at, level: "debug", text: `${payload.message}${pct}` }
-  }
-  return null
 }
 
 /** Opens a `jobs.follow` binary NDJSON stream starting after cursor `after`. */
@@ -109,8 +116,8 @@ export async function openJobFollow(
   id: string,
   after: number,
   handlers: {
-    onItem: (item: JobLogItem) => void
-    onDone?: (done: JobFollowDone) => void
+    onItem: (item: LogItem) => void
+    onDone?: (end: JobEnd) => void
     onEnd?: () => void
     onError?: (err: Error) => void
   },
@@ -124,16 +131,12 @@ export async function openJobFollow(
     const trimmed = line.trim()
     if (!trimmed) return
     try {
-      const parsed = JSON.parse(trimmed) as Record<string, unknown>
-      if (parsed && typeof parsed === "object" && "state" in parsed && !("seq" in parsed)) {
+      const parsed = JSON.parse(trimmed) as unknown
+      if (typeof parsed === "object" && parsed !== null && typeof (parsed as LogItem).seq === "number") {
+        handlers.onItem(parsed as LogItem)
+      } else if (typeof parsed === "object" && parsed !== null && "state" in parsed) {
         finished = true
-        handlers.onDone?.({
-          state: parsed.state as JobState,
-          result: parsed.result,
-          error: typeof parsed.error === "string" ? parsed.error : null,
-        })
-      } else {
-        handlers.onItem(parsed as unknown as JobLogItem)
+        handlers.onDone?.(parsed as JobEnd)
       }
     } catch {
       // Ignore malformed chunks rather than killing the stream.
@@ -147,7 +150,7 @@ export async function openJobFollow(
     for (const line of lines) handleLine(line)
   }
 
-  stream.onEnd = (err) => {
+  stream.onEnd = (err: { code: string; message: string; details?: unknown } | undefined) => {
     buf += dec.decode()
     if (buf.trim()) handleLine(buf)
     buf = ""
@@ -183,7 +186,7 @@ export function createJobsStore(conn: Connection): JobsStore {
 
   const activeCount = () => jobs().filter((j) => isJobActive(j.state)).length
 
-  const refresh = async (query: JobListQuery = { limit: 100 }) => {
+  const refresh = async (query: JobQuery = { limit: 100 }) => {
     setLoading(true)
     setError(null)
     try {
@@ -203,7 +206,8 @@ export function createJobsStore(conn: Connection): JobsStore {
   }
 
   const retry = async (id: string, attempts?: number) => {
-    const retried = await conn.call<JobInfo>("jobs.retry", attempts === undefined ? { id } : { id, attempts })
+    const params: JobRetry = attempts === undefined ? { id } : { id, attempts }
+    const retried = await conn.call<JobInfo>("jobs.retry", params as Record<string, unknown>)
     setJobs((prev) => upsertJob(prev, retried))
     return retried
   }

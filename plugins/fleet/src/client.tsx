@@ -1,8 +1,9 @@
 // Client-half entry for the Fleet plugin against @rookery/sdk's defineClient contract.
 import { defineClient } from "@rookery/sdk/client"
 import { createSignal } from "solid-js"
-import { createFleetApi, type HostChangedEvent, type HostInfo } from "./api"
+import type { HostChangedEvent, HostInfo } from "./api"
 import { type FleetStore, FleetView } from "./FleetView"
+import { createFleetApi } from "./fleetApi"
 import { errorMessage, hostNeedsAttention } from "./format"
 import { HostView } from "./HostView"
 import { JobView } from "./JobView"

@@ -1,15 +1,15 @@
-// Live job log panel built on Nocturne's LogViewer and WidgetProgress, backed by `jobs.follow`
-// with cursor tracking and automatic resumption across reconnects.
-import { Card, type LogEntry, LogViewer, type StreamStatus, WidgetProgress } from "@aiviarium/nocturne"
-import type { Connection, JobLogItem } from "@rookery/client"
-import { createEffect, createSignal, type JSX, on, onCleanup, Show } from "solid-js"
-import { type JobFollowDone, jobLogItemToEntry, openJobFollow } from "./state"
+// Live job log panel built on Nocturne's LogViewer, backed by `jobs.follow` with cursor tracking
+// and automatic resumption across reconnects.
+import { type LogEntry, LogViewer, type StreamStatus } from "@aiviarium/nocturne"
+import type { Connection, JobEnd, LogItem } from "@rookery/client"
+import { createEffect, createSignal, type JSX, on, onCleanup } from "solid-js"
+import { jobLogItemToEntry, openJobFollow } from "./state"
 
 export interface JobLogProps {
   conn: Connection
   jobId: string
   active?: boolean
-  onDone?: (done: JobFollowDone) => void
+  onDone?: (end: JobEnd) => void
 }
 
 export function JobLog(props: JobLogProps): JSX.Element {
@@ -17,7 +17,6 @@ export function JobLog(props: JobLogProps): JSX.Element {
   const [streamState, setStreamState] = createSignal<StreamStatus>("connecting")
   const [cursor, setCursor] = createSignal(0)
   const [streamCode, setStreamCode] = createSignal<string | undefined>(undefined)
-  const [progress, setProgress] = createSignal<{ done: number; total: number; message?: string } | null>(null)
 
   createEffect(
     on(
@@ -30,24 +29,15 @@ export function JobLog(props: JobLogProps): JSX.Element {
         let handle: { close(): void } | null = null
 
         setEntries([])
-        setProgress(null)
         setCursor(0)
         setStreamCode(undefined)
         setStreamState("connecting")
 
-        const append = (item: JobLogItem) => {
+        const append = (item: LogItem) => {
           if (item.seq <= lastSeq) return
           lastSeq = item.seq
           setCursor(lastSeq)
-
-          if (item.payload.type === "progress") {
-            const d = item.payload.done ?? 0
-            const t = item.payload.total ?? 0
-            if (t > 0) setProgress({ done: d, total: t, message: item.payload.message ?? undefined })
-          }
-
-          const entry = jobLogItemToEntry(item)
-          if (entry) setEntries((prev) => [...prev, entry])
+          setEntries((prev) => [...prev, jobLogItemToEntry(item)])
         }
 
         const connect = async (after: number) => {
@@ -61,16 +51,16 @@ export function JobLog(props: JobLogProps): JSX.Element {
                 setStreamState("live")
                 append(item)
               },
-              onDone: (result) => {
+              onDone: (end) => {
                 if (disposed) return
                 done = true
-                setStreamState(result.state === "failed" ? "error" : "ended")
-                if (result.error) setStreamCode(result.error)
-                props.onDone?.(result)
+                setStreamState(end.state === "failed" ? "error" : "ended")
+                if (end.error) setStreamCode(end.error.message)
+                props.onDone?.(end)
               },
               onEnd: () => {
                 if (disposed || done) return
-                // Stream closed before terminal frame (e.g. socket dropped); wait for reconnect.
+                // Stream closed before the terminal line (e.g. socket dropped); wait for reconnect.
                 setStreamState("resuming")
               },
               onError: (err) => {
@@ -113,25 +103,6 @@ export function JobLog(props: JobLogProps): JSX.Element {
 
   return (
     <div class="crow-job-log" data-part="shell-job-log">
-      <Show when={progress()}>
-        {(p) => (
-          <Card>
-            <div class="crow-progress" data-part="shell-job-progress">
-              <div class="crow-progress__head label">
-                <span>{p().message ?? "Working…"}</span>
-                <span class="mono">
-                  {p().done} / {p().total}
-                </span>
-              </div>
-              <WidgetProgress
-                value={p().total > 0 ? (p().done / p().total) * 100 : 0}
-                label={p().message ?? "Job progress"}
-              />
-            </div>
-          </Card>
-        )}
-      </Show>
-
       <LogViewer
         title="Output"
         streamState={streamState()}

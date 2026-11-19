@@ -3,7 +3,8 @@
 // `hosts.act` (`trust-key`).
 import { Button, Callout, Checkbox, Dialog, Select, TextField } from "@aiviarium/nocturne"
 import { createSignal, type JSX, Show } from "solid-js"
-import type { FleetApi, HostInfo, HostProfile, HostType } from "./api"
+import type { HostInfo, HostProfile, HostType } from "./api"
+import type { FleetApi } from "./fleetApi"
 import { errorMessage, validateHostAddress, validateHostName } from "./format"
 
 const HOST_TYPE_OPTIONS: Array<{ value: HostType; label: string; description: string }> = [

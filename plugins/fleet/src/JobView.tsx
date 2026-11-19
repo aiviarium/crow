@@ -14,10 +14,18 @@ import {
   ViewLayout,
   WidgetProgress,
 } from "@aiviarium/nocturne"
+import type { JobDetail, JobEnd, LogItem } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { createEffect, createSignal, type JSX, on, onCleanup, Show } from "solid-js"
-import type { FleetApi, JobDetail, JobLogItem } from "./api"
-import { errorMessage, formatRelativeTime, isJobActive, jobItemToLogEntry, jobStatus } from "./format"
+import type { FleetApi } from "./fleetApi"
+import {
+  errorMessage,
+  formatRelativeTime,
+  isJobActive,
+  jobItemToLogEntry,
+  jobProgress,
+  jobStatus,
+} from "./format"
 
 export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: FleetApi }): JSX.Element {
   const jobId = () => props.view.params.id ?? props.view.path ?? ""
@@ -28,7 +36,6 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
   const [streamState, setStreamState] = createSignal<StreamStatus>("connecting")
   const [streamOffset, setStreamOffset] = createSignal<number>(0)
   const [streamCode, setStreamCode] = createSignal<string | undefined>(undefined)
-  const [progress, setProgress] = createSignal<{ done: number; total: number; message?: string } | null>(null)
   const [error, setError] = createSignal<string | null>(null)
   const [acting, setActing] = createSignal<"cancel" | "retry" | null>(null)
 
@@ -43,6 +50,8 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
     return ""
   }
 
+  const progress = () => jobProgress(detail()?.job.progress)
+
   createEffect(
     on(jobId, (id) => {
       if (!id) return
@@ -52,7 +61,6 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
 
       setDetail(null)
       setEntries([])
-      setProgress(null)
       setError(null)
       setStreamOffset(0)
       setStreamCode(undefined)
@@ -64,45 +72,17 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
           const d = await props.api.getJob(id)
           if (disposed) return
           setDetail(d)
-          props.view.setTitle(d.job.name)
+          props.view.setTitle(d.job.kind)
         } catch (err) {
           if (!disposed) setError(errorMessage(err))
         }
       }
 
-      const appendItem = (item: JobLogItem) => {
+      const appendItem = (item: LogItem) => {
         if (item.seq <= lastSeq) return
         lastSeq = item.seq
         setStreamOffset(lastSeq)
-
-        if (item.payload.type === "progress") {
-          const done = item.payload.done ?? 0
-          const total = item.payload.total ?? 0
-          if (total > 0) {
-            setProgress({ done, total, message: item.payload.message ?? undefined })
-          }
-        } else if (item.payload.type === "state") {
-          setDetail((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  job: {
-                    ...prev.job,
-                    state: item.payload.type === "state" ? item.payload.state : prev.job.state,
-                    error:
-                      item.payload.type === "state" && item.payload.error
-                        ? item.payload.error
-                        : prev.job.error,
-                  },
-                }
-              : prev,
-          )
-        }
-
-        const entry = jobItemToLogEntry(item)
-        if (entry) {
-          setEntries((prev) => [...prev, entry])
-        }
+        setEntries((prev) => [...prev, jobItemToLogEntry(item)])
       }
 
       const openStream = async (after: number) => {
@@ -116,18 +96,19 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
               setStreamState("live")
               appendItem(item)
             },
-            onDone: (done) => {
+            onDone: (end: JobEnd) => {
               if (disposed) return
-              setStreamState(done.state === "failed" ? "error" : "ended")
-              if (done.error) setStreamCode(done.error)
+              setStreamState(end.state === "failed" ? "error" : "ended")
+              if (end.error) setStreamCode(end.error.message)
               setDetail((prev) =>
                 prev
                   ? {
                       ...prev,
                       job: {
                         ...prev.job,
-                        state: done.state,
-                        error: done.error ?? prev.job.error,
+                        state: end.state,
+                        result: end.result ?? prev.job.result,
+                        error: end.error ?? prev.job.error,
                       },
                     }
                   : prev,
@@ -215,7 +196,7 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
         href: props.rookery.views.href("fleet.host", { params: { name: h } }) ?? `/fleet/hosts/${h}`,
       })
     }
-    list.push({ label: detail()?.job.name ?? jobId() })
+    list.push({ label: detail()?.job.kind ?? jobId() })
     return list
   }
 
@@ -288,7 +269,8 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
                 <MetaLine
                   items={[
                     { label: <IdBadge>{d().job.id}</IdBadge> },
-                    { label: d().job.plugin },
+                    { label: d().job.kind },
+                    d().job.subject ? { label: d().job.subject! } : null,
                     { label: `Attempt ${d().job.attempts} of ${d().job.maxAttempts}` },
                     { label: `Created ${formatRelativeTime(d().job.createdAt)}` },
                     d().job.finishedAt
@@ -311,7 +293,7 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
                       </Show>
                     }
                   >
-                    {err()}
+                    {err().message}
                   </Callout>
                 )}
               </Show>

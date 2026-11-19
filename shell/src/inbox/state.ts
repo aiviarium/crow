@@ -1,90 +1,75 @@
-// Reactive shell notifications inbox store backed by `notify.list`, `notify.read`, `notify.unread`,
-// `notify.readAll`, `notify.archive`, `notify.answer`, and live `notify.new` / `notify.changed`.
+// Reactive shell notifications inbox store backed by `notify.list`, `notify.read` and
+// `notify.answer`, plus live `notify.new` / `notify.changed`. Rookery's wire types have one
+// `NotificationInfo` with a `title`, an optional `body`, string action ids and a single answer.
 import { toast } from "@aiviarium/nocturne"
 import type {
   Connection,
-  InboxPage,
-  InboxQuery,
-  KindCount,
   NotificationInfo,
+  NotificationList,
   NotifyChanged,
   NotifyNew,
+  NotifyQuery,
 } from "@rookery/client"
 import { type Accessor, createSignal } from "solid-js"
 
 export interface InboxStore {
   readonly notifications: Accessor<NotificationInfo[]>
   readonly unread: Accessor<number>
-  readonly counts: Accessor<KindCount[]>
   readonly loading: Accessor<boolean>
   readonly error: Accessor<string | null>
-  readonly showArchived: Accessor<boolean>
-  refresh(query?: InboxQuery): Promise<void>
-  setShowArchived(archived: boolean): Promise<void>
+  refresh(query?: Partial<NotifyQuery>): Promise<void>
   markRead(ids: string[]): Promise<void>
-  markUnread(ids: string[]): Promise<void>
   markAllRead(): Promise<void>
-  archive(ids: string[]): Promise<void>
-  answer(id: string, action: string, text?: string): Promise<NotificationInfo>
+  answer(id: string, answer: string): Promise<NotificationInfo>
   start(): void
   stop(): void
 }
 
-function mergeNotifications(
-  existing: NotificationInfo[],
-  incoming: NotificationInfo[],
-  archivedMode: boolean,
-): NotificationInfo[] {
+function mergeNotifications(existing: NotificationInfo[], incoming: NotificationInfo[]): NotificationInfo[] {
   const byId = new Map<string, NotificationInfo>()
   for (const n of existing) byId.set(n.id, n)
-  for (const n of incoming) {
-    const isArchived = Boolean(n.archivedAt)
-    if (archivedMode !== isArchived) {
-      byId.delete(n.id)
-    } else {
-      byId.set(n.id, n)
-    }
-  }
+  for (const n of incoming) byId.set(n.id, n)
   return Array.from(byId.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
 
 export function notificationTitle(n: NotificationInfo): string {
-  const d = n.data
-  if (d && typeof d.title === "string" && d.title.trim()) return d.title.trim()
-  return n.text
+  return n.title
 }
 
 export function notificationLink(n: NotificationInfo): string | null {
   const d = n.data
-  if (d && typeof d.url === "string" && d.url.startsWith("/")) return d.url
-  if (d && typeof d.link === "string" && d.link.startsWith("/")) return d.link
+  if (!d || typeof d !== "object") return null
+  const data = d as Record<string, unknown>
+  if (typeof data.url === "string" && data.url.startsWith("/")) return data.url
+  if (typeof data.link === "string" && data.link.startsWith("/")) return data.link
   return null
+}
+
+/** A notification action id as a button label, such as `dismiss` -> `Dismiss`. */
+export function actionLabel(action: string): string {
+  return action.replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 export function createInboxStore(conn: Connection): InboxStore {
   const [notifications, setNotifications] = createSignal<NotificationInfo[]>([])
   const [unread, setUnread] = createSignal(0)
-  const [counts, setCounts] = createSignal<KindCount[]>([])
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
-  const [showArchived, setShowArchivedSignal] = createSignal(false)
 
   let started = false
   let unsubs: Array<() => void> = []
 
-  const refresh = async (query: InboxQuery = {}) => {
+  const refresh = async (query: Partial<NotifyQuery> = {}) => {
     setLoading(true)
     setError(null)
     try {
-      const archived = query.archived ?? showArchived()
-      const page = await conn.call<InboxPage>("notify.list", {
+      const page = await conn.call<NotificationList>("notify.list", {
+        unread: false,
         limit: 100,
         ...query,
-        archived,
       } as Record<string, unknown>)
       setNotifications(page.notifications ?? [])
       setUnread(page.unread ?? 0)
-      setCounts(page.counts ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -92,60 +77,26 @@ export function createInboxStore(conn: Connection): InboxStore {
     }
   }
 
-  const setShowArchived = async (archived: boolean) => {
-    setShowArchivedSignal(archived)
-    await refresh({ archived })
-  }
-
   const markRead = async (ids: string[]) => {
     if (ids.length === 0) return
-    const res = await conn.call<{ unread?: number }>("notify.read", { ids })
+    await conn.call<{ count: number }>("notify.read", { ids })
     const now = new Date().toISOString()
     const set = new Set(ids)
+    const newlyRead = notifications().filter((n) => set.has(n.id) && !n.readAt).length
     setNotifications((prev) => prev.map((n) => (set.has(n.id) ? { ...n, readAt: n.readAt ?? now } : n)))
-    if (typeof res?.unread === "number") {
-      setUnread(res.unread)
-    } else {
-      setUnread((prev) => Math.max(0, prev - ids.length))
-    }
-  }
-
-  const markUnread = async (ids: string[]) => {
-    if (ids.length === 0) return
-    const res = await conn.call<{ unread?: number }>("notify.unread", { ids })
-    const set = new Set(ids)
-    setNotifications((prev) => prev.map((n) => (set.has(n.id) ? { ...n, readAt: undefined } : n)))
-    if (typeof res?.unread === "number") {
-      setUnread(res.unread)
-    } else {
-      setUnread((prev) => prev + ids.length)
-    }
+    setUnread((prev) => Math.max(0, prev - newlyRead))
   }
 
   const markAllRead = async () => {
-    await conn.call("notify.readAll", {})
+    await conn.call<{ count: number }>("notify.read", {})
     const now = new Date().toISOString()
     setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? now })))
     setUnread(0)
   }
 
-  const archive = async (ids: string[]) => {
-    if (ids.length === 0) return
-    const res = await conn.call<{ unread?: number }>("notify.archive", { ids })
-    const set = new Set(ids)
-    if (!showArchived()) {
-      setNotifications((prev) => prev.filter((n) => !set.has(n.id)))
-    }
-    if (typeof res?.unread === "number") {
-      setUnread(res.unread)
-    }
-  }
-
-  const answer = async (id: string, action: string, text?: string): Promise<NotificationInfo> => {
-    const params: Record<string, unknown> = { id, action }
-    if (text !== undefined && text.trim() !== "") params.text = text.trim()
-    const updated = await conn.call<NotificationInfo>("notify.answer", params)
-    setNotifications((prev) => mergeNotifications(prev, [updated], showArchived()))
+  const answer = async (id: string, action: string): Promise<NotificationInfo> => {
+    const updated = await conn.call<NotificationInfo>("notify.answer", { id, answer: action })
+    setNotifications((prev) => mergeNotifications(prev, [updated]))
     return updated
   }
 
@@ -156,14 +107,11 @@ export function createInboxStore(conn: Connection): InboxStore {
       conn.on("notify.new", (ev: NotifyNew) => {
         if (!ev?.notification) return
         setUnread(ev.unread)
-        if (!showArchived()) {
-          setNotifications((prev) => mergeNotifications(prev, [ev.notification], false))
-        }
+        setNotifications((prev) => mergeNotifications(prev, [ev.notification]))
         if (ev.native || ev.notification.kind === "approval" || ev.notification.kind === "job_failure") {
           toast({
             title: notificationTitle(ev.notification),
-            description:
-              notificationTitle(ev.notification) !== ev.notification.text ? ev.notification.text : undefined,
+            description: ev.notification.body ?? undefined,
             tone:
               ev.notification.kind === "job_failure"
                 ? "danger"
@@ -181,7 +129,7 @@ export function createInboxStore(conn: Connection): InboxStore {
           setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? now })))
         }
         if (ev.notifications && ev.notifications.length > 0) {
-          setNotifications((prev) => mergeNotifications(prev, ev.notifications, showArchived()))
+          setNotifications((prev) => mergeNotifications(prev, ev.notifications))
         }
       }),
       conn.onOpen(() => {
@@ -203,16 +151,11 @@ export function createInboxStore(conn: Connection): InboxStore {
   return {
     notifications,
     unread,
-    counts,
     loading,
     error,
-    showArchived,
     refresh,
-    setShowArchived,
     markRead,
-    markUnread,
     markAllRead,
-    archive,
     answer,
     start,
     stop,
