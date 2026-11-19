@@ -1,10 +1,12 @@
 // What a level on a host allows, the grants a person changes, and how a Rookery error reads in the UI.
 // Ported from the prototype's `plugins/fleet/lib/access.ts`, onto Rookery's `access.*` methods: grants are
 // on `env://NAME` (plans/design.md, "Levels on a host").
-import type { Grant, GrantInfo, LevelHeld } from "@rookery/client"
+import type { Grant, GrantInfo, GroupInfo, GroupList, LevelHeld, UserInfo, UserList } from "@rookery/client"
 import type { ClientRookery } from "@rookery/sdk/client"
 import { RookeryError } from "@rookery/sdk/client"
 import { envName } from "./env"
+
+export type { GroupInfo, UserInfo }
 
 export type Level = Grant
 export type Need = Level | "admin"
@@ -56,14 +58,6 @@ export interface Sharing {
   grants: GrantInfo[]
 }
 
-export interface UserInfo {
-  id: string
-  name: string
-  email?: string
-  admin: boolean
-  disabled: boolean
-}
-
 export interface GrantsApi {
   /** Who holds what on the resource. Needs `manage`. */
   grants(resource: string): Promise<Sharing>
@@ -73,6 +67,8 @@ export interface GrantsApi {
   revoke(resource: string, principal: string): Promise<void>
   /** Everyone, for picking a person to share with. Needs `admin`; empty when the caller is not one. */
   users(): Promise<UserInfo[]>
+  /** The groups a grant can name. Needs `admin`; empty when the caller is not one. */
+  groups(): Promise<GroupInfo[]>
 }
 
 export function createGrantsApi(rookery: ClientRookery): GrantsApi {
@@ -89,8 +85,16 @@ export function createGrantsApi(rookery: ClientRookery): GrantsApi {
     },
     async users() {
       try {
-        const res = await rookery.rpc.call<{ users: UserInfo[] }>("admin.users", {})
+        const res = await rookery.rpc.call<UserList>("admin.users", {})
         return res.users ?? []
+      } catch {
+        return []
+      }
+    },
+    async groups() {
+      try {
+        const res = await rookery.rpc.call<GroupList>("admin.groups", {})
+        return res.groups ?? []
       } catch {
         return []
       }

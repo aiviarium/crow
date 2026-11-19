@@ -352,7 +352,11 @@ describe("agents plugin on Parrot", () => {
     const methods = fake.hosts.get("studio")!.rpcLog.map((e) => e.method)
     expect(methods).toContain("initialize")
     expect(methods).toContain("session/new")
-    expect(methods).toContain("session/prompt")
+    // The first prompt rides on `session/new`, so no separate `session/prompt` call is made.
+    const created = fake.hosts.get("studio")!.rpcLog.find((e) => e.method === "session/new")
+    expect(created).toBeDefined()
+    expect((created!.params as { prompt?: string }).prompt).toBe("Fix the auth test")
+    expect(methods).not.toContain("session/prompt")
     expect(methods).toContain("request/answer")
     expect(methods).toContain("session/cancel")
   })

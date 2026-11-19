@@ -6,13 +6,25 @@ import { Avatar, Badge, Button, Callout, Dialog, IconButton, Select, TextField }
 import type { GrantInfo } from "@rookery/client"
 import type { ClientRookery } from "@rookery/sdk/client"
 import { createResource, createSignal, For, type JSX, Show } from "solid-js"
-import { createGrantsApi, explain, LEVELS, type Level, levelLabel, type UserInfo } from "./access"
+import {
+  createGrantsApi,
+  explain,
+  type GroupInfo,
+  LEVELS,
+  type Level,
+  levelLabel,
+  type UserInfo,
+} from "./access"
 import { envUri } from "./env"
 import { createMeApi, principalOf } from "./me"
 
-/** `user:<id>` as a person's name, when `admin.users` told us who they are. */
-function nameOf(principal: string, users: UserInfo[]): string | undefined {
+/** `user:<id>` or `group:<id>` as a name, when `admin.users`/`admin.groups` told us who they are. */
+function nameOf(principal: string, users: UserInfo[], groups: GroupInfo[]): string | undefined {
   if (principal === "everyone") return "Everyone signed in"
+  if (principal.startsWith("group:")) {
+    const id = principal.slice("group:".length)
+    return groups.find((g) => g.id === id)?.name
+  }
   const id = principal.replace(/^user:/, "")
   return users.find((u) => u.id === id)?.name
 }
@@ -28,6 +40,7 @@ export function ShareDialog(props: {
   const resource = () => envUri(props.host)
   const [me] = createResource(() => meApi.me())
   const [users] = createResource(() => grants.users())
+  const [groups] = createResource(() => grants.groups())
   // A refusal is an answer here, not a thrown error: the dialog says why it cannot show the grants.
   const [loaded, { refetch }] = createResource(resource, (uri) =>
     grants
@@ -58,15 +71,29 @@ export function ShareDialog(props: {
 
   const people = () => {
     const text = query().trim().toLowerCase()
-    const list = users() ?? []
-    if (!text) return list.slice(0, 6)
-    return list
-      .filter((u) => u.name.toLowerCase().includes(text) || (u.email ?? "").toLowerCase().includes(text))
+    const candidates = [
+      ...(users() ?? []).map((u) => ({
+        principal: principalOf(u.id),
+        name: u.name,
+        detail: u.email ?? u.id,
+        label: "Add",
+      })),
+      ...(groups() ?? []).map((g) => ({
+        principal: `group:${g.id}`,
+        name: g.name,
+        detail: `${g.members} ${g.members === 1 ? "member" : "members"}`,
+        label: "Group",
+      })),
+    ]
+    if (!text) return candidates.slice(0, 6)
+    return candidates
+      .filter((c) => c.name.toLowerCase().includes(text) || c.detail.toLowerCase().includes(text))
       .slice(0, 6)
   }
 
-  const already = (userId: string) =>
-    owner() === userId || !!sharing()?.grants.some((g) => g.principal === principalOf(userId))
+  const already = (principal: string) =>
+    (principal.startsWith("user:") ? owner() === principal.slice("user:".length) : false) ||
+    !!sharing()?.grants.some((g) => g.principal === principal)
 
   const run = async (fn: () => Promise<unknown>, what: string) => {
     if (busy()) return
@@ -83,8 +110,8 @@ export function ShareDialog(props: {
     }
   }
 
-  const addPerson = (userId: string) =>
-    run(() => grants.grant(resource(), principalOf(userId), level()), "share the host")
+  const addPerson = (principal: string) =>
+    run(() => grants.grant(resource(), principal, level()), "share the host")
 
   const addPrincipal = () => {
     const value = principal().trim()
@@ -189,17 +216,17 @@ export function ShareDialog(props: {
                         role="option"
                         aria-selected={false}
                         class="fleet-share__person fleet-share__result"
-                        data-user={p.id}
-                        disabled={already(p.id) || busy()}
-                        onClick={() => addPerson(p.id)}
+                        data-candidate={p.principal}
+                        disabled={already(p.principal) || busy()}
+                        onClick={() => addPerson(p.principal)}
                       >
                         <Avatar name={p.name} size="sm" />
                         <span class="fleet-share__who">
                           <span class="label">{p.name}</span>
-                          <span class="nc-meta">{p.email ?? p.id}</span>
+                          <span class="nc-meta">{p.detail}</span>
                         </span>
                         <span class="nc-meta">
-                          {already(p.id) ? "Has access" : `Add · ${levelLabel(level())}`}
+                          {already(p.principal) ? "Has access" : `${p.label} · ${levelLabel(level())}`}
                         </span>
                       </button>
                     )}
@@ -218,6 +245,7 @@ export function ShareDialog(props: {
                         createdAt: "",
                       }}
                       users={users() ?? []}
+                      groups={groups() ?? []}
                       meId={me()?.id}
                       note="Owner"
                     />
@@ -228,6 +256,7 @@ export function ShareDialog(props: {
                     <Person
                       grant={g}
                       users={users() ?? []}
+                      groups={groups() ?? []}
                       meId={me()?.id}
                       editable={canManage()}
                       busy={busy()}
@@ -253,6 +282,7 @@ export function ShareDialog(props: {
 function Person(props: {
   grant: GrantInfo
   users: UserInfo[]
+  groups: GroupInfo[]
   meId?: string
   note?: string
   editable?: boolean
@@ -260,7 +290,7 @@ function Person(props: {
   onLevel?: (l: Level) => void
   onRemove?: () => void
 }): JSX.Element {
-  const name = () => nameOf(props.grant.principal, props.users) ?? props.grant.principal
+  const name = () => nameOf(props.grant.principal, props.users, props.groups) ?? props.grant.principal
   const isMe = () => !!props.meId && props.grant.principal === principalOf(props.meId)
   return (
     <div class="fleet-share__person" data-principal={props.grant.principal}>

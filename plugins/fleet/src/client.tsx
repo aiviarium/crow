@@ -80,8 +80,9 @@ export default defineClient(async (rookery) => {
   })
 
   // Best-effort live host updates; falls back cleanly if the server doesn't emit `hosts.changed`.
+  // A name without a `/` is the plugin's own, so the server's is asked for in full.
   try {
-    await rookery.events.subscribe("hosts.changed", (raw) => {
+    await rookery.events.subscribe("rookery/hosts.changed", (raw) => {
       const payload = raw as HostChangedEvent | undefined
       if (!payload?.host) {
         void refresh()

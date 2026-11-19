@@ -78,7 +78,9 @@ function fakeRookery(opts: {
               apiVersion: 1,
             }
           case "admin.users":
-            return { users: opts.users ?? [], groups: [] }
+            return { users: opts.users ?? [] }
+          case "admin.groups":
+            return { groups: [] }
           case "access.grants": {
             if (opts.forbidGrants)
               throw Object.assign(new Error("you may not see who can use env://studio"), {

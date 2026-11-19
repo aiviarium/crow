@@ -54,9 +54,10 @@ export default defineClient(async (rookery) => {
     return waiting > 0 ? waiting : undefined
   })
 
-  // Best-effort live host updates when the server emits `hosts.changed`.
+  // Best-effort live host updates when the server emits `hosts.changed`: a name with a `/` is the
+  // server's, taken as it is, where a bare one would be this plugin's own.
   try {
-    await rookery.events.subscribe("hosts.changed", () => {
+    await rookery.events.subscribe("rookery/hosts.changed", () => {
       void store.refreshHosts()
     })
   } catch {
