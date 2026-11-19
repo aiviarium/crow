@@ -1,0 +1,26 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "https://api.github.com/repos/octocat/this-repository-does-not-exist-crow",
+    "headers": {
+      "accept": "application/vnd.github+json"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-github-media-type": "github.v3; format=json",
+      "x-ratelimit-limit": "60",
+      "x-ratelimit-remaining": "48",
+      "x-ratelimit-reset": "1794945719",
+      "x-ratelimit-resource": "core",
+      "x-ratelimit-used": "12"
+    },
+    "body": {
+      "message": "Not Found",
+      "documentation_url": "https://docs.github.com/rest/repos/repos#get-a-repository",
+      "status": "404"
+    }
+  }
+}

@@ -1,0 +1,440 @@
+{
+  "id": "code",
+  "version": "0.1.0",
+  "services": {
+    "github": {
+      "methods": {
+        "createPullRequest": {
+          "description": "Opens a pull request through the caller's GitHub connection.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "repo": {
+                "type": "string",
+                "description": "owner/name, or the repository's git URL; the head branch must be on GitHub"
+              },
+              "head": {
+                "type": "string"
+              },
+              "base": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              },
+              "draft": {
+                "type": "boolean"
+              },
+              "reviewers": {
+                "description": "GitHub logins",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "space": {
+                "description": "The space whose attached repositories to use; the caller's by default",
+                "type": "string"
+              }
+            },
+            "required": ["repo", "head", "title"]
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "number": {
+                "type": "number"
+              },
+              "url": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "existing": {
+                "type": "boolean",
+                "description": "A pull request for this branch was already open; nothing was created"
+              },
+              "uri": {
+                "description": "gh-pr://\u2026, when the repository is attached to a space",
+                "type": "string"
+              }
+            },
+            "required": ["number", "url", "title", "existing"],
+            "additionalProperties": false
+          }
+        },
+        "linkSession": {
+          "description": "Says that an agent session worked on a branch: every pull request from it, now or later, references the session. Call it again when the session pushes, with headSha.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "session": {
+                "type": "string",
+                "description": "session://<id>"
+              },
+              "branch": {
+                "type": "string"
+              },
+              "headSha": {
+                "type": "string"
+              },
+              "repo": {
+                "type": "string"
+              },
+              "space": {
+                "description": "The space whose attached repositories to use; the caller's by default",
+                "type": "string"
+              }
+            },
+            "required": ["session", "branch"]
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "pulls": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "uri": {
+                      "type": "string",
+                      "description": "gh-pr://\u2026"
+                    },
+                    "repo": {
+                      "type": "string",
+                      "description": "owner/name"
+                    },
+                    "number": {
+                      "type": ["number", "null"]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": ["open", "closed", "merged"]
+                    },
+                    "url": {
+                      "type": ["string", "null"]
+                    },
+                    "head": {
+                      "type": ["string", "null"]
+                    },
+                    "headSha": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["uri", "repo", "number", "title", "state", "url", "head", "headSha"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["pulls"],
+            "additionalProperties": false
+          }
+        },
+        "unlinkSession": {
+          "description": "Removes the link of a session to one branch, or to all of its branches.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "session": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              },
+              "space": {
+                "description": "The space whose attached repositories to use; the caller's by default",
+                "type": "string"
+              }
+            },
+            "required": ["session"]
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "removed": {
+                "type": "number"
+              }
+            },
+            "required": ["removed"],
+            "additionalProperties": false
+          }
+        },
+        "pullRequestsFor": {
+          "description": "The pull requests from a branch, newest first.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "branch": {
+                "type": "string"
+              },
+              "repo": {
+                "type": "string"
+              },
+              "headSha": {
+                "type": "string"
+              },
+              "space": {
+                "description": "The space whose attached repositories to use; the caller's by default",
+                "type": "string"
+              }
+            },
+            "required": ["branch"]
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "uri": {
+                  "type": "string",
+                  "description": "gh-pr://\u2026"
+                },
+                "repo": {
+                  "type": "string",
+                  "description": "owner/name"
+                },
+                "number": {
+                  "type": ["number", "null"]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": ["open", "closed", "merged"]
+                },
+                "url": {
+                  "type": ["string", "null"]
+                },
+                "head": {
+                  "type": ["string", "null"]
+                },
+                "headSha": {
+                  "type": ["string", "null"]
+                }
+              },
+              "required": ["uri", "repo", "number", "title", "state", "url", "head", "headSha"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "pushIssue": {
+          "description": "projects.issueSources: writes a change made in Crow to the GitHub issue, as the caller.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "link": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "space": {
+                    "type": "string",
+                    "description": "The project's space"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "repository": {
+                    "type": "string",
+                    "description": "gh-repo://\u2026"
+                  },
+                  "repoSpace": {
+                    "description": "The space the repository is attached to",
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["id", "space", "name", "repository"],
+                "additionalProperties": {}
+              },
+              "create": {
+                "type": "boolean"
+              },
+              "external": {
+                "type": ["string", "null"]
+              },
+              "number": {
+                "type": ["number", "null"]
+              },
+              "fields": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["title", "body", "state", "labels", "assignee"]
+                }
+              },
+              "issue": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "key", "title"],
+                "additionalProperties": {}
+              },
+              "comment": {
+                "type": "object",
+                "properties": {
+                  "op": {
+                    "type": "string",
+                    "enum": ["create", "edit", "delete"]
+                  },
+                  "id": {
+                    "type": "string"
+                  }
+                },
+                "required": ["op", "id"],
+                "additionalProperties": {}
+              }
+            },
+            "required": ["link", "create", "fields", "issue"],
+            "additionalProperties": {}
+          },
+          "result": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {}
+          }
+        },
+        "linkableRepositories": {
+          "description": "projects.issueSources: the attached repositories the caller can see.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "space": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": {}
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "repositories": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "repository": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["repository", "name"],
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": ["repositories"],
+            "additionalProperties": false
+          }
+        },
+        "projectLinked": {
+          "description": "projects.issueSources: a project was linked to one of its repositories; sync it now.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "link": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "space": {
+                    "type": "string",
+                    "description": "The project's space"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "repository": {
+                    "type": "string",
+                    "description": "gh-repo://\u2026"
+                  },
+                  "repoSpace": {
+                    "description": "The space the repository is attached to",
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["id", "space", "repository"],
+                "additionalProperties": {}
+              }
+            },
+            "required": ["link"]
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              }
+            },
+            "required": ["ok"],
+            "additionalProperties": false
+          }
+        },
+        "projectUnlinked": {
+          "description": "projects.issueSources: a project was unlinked from one of its repositories.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "link": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "space": {
+                    "type": "string",
+                    "description": "The project's space"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "repository": {
+                    "type": "string",
+                    "description": "gh-repo://\u2026"
+                  },
+                  "repoSpace": {
+                    "description": "The space the repository is attached to",
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["id", "space", "repository"],
+                "additionalProperties": {}
+              }
+            },
+            "required": ["link"]
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              }
+            },
+            "required": ["ok"],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  }
+}
