@@ -31,9 +31,9 @@ export async function testConnection(
 export default definePlugin((rookery) => {
   const valuesOf = async (id: string): Promise<Record<string, unknown>> => {
     const resolved = await rookery.connections.resolve(id)
-    const values: Record<string, unknown> = { ...resolved.connection.config }
-    if (resolved.credential) values.apiKey = resolved.credential
-    return values
+    // The connection's config holds no address, so the API key only ever goes to Anthropic. A
+    // redirect is refused: it could carry the key to another host.
+    return { apiKey: resolved.credential ?? "", rejectRedirects: true }
   }
 
   rookery.services.provide("anthropic", {

@@ -23,9 +23,10 @@ import {
 import type { EnvInfo } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { createEffect, createResource, createSignal, For, type JSX, on, onCleanup, Show } from "solid-js"
+import type { SessionSummary, Update } from "../../agents/src/parrot"
 import type { AgentHostCapability } from "../../agents/src/rookery-wire"
 import { formatChatPath } from "../../agents/src/store"
-import { connectParrot } from "../../agents/src/transport"
+import { connectParrot, type ParrotConnection } from "../../agents/src/transport"
 import { envName } from "./env"
 import { createHostsApi, type HostsApi } from "./hosts"
 import { addToPanel, openPanel } from "./panel"
@@ -33,6 +34,13 @@ import type { TerminalsApi } from "./termApi"
 import type { EnvSession, TerminalInfo } from "./types"
 
 const LAST_ENV = "crow.terminal.env"
+
+/** A host's session in the list: the one with its id replaced, or the newest at the front. */
+function upsertSession(list: readonly SessionSummary[], session: SessionSummary): SessionSummary[] {
+  const at = list.findIndex((s) => s.id === session.id)
+  if (at === -1) return [session, ...list]
+  return [...list.slice(0, at), session, ...list.slice(at + 1)]
+}
 
 function ago(iso: string): string {
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000)
@@ -154,29 +162,66 @@ export function SessionsView(props: {
     const supports: (EnvInfo["supports"] & AgentHostCapability) | undefined = host?.supports
     return host?.state === "online" && host.level !== "view" && supports?.agents ? host.name : undefined
   }
-  const [listedAgents] = createResource(
-    () => {
-      const name = agentHost()
-      return name ? { name, revision: tick() } : false
-    },
-    async ({ name }) => {
-      try {
-        const connection = await connectParrot(props.rookery, name)
-        try {
-          const listed = await connection.client.call("session/list", { archived: false, limit: 200 })
-          return { host: name, sessions: listed.sessions }
-        } finally {
-          connection.close()
-        }
-      } catch {
-        return undefined
-      }
-    },
-  )
-  const agentSessions = () => {
-    const list = listedAgents.latest
-    return list && list.host === agentHost() ? list.sessions : []
+  const [agentSessions, setAgentSessions] = createSignal<SessionSummary[]>([])
+  // One `agents.connect` stream per selected host, kept open so the index subscription pushes the
+  // host's sessions as they change, instead of a new handshake on every tick.
+  let agentLink: { conn: ParrotConnection; off: () => void } | null = null
+  let agentTicket = 0
+  const closeAgentLink = () => {
+    agentTicket++
+    if (!agentLink) return
+    const { conn, off } = agentLink
+    agentLink = null
+    off()
+    conn.close()
   }
+  createEffect(
+    on(agentHost, (name) => {
+      // The previous host's stream ends with the selection, and a handshake still running when the
+      // host changes is closed on arrival, so only the newest selection ever holds a stream.
+      closeAgentLink()
+      setAgentSessions([])
+      if (!name) return
+      const ticket = agentTicket
+      const apply = (u: Update) => {
+        if (u.type === "summary") setAgentSessions((prev) => upsertSession(prev, u.session))
+        else if (u.type === "deleted" && u.kind === "session")
+          setAgentSessions((prev) => prev.filter((s) => s.id !== u.id))
+      }
+      ;(async () => {
+        let conn: ParrotConnection | undefined
+        let off: (() => void) | undefined
+        try {
+          conn = await connectParrot(props.rookery, name)
+          if (ticket !== agentTicket) return
+          let subscription: string | undefined
+          off = conn.client.on("update", (params) => {
+            if (subscription && params.subscription !== subscription) return
+            apply(params.update)
+          })
+          agentLink = { conn, off }
+          const sub = await conn.client.subscribe({ index: true })
+          if (ticket !== agentTicket) return
+          subscription = sub.subscription
+          if (sub.snapshot?.index) setAgentSessions(sub.snapshot.index.sessions)
+          else {
+            const listed = await conn.client.call("session/list", { archived: false, limit: 200 })
+            if (ticket !== agentTicket) return
+            setAgentSessions(listed.sessions)
+          }
+        } catch {
+          // A host that does not answer shows the terminal state instead of the agent sessions.
+          if (ticket === agentTicket) setAgentSessions([])
+        } finally {
+          // A handshake that finished after the host changed is closed here, never used.
+          if (ticket !== agentTicket) {
+            off?.()
+            conn?.close()
+          }
+        }
+      })()
+    }),
+  )
   const offT = props.terminals.onChanged(() => setTick(tick() + 1))
   const offE = hosts.onChanged(() => refetchEnvs())
   const timer = setInterval(() => setTick(tick() + 1), 5000)
@@ -184,6 +229,7 @@ export function SessionsView(props: {
     offT()
     offE()
     clearInterval(timer)
+    closeAgentLink()
   })
   const previewOf = (t: TerminalInfo) => sessions().find((s) => s.id === t.sessionId)?.preview
   // The server says which sessions are already a terminal (`adopted`) and names the one this caller may

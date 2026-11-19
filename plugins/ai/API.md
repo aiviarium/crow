@@ -9,11 +9,17 @@ Each item is marked:
 
 ## Configure an Anthropic connection
 
-Run `bun scripts/pack-model-provider.ts` from Crow, then install the staged plugin with
-`rookery plugin add dist/model-anthropic` against an M5 server. In the Models page, an
-administrator can add an Anthropic API key, map the Text or Fast task to a model and run a test
-prompt. Rookery stores the key as a sealed connection credential and the task mappings as global
-settings. The provider sends requests to Anthropic's Messages API and returns completed text.
+Run `bun run pack` from Crow, then add the registry and the provider it holds to an M5 server:
+
+```bash
+rookery plugin registry add dir ./dist/registry
+rookery plugin add crow/model-anthropic
+```
+
+In the Models page, an administrator can add an Anthropic API key, map the Text or Fast task to a
+model and run a test prompt. Rookery stores the key as a sealed connection credential and the task
+mappings as global settings. The provider sends requests to Anthropic's Messages API and returns
+completed text.
 
 ---
 

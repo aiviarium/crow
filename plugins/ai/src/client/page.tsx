@@ -109,12 +109,17 @@ function AddAnthropic(props: { rookery: ClientRookeryWithAi; onAdded: () => void
     const form = e.currentTarget as HTMLFormElement
     const input = new FormData(form).get("apiKey")
     if (typeof input !== "string" || !input.trim()) return
+    const label = name().trim()
+    if (!label) {
+      setStatus("Give the connection a name")
+      return
+    }
     setSaving(true)
     setStatus("")
     try {
       await props.rookery.connections.create({
         type: ANTHROPIC_TYPE,
-        name: name().trim(),
+        name: label,
         scope: "global",
         config: {},
         credential: input.trim(),
