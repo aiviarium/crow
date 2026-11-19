@@ -2,6 +2,7 @@
 // @rookery/client's `createPluginLoader` so `ROOKERY_SHELL_DIR` serves shell and fleet together.
 // Delete this module in M2 once Hatchery packages serve plugin client halves from Rookery.
 import type { Connection, PluginInfo, PluginList } from "@rookery/client"
+import agentsManifest from "../../../plugins/agents/plugin.json"
 import aiManifest from "../../../plugins/ai/plugin.json"
 import fleetManifest from "../../../plugins/fleet/plugin.json"
 
@@ -44,6 +45,21 @@ const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = [
       manifest: aiManifest,
     } as unknown as PluginInfo,
     load: () => import("../../../plugins/ai/src/client"),
+  },
+  {
+    id: agentsManifest.id,
+    scriptUrl: `${BUILTIN_PREFIX}${agentsManifest.id}`,
+    info: {
+      id: agentsManifest.id,
+      state: "active",
+      client: {
+        script: `${BUILTIN_PREFIX}${agentsManifest.id}`,
+        styles: null,
+        hash: `builtin-${agentsManifest.version}`,
+      },
+      manifest: agentsManifest,
+    } as unknown as PluginInfo,
+    load: () => import("../../../plugins/agents/src/client"),
   },
 ]
 

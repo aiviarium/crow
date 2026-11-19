@@ -12,5 +12,12 @@
     "ref": "main",
     "sibling": "../nocturne",
     "probe": "package.json"
+  },
+  "parrot": {
+    "repo": "https://github.com/aiviarium/parrot.git",
+    "commit": "b889817a377b5a8ced18a913fc81289b4cef6cbe",
+    "ref": "main",
+    "sibling": "../parrot",
+    "probe": "packages/parrot-client/package.json"
   }
 }
