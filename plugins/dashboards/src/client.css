@@ -1,0 +1,66 @@
+@layer app {
+  .dashboards {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .dashboards .nc-panel-header {
+    gap: var(--space-3);
+  }
+
+  .dashboards__spacer {
+    flex: 1;
+  }
+
+  .dashboards__title-field {
+    min-width: 240px;
+  }
+
+  .dashboards__body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--space-4);
+  }
+
+  .dashboards__list {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: var(--space-2);
+    list-style: none;
+    overflow: auto;
+  }
+
+  .dashboards__item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: none;
+    color: var(--text-1);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .dashboards__item:hover {
+    background: var(--bg-3);
+  }
+
+  .dashboards__title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  @media (max-width: 720px) {
+    .dashboards__body {
+      padding: var(--space-3);
+    }
+  }
+}

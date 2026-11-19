@@ -1,0 +1,81 @@
+{
+  "id": "dashboards",
+  "name": "Dashboards",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "namespace": "dashboards",
+  "description": "Pages of widgets on a grid, for one person in their own space or shared with a team space. A dashboard is an entity, so it can be shared, pinned and mentioned like anything else.",
+  "client": "src/client.tsx",
+  "styles": "src/client.css",
+  "contributes": {
+    "collections": [
+      {
+        "name": "dashboards",
+        "scope": "space",
+        "entity": { "scheme": "dashboard", "title": "title", "subtitle": "description" },
+        "access": { "read": "view", "write": "use" },
+        "history": true,
+        "trash": true,
+        "fields": [
+          {
+            "name": "title",
+            "type": "text",
+            "search": true,
+            "required": true,
+            "default": "Untitled dashboard"
+          },
+          { "name": "description", "type": "text", "search": true },
+          { "name": "layout", "type": "json" }
+        ]
+      }
+    ],
+    "entityTypes": [
+      {
+        "scheme": "dashboard",
+        "title": "Dashboard",
+        "icon": "grid",
+        "view": "dashboards.dashboard",
+        "description": "A page of widgets"
+      }
+    ],
+    "commands": [
+      {
+        "id": "dashboards.create",
+        "title": "New dashboard",
+        "description": "Creates a dashboard in the current space and opens it for editing.",
+        "icon": "plus"
+      },
+      { "id": "dashboards.open", "title": "Open dashboards", "icon": "grid" }
+    ],
+    "views": [
+      { "id": "dashboards.list", "title": "Dashboards", "slot": "main", "icon": "grid" },
+      { "id": "dashboards.dashboard", "title": "Dashboard", "slot": "main", "icon": "grid" }
+    ],
+    "nav": [
+      {
+        "id": "dashboards.nav",
+        "title": "Dashboards",
+        "view": "dashboards.list",
+        "section": "rookery.spaces",
+        "icon": "layout-dashboard"
+      }
+    ],
+    "routes": [
+      { "path": "/", "view": "dashboards.list", "context": "rookery.space" },
+      { "path": "/:dashboard", "view": "dashboards.dashboard", "context": "rookery.space" }
+    ],
+    "extensions": {
+      "home.actions": [
+        {
+          "id": "dashboards.new",
+          "title": "New dashboard",
+          "icon": "grid",
+          "command": "dashboards.create",
+          "order": 40
+        }
+      ]
+    },
+    "settings": [],
+    "adminPages": []
+  }
+}
