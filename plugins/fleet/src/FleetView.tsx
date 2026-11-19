@@ -16,7 +16,8 @@ import {
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { type Accessor, createEffect, createMemo, createSignal, type JSX, onMount, Show } from "solid-js"
 import { AddHostDialog } from "./AddHostDialog"
-import type { FleetApi, HostInfo } from "./api"
+import type { HostInfo } from "./api"
+import type { FleetApi } from "./fleetApi"
 import { errorMessage, type HostStatusKind, hostStatus, hostTypeLabel, hostTypeTone } from "./format"
 
 export interface FleetStore {

@@ -5,7 +5,7 @@ import type { JobInfo } from "@rookery/client"
 import { render } from "solid-js/web"
 import { App } from "../../../shell/src/app/App"
 import { createShellApp } from "../../../shell/src/app/state"
-import { makeJob, startFakeRookery } from "../../../shell/test/fakeRookery"
+import { makeJob, makeLogItem, startFakeRookery } from "../../../shell/test/fakeRookery"
 import type { Action, HostInfo, HostProfile } from "../src/api"
 
 const cleanup: Array<() => void> = []
@@ -139,8 +139,8 @@ function seedHosts(): {
   const jobs: JobInfo[] = [
     makeJob({
       id: "job-prev-1",
-      plugin: "hosts",
-      name: "forge.apply",
+      kind: "host.apply",
+      subject: "host://forge",
       params: { host: "forge", action: "apply" },
       state: "succeeded",
       createdAt: now,
@@ -319,7 +319,7 @@ describe("@crow/plugin-fleet M1 views", () => {
     expect(profileText).toContain("builder")
     expect(profileText).toContain("docker")
     expect(root.querySelector("[data-part='host-behind']")?.textContent).toContain("packages")
-    expect(root.querySelector("[data-part='host-jobs']")?.textContent).toContain("forge.apply")
+    expect(root.querySelector("[data-part='host-jobs']")?.textContent).toContain("host.apply")
 
     // M1 scope: terminal action `ssh-shell` is filtered out while non-terminal actions show.
     const actionsCard = root.querySelector("[data-part='host-actions']")!
@@ -391,11 +391,12 @@ describe("@crow/plugin-fleet M1 views", () => {
     const now = new Date().toISOString()
     const liveJob: JobInfo = makeJob({
       id: "job-live-1",
-      plugin: "hosts",
-      name: "studio.apply",
+      kind: "host.apply",
+      subject: "host://studio",
       params: { host: "studio", action: "apply" },
       state: "running",
       maxAttempts: 2,
+      progress: { done: 2, total: 4, message: "Syncing packages" },
       createdAt: now,
       startedAt: now,
     })
@@ -403,9 +404,7 @@ describe("@crow/plugin-fleet M1 views", () => {
       ...seedHosts(),
       jobs: [liveJob],
       jobLogs: {
-        "job-live-1": [
-          { seq: 1, at: now, payload: { type: "output", level: "info", text: "Connecting to 192.0.2.10" } },
-        ],
+        "job-live-1": [makeLogItem({ seq: 1, at: now, text: "Connecting to 192.0.2.10" })],
       },
     })
     cleanup.push(() => fake.stop())
@@ -427,19 +426,10 @@ describe("@crow/plugin-fleet M1 views", () => {
     await waitFor(() => root.querySelector("[data-part='fleet-job']") !== null, "fleet-job mounted")
     await waitFor(() => (root.textContent ?? "").includes("Connecting to 192.0.2.10"), "initial job log")
 
-    // Push live progress and output chunks over the binary `jobs.follow` stream.
-    fake.pushJobLog("job-live-1", {
-      seq: 2,
-      at: now,
-      payload: { type: "progress", done: 2, total: 4, message: "Syncing packages" },
-    })
-    fake.pushJobLog("job-live-1", {
-      seq: 3,
-      at: now,
-      payload: { type: "output", level: "warn", text: "Reloading daemon" },
-    })
+    // Push a live output chunk over the binary `jobs.follow` stream.
+    fake.pushJobLog("job-live-1", makeLogItem({ seq: 2, at: now, level: "warn", text: "Reloading daemon" }))
 
-    await waitFor(() => (root.textContent ?? "").includes("Reloading daemon"), "live log line 3")
+    await waitFor(() => (root.textContent ?? "").includes("Reloading daemon"), "live log line 2")
     await waitFor(() => root.querySelector("[data-part='job-progress']") !== null, "job progress bar")
     expect(root.querySelector("[data-part='job-progress']")?.textContent).toContain("2 / 4")
 
@@ -474,6 +464,6 @@ describe("@crow/plugin-fleet M1 views", () => {
       () => fake.calls.some((c) => c.method === "jobs.retry" && c.params.id === "job-live-1"),
       "jobs.retry call",
     )
-    await waitFor(() => (root.textContent ?? "").includes("Retrying studio.apply"), "retried job log")
+    await waitFor(() => (root.textContent ?? "").includes("Retrying host.apply"), "retried job log")
   })
 })

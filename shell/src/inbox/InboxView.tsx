@@ -1,5 +1,5 @@
 // Shell Notifications Inbox view (`/inbox` and `/inbox/:id`): filterable notification list,
-// read/unread/archive controls, actionable `notify.answer` buttons + text input, and live updates.
+// read controls, actionable `notify.answer` buttons, and live updates.
 import {
   Badge,
   type BadgeTone,
@@ -12,23 +12,21 @@ import {
   RowList,
   Select,
   Tabs,
-  TextField,
   toast,
   ViewHeader,
   ViewLayout,
 } from "@aiviarium/nocturne"
-import type { NotificationAction, NotificationInfo } from "@rookery/client"
+import type { NotificationInfo } from "@rookery/client"
 import { createEffect, createMemo, createSignal, For, type JSX, on, onMount, Show } from "solid-js"
 import type { ShellApp } from "../app/state"
 import { formatTimeAgo } from "../jobs/state"
-import { notificationLink, notificationTitle } from "./state"
+import { actionLabel, notificationLink, notificationTitle } from "./state"
 
-type InboxFilter = "all" | "unread" | "archived"
+type InboxFilter = "all" | "unread"
 
 const FILTER_TABS: Array<{ id: InboxFilter; label: string }> = [
   { id: "all", label: "All" },
   { id: "unread", label: "Unread" },
-  { id: "archived", label: "Archived" },
 ]
 
 function kindTone(kind: string): BadgeTone {
@@ -51,16 +49,16 @@ function kindLabel(kind: string): string {
   return kind.replace(/[._]/g, " ")
 }
 
-function actionVariant(style?: string): "primary" | "secondary" | "danger" {
-  if (style === "primary") return "primary"
-  if (style === "danger") return "danger"
+function actionVariant(action: string): "primary" | "secondary" | "danger" {
+  const id = action.toLowerCase()
+  if (id.includes("deny") || id.includes("reject") || id.includes("dismiss")) return "danger"
+  if (id.includes("approve") || id.includes("accept") || id === "yes") return "primary"
   return "secondary"
 }
 
 export function InboxView(props: { app: ShellApp; notificationId?: string }): JSX.Element {
   const [tab, setTab] = createSignal<InboxFilter>("all")
   const [kindFilter, setKindFilter] = createSignal("all")
-  const [answerText, setAnswerText] = createSignal("")
   const [answering, setAnswering] = createSignal<string | null>(null)
   const [answerError, setAnswerError] = createSignal<string | null>(null)
 
@@ -68,21 +66,11 @@ export function InboxView(props: { app: ShellApp; notificationId?: string }): JS
 
   onMount(() => {
     props.app.setViewTitle("Inbox")
-    void props.app.inbox.refresh({ archived: false })
+    void props.app.inbox.refresh()
   })
-
-  const switchTab = (next: string) => {
-    const f = next as InboxFilter
-    setTab(f)
-    const wantArchived = f === "archived"
-    if (wantArchived !== props.app.inbox.showArchived()) {
-      void props.app.inbox.setShowArchived(wantArchived)
-    }
-  }
 
   const kindOptions = createMemo(() => {
     const kinds = new Set<string>()
-    for (const c of props.app.inbox.counts()) kinds.add(c.kind)
     for (const n of props.app.inbox.notifications()) kinds.add(n.kind)
     return [
       { value: "all", label: "All kinds" },
@@ -110,7 +98,6 @@ export function InboxView(props: { app: ShellApp; notificationId?: string }): JS
 
   createEffect(
     on(selectedId, () => {
-      setAnswerText("")
       setAnswerError(null)
     }),
   )
@@ -122,14 +109,12 @@ export function InboxView(props: { app: ShellApp; notificationId?: string }): JS
     }
   }
 
-  const submitAnswer = async (n: NotificationInfo, act: NotificationAction) => {
+  const submitAnswer = async (n: NotificationInfo, action: string) => {
     if (answering()) return
-    setAnswering(act.id)
+    setAnswering(action)
     setAnswerError(null)
     try {
-      const text = act.input !== undefined ? answerText() : undefined
-      await props.app.inbox.answer(n.id, act.id, text)
-      setAnswerText("")
+      await props.app.inbox.answer(n.id, action)
       if (!n.readAt) void props.app.inbox.markRead([n.id])
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -152,34 +137,6 @@ export function InboxView(props: { app: ShellApp; notificationId?: string }): JS
     }
   }
 
-  const toggleRead = async (n: NotificationInfo) => {
-    try {
-      if (n.readAt) await props.app.inbox.markUnread([n.id])
-      else await props.app.inbox.markRead([n.id])
-    } catch (err) {
-      toast({
-        title: "Could not update notification",
-        description: err instanceof Error ? err.message : String(err),
-        tone: "danger",
-      })
-    }
-  }
-
-  const archiveItem = async (n: NotificationInfo) => {
-    try {
-      await props.app.inbox.archive([n.id])
-      props.app.navigate("/inbox")
-    } catch (err) {
-      toast({
-        title: "Could not archive notification",
-        description: err instanceof Error ? err.message : String(err),
-        tone: "danger",
-      })
-    }
-  }
-
-  const inputAction = createMemo(() => selected()?.actions?.find((a) => a.input !== undefined) ?? null)
-
   return (
     <ViewLayout
       id="crow.inbox"
@@ -189,7 +146,12 @@ export function InboxView(props: { app: ShellApp; notificationId?: string }): JS
       sidebar={
         <div class="crow-split-list" data-part="inbox-list">
           <div class="crow-split-list__controls">
-            <Tabs label="Notification filter" items={FILTER_TABS} value={tab()} onChange={switchTab} />
+            <Tabs
+              label="Notification filter"
+              items={FILTER_TABS}
+              value={tab()}
+              onChange={(id) => setTab(id as InboxFilter)}
+            />
             <Show when={kindOptions().length > 1}>
               <Select
                 aria-label="Filter by kind"
@@ -239,11 +201,7 @@ export function InboxView(props: { app: ShellApp; notificationId?: string }): JS
                   {(n) => (
                     <ListRow
                       title={notificationTitle(n)}
-                      secondary={
-                        notificationTitle(n) !== n.text
-                          ? n.text
-                          : (n.actorName ?? n.plugin ?? kindLabel(n.kind))
-                      }
+                      secondary={n.body ?? kindLabel(n.kind)}
                       meta={formatTimeAgo(n.createdAt)}
                       unread={!n.readAt}
                       selected={n.id === selectedId()}
@@ -302,27 +260,16 @@ export function InboxView(props: { app: ShellApp; notificationId?: string }): JS
               <Card
                 title={notificationTitle(n())}
                 action={
-                  <div class="crow-row">
+                  <Show when={!n().readAt}>
                     <Button
                       size="sm"
                       variant="ghost"
-                      data-part="inbox-toggle-read"
-                      onClick={() => void toggleRead(n())}
+                      data-part="inbox-mark-read"
+                      onClick={() => void props.app.inbox.markRead([n().id])}
                     >
-                      {n().readAt ? "Mark unread" : "Mark read"}
+                      Mark read
                     </Button>
-                    <Show when={!n().archivedAt}>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon="archive"
-                        data-part="inbox-archive"
-                        onClick={() => void archiveItem(n())}
-                      >
-                        Archive
-                      </Button>
-                    </Show>
-                  </div>
+                  </Show>
                 }
               >
                 <div class="crow-detail-stack">
@@ -335,15 +282,17 @@ export function InboxView(props: { app: ShellApp; notificationId?: string }): JS
                           </Badge>
                         ),
                       },
-                      n().actorName ? { label: n().actorName! } : null,
-                      n().plugin ? { label: n().plugin! } : null,
                       { label: formatTimeAgo(n().createdAt) },
                     ]}
                   />
 
-                  <p class="body" data-part="inbox-detail-text">
-                    {n().text}
-                  </p>
+                  <Show when={n().body}>
+                    {(body) => (
+                      <p class="body" data-part="inbox-detail-text">
+                        {body()}
+                      </p>
+                    )}
+                  </Show>
 
                   <Show when={notificationLink(n())}>
                     {(href) => (
@@ -363,16 +312,14 @@ export function InboxView(props: { app: ShellApp; notificationId?: string }): JS
               </Card>
 
               <Show when={n().answer}>
-                {(ans) => (
+                {(answered) => (
                   <Callout tone="info" data-part="inbox-answered">
-                    Answered with <strong class="mono">{ans().action}</strong>
-                    <Show when={ans().text}>: {ans().text}</Show>
-                    <Show when={ans().byName}> by {ans().byName}</Show> ({formatTimeAgo(ans().at)})
+                    Answered with <strong class="mono">{actionLabel(answered())}</strong>
                   </Callout>
                 )}
               </Show>
 
-              <Show when={!n().answer && (n().actions?.length ?? 0) > 0}>
+              <Show when={!n().answer && n().actions.length > 0}>
                 <Card title="Respond" data-part="inbox-actions">
                   <div class="crow-detail-stack">
                     <Show when={answerError()}>
@@ -383,30 +330,18 @@ export function InboxView(props: { app: ShellApp; notificationId?: string }): JS
                       )}
                     </Show>
 
-                    <Show when={inputAction()}>
-                      {(act) => (
-                        <TextField
-                          id="inbox-answer-input"
-                          label="Reply"
-                          placeholder={act().input || "Enter response…"}
-                          value={answerText()}
-                          onInput={(e) => setAnswerText(e.currentTarget.value)}
-                        />
-                      )}
-                    </Show>
-
                     <div class="crow-row">
                       <For each={n().actions}>
-                        {(act) => (
+                        {(action) => (
                           <Button
                             size="sm"
-                            variant={actionVariant(act.style)}
+                            variant={actionVariant(action)}
                             disabled={answering() !== null}
                             data-part="inbox-action-btn"
-                            data-action-id={act.id}
-                            onClick={() => void submitAnswer(n(), act)}
+                            data-action-id={action}
+                            onClick={() => void submitAnswer(n(), action)}
                           >
-                            {answering() === act.id ? "Sending…" : act.label}
+                            {answering() === action ? "Sending…" : actionLabel(action)}
                           </Button>
                         )}
                       </For>

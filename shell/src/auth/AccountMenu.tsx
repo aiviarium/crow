@@ -9,6 +9,16 @@ export function AccountMenu(props: { app: ShellApp; onNavigate?: () => void }): 
   const [open, setOpen] = createSignal(false)
   const [trigger, setTrigger] = createSignal<HTMLElement>()
   const me = () => props.app.session.me()
+  // Over the Unix socket there is no user: the principal is the server's own machine.
+  const identity = () => {
+    const m = me()
+    if (!m) return null
+    return {
+      name: m.user?.name ?? "Local session",
+      email: m.user?.email ?? `${m.principal.kind}:${m.principal.id}`,
+      admin: m.admin,
+    }
+  }
 
   const close = () => {
     setOpen(false)
@@ -16,19 +26,19 @@ export function AccountMenu(props: { app: ShellApp; onNavigate?: () => void }): 
   }
 
   const buildItems = (): MenuEntry[] => {
-    const user = me()?.user
+    const who = identity()
     const currentTheme = theme()
     return [
       {
         type: "custom",
         content: (
           <div class="crow-account__who" data-part="account-who">
-            <Avatar name={user?.name ?? ""} size="lg" />
+            <Avatar name={who?.name ?? ""} size="lg" />
             <span class="crow-account__text">
-              <span class="label crow-account__name">{user?.name}</span>
-              <span class="nc-meta crow-account__email">{user?.email}</span>
+              <span class="label crow-account__name">{who?.name}</span>
+              <span class="nc-meta crow-account__email">{who?.email}</span>
             </span>
-            <Badge tone={user?.admin ? "accent" : "neutral"}>{user?.admin ? "Admin" : "Member"}</Badge>
+            <Badge tone={who?.admin ? "accent" : "neutral"}>{who?.admin ? "Admin" : "Member"}</Badge>
           </div>
         ),
       },
@@ -55,8 +65,8 @@ export function AccountMenu(props: { app: ShellApp; onNavigate?: () => void }): 
   }
 
   return (
-    <Show when={me()}>
-      {(m) => (
+    <Show when={identity()}>
+      {(who) => (
         <>
           <button
             ref={setTrigger}
@@ -74,9 +84,9 @@ export function AccountMenu(props: { app: ShellApp; onNavigate?: () => void }): 
             }}
           >
             <span class="crow-user__lead">
-              <Avatar name={m().user.name} size="sm" />
+              <Avatar name={who().name} size="sm" />
             </span>
-            <span class="nc-nav-item__label">{m().user.name}</span>
+            <span class="nc-nav-item__label">{who().name}</span>
             <span class="nc-nav-item__meta" aria-hidden="true">
               <Icon name="chevron-down" />
             </span>
@@ -114,11 +124,11 @@ export function AboutDialog(props: { app: ShellApp }): JSX.Element {
     >
       <dl class="crow-about" data-part="about">
         <dt class="nc-meta">Server</dt>
-        <dd class="mono">v{me()?.kernelVersion ?? "—"}</dd>
+        <dd class="mono">v{me()?.version ?? "—"}</dd>
         <dt class="nc-meta">API</dt>
         <dd class="mono">v{me()?.apiVersion ?? "—"}</dd>
         <dt class="nc-meta">Signed in as</dt>
-        <dd>{me()?.user.email ?? me()?.user.name ?? "—"}</dd>
+        <dd>{me()?.user?.email ?? me()?.user?.name ?? "—"}</dd>
         <dt class="nc-meta">Theme</dt>
         <dd>{shown()}</dd>
       </dl>

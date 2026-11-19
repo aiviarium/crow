@@ -15,12 +15,13 @@ import {
   toast,
   ViewHeader,
   ViewLayout,
+  WidgetProgress,
 } from "@aiviarium/nocturne"
 import type { JobDetail, JobInfo, JobState } from "@rookery/client"
 import { createEffect, createMemo, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js"
 import type { ShellApp } from "../app/state"
 import { JobLog } from "./JobLog"
-import { formatTimeAgo, isJobActive, jobStatusInfo } from "./state"
+import { formatTimeAgo, isJobActive, jobProgress, jobStatusInfo, jobSubtitle, jobTitle } from "./state"
 
 type JobFilter = "all" | "active" | "succeeded" | "failed" | "cancelled"
 
@@ -59,8 +60,8 @@ export function JobsView(props: { app: ShellApp; jobId?: string }): JSX.Element 
       if (!matchesFilter(job.state, f)) return false
       if (!q) return true
       return (
-        job.name.toLowerCase().includes(q) ||
-        job.plugin.toLowerCase().includes(q) ||
+        job.kind.toLowerCase().includes(q) ||
+        (job.subject ?? "").toLowerCase().includes(q) ||
         job.id.toLowerCase().includes(q)
       )
     })
@@ -76,7 +77,7 @@ export function JobsView(props: { app: ShellApp; jobId?: string }): JSX.Element 
     try {
       const d = await props.app.jobs.get(id)
       setDetail(d)
-      props.app.setViewTitle(d.job.name)
+      props.app.setViewTitle(jobTitle(d.job))
     } catch (err) {
       setDetailError(err instanceof Error ? err.message : String(err))
     }
@@ -235,8 +236,8 @@ export function JobsView(props: { app: ShellApp; jobId?: string }): JSX.Element 
                     const s = jobStatusInfo(job.state)
                     return (
                       <ListRow
-                        title={job.name}
-                        secondary={job.plugin}
+                        title={jobTitle(job)}
+                        secondary={jobSubtitle(job)}
                         meta={formatTimeAgo(job.createdAt)}
                         leading={<State status={s.dot}>{s.label}</State>}
                         selected={job.id === selectedId()}
@@ -256,7 +257,7 @@ export function JobsView(props: { app: ShellApp; jobId?: string }): JSX.Element 
           noPin
           crumbs={
             activeJob()
-              ? [{ label: "Jobs", icon: "activity", href: "/jobs" }, { label: activeJob()!.name }]
+              ? [{ label: "Jobs", icon: "activity", href: "/jobs" }, { label: jobTitle(activeJob()!) }]
               : [{ label: "Jobs", icon: "activity" }]
           }
           context={
@@ -332,13 +333,33 @@ export function JobsView(props: { app: ShellApp; jobId?: string }): JSX.Element 
                       <MetaLine
                         items={[
                           { label: <IdBadge>{job().id}</IdBadge> },
-                          { label: job().plugin },
+                          { label: job().kind },
+                          job().subject ? { label: job().subject! } : null,
                           { label: `Attempt ${job().attempts} of ${job().maxAttempts}` },
                           { label: `Created ${formatTimeAgo(job().createdAt)}` },
                           job().finishedAt ? { label: `Finished ${formatTimeAgo(job().finishedAt)}` } : null,
                         ]}
                       />
                     </Card>
+
+                    <Show when={jobProgress(job().progress)}>
+                      {(p) => (
+                        <Card>
+                          <div class="crow-progress" data-part="job-progress">
+                            <div class="crow-progress__head label">
+                              <span>{p().message ?? "Working…"}</span>
+                              <span class="mono">
+                                {p().done} / {p().total}
+                              </span>
+                            </div>
+                            <WidgetProgress
+                              value={p().total > 0 ? (p().done / p().total) * 100 : 0}
+                              label={p().message ?? "Job progress"}
+                            />
+                          </div>
+                        </Card>
+                      )}
+                    </Show>
 
                     <Show when={job().error}>
                       {(err) => (
@@ -353,7 +374,7 @@ export function JobsView(props: { app: ShellApp; jobId?: string }): JSX.Element 
                             </Show>
                           }
                         >
-                          {err()}
+                          {err().message}
                         </Callout>
                       )}
                     </Show>

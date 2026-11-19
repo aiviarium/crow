@@ -1,7 +1,8 @@
 // Dialog for running a host action that takes arguments or requires confirmation.
 import { Button, Callout, Dialog, Select, Switch, TextArea, TextField } from "@aiviarium/nocturne"
 import { createEffect, createSignal, For, type JSX, Show } from "solid-js"
-import type { Action, Argument, FleetApi } from "./api"
+import type { Action, Argument } from "./api"
+import type { FleetApi } from "./fleetApi"
 import { errorMessage } from "./format"
 
 export interface ActionDialogProps {

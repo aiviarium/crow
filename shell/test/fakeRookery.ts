@@ -1,14 +1,46 @@
-// Reusable fake Rookery WebSocket/HTTP server for Bun tests. Implements every RPC method and
-// stream in `plugins/fleet/src/api.ts`, plus `jobs.*` (with binary NDJSON `jobs.follow` streams
-// honoring `after` cursors) and `notify.*` (with live `notify.new` / `notify.changed` events).
-import type { JobDetail, JobInfo, JobLogItem, JobState, NotificationInfo, PluginInfo } from "@rookery/client"
+// Reusable fake Rookery WebSocket/HTTP server for Bun tests. Answers in the exact shapes of
+// @rookery/client's generated wire types: `auth.me` is a `Me`, `jobs.*` use `JobInfo` / `JobDetail`
+// / `LogItem` / `JobEnd`, and `notify.*` use `NotificationInfo` with string actions and answers.
+// `hosts.*` is still the hand-written contract in `plugins/fleet/src/api.ts` until it lands.
+import type {
+  CommandList,
+  Count,
+  ErrorBody,
+  Event,
+  EventSubscribed,
+  JobChanged,
+  JobDetail,
+  JobEnd,
+  JobInfo,
+  JobList,
+  JobState,
+  LogItem,
+  Me,
+  NotificationInfo,
+  NotificationList,
+  NotifyChanged,
+  NotifyNew,
+  PluginInfo,
+  PluginList,
+  StreamOpened,
+  User,
+} from "@rookery/client"
 import type {
   Action,
   HostCheckResult,
   HostInfo,
   HostProfile,
+  HostsActionsResult,
   HostsActParams,
+  HostsActResult,
+  HostsCheckResult,
+  HostsGetResult,
+  HostsListResult,
+  HostsProfileResult,
+  HostsRemoveResult,
+  HostsRenameResult,
   HostsSaveParams,
+  HostsSaveResult,
 } from "../../plugins/fleet/src/api"
 
 export interface FakeRookerySeed {
@@ -17,7 +49,7 @@ export interface FakeRookerySeed {
   actions?: Record<string, Action[]>
   checks?: Record<string, HostCheckResult>
   jobs?: JobInfo[]
-  jobLogs?: Record<string, JobLogItem[]>
+  jobLogs?: Record<string, LogItem[]>
   notifications?: NotificationInfo[]
   plugins?: PluginInfo[]
 }
@@ -40,14 +72,35 @@ export interface FakeRookeryServer {
   readonly followRequests: Array<{ id: string; after: number }>
   getHosts(): HostInfo[]
   getJob(id: string): JobInfo | undefined
-  pushJobLog(jobId: string, item: JobLogItem): void
-  finishJob(jobId: string, state: JobState, opts?: { result?: unknown; error?: string | null }): void
+  pushJobLog(jobId: string, item: LogItem): void
+  finishJob(jobId: string, state: JobState, opts?: { result?: unknown; error?: ErrorBody | null }): void
   pushJobChanged(job: JobInfo): void
   pushNotification(notification: NotificationInfo): void
   pushNotificationChanged(notification: NotificationInfo): void
   pushHostChanged(event: { host: string; info?: HostInfo | null; removed?: boolean }): void
   closeSockets(): void
   stop(): void
+}
+
+export const TEST_USER: User = {
+  id: "u-ada",
+  name: "Ada Lovelace",
+  email: "ada@example.test",
+  admin: true,
+}
+
+export function errorBody(message: string, code: ErrorBody["code"] = "INTERNAL"): ErrorBody {
+  return { code, message }
+}
+
+export function makeLogItem(overrides: Partial<LogItem> & Pick<LogItem, "seq" | "text">): LogItem {
+  return {
+    at: new Date().toISOString(),
+    attempt: 1,
+    level: "info",
+    data: null,
+    ...overrides,
+  }
 }
 
 const enc = new TextEncoder()
@@ -64,23 +117,21 @@ function isTerminal(state: JobState): boolean {
   return state === "succeeded" || state === "failed" || state === "cancelled"
 }
 
-export function makeJob(
-  overrides: Partial<JobInfo> & Pick<JobInfo, "id" | "plugin" | "name" | "state">,
-): JobInfo {
-  const now = overrides.createdAt ?? new Date().toISOString()
+export function makeJob(overrides: Partial<JobInfo> & Pick<JobInfo, "id" | "kind" | "state">): JobInfo {
+  const now = new Date().toISOString()
   return {
-    uri: `job://${overrides.id}`,
-    priority: 0,
+    params: null,
+    subject: null,
     attempts: 1,
     maxAttempts: 1,
-    timeoutSecs: 300,
-    params: {},
-    principal: "user:u-ada",
     cancelRequested: false,
-    runAt: now,
+    progress: null,
+    result: null,
+    error: null,
+    enqueuedBy: TEST_USER.id,
     createdAt: now,
-    updatedAt: now,
     startedAt: now,
+    finishedAt: null,
     ...overrides,
   }
 }
@@ -95,7 +146,7 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
   )
   const checks = new Map<string, HostCheckResult>(Object.entries(seed.checks ?? {}))
   const jobs = new Map<string, JobInfo>((seed.jobs ?? []).map((j) => [j.id, structuredClone(j)]))
-  const jobLogs = new Map<string, JobLogItem[]>(
+  const jobLogs = new Map<string, LogItem[]>(
     Object.entries(seed.jobLogs ?? {}).map(([k, v]) => [k, structuredClone(v)]),
   )
   const notifications = new Map<string, NotificationInfo>(
@@ -117,31 +168,21 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
     for (const ws of sockets) ws.send(wire)
   }
 
-  const unreadCount = () =>
-    Array.from(notifications.values()).filter((n) => !n.readAt && !n.archivedAt).length
+  const unreadCount = () => Array.from(notifications.values()).filter((n) => !n.readAt).length
 
   const sendReply = (ws: any, id: unknown, result: unknown) => {
     ws.send(JSON.stringify({ jsonrpc: "2.0", id, result }))
   }
 
-  const sendError = (ws: any, id: unknown, code: string, message: string) => {
-    ws.send(
-      JSON.stringify({
-        jsonrpc: "2.0",
-        id,
-        error: { code: -32000, message, data: { code } },
-      }),
-    )
+  const sendError = (ws: any, id: unknown, code: ErrorBody["code"], message: string) => {
+    ws.send(JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32000, message, data: { code } } }))
   }
 
-  const closeFollowStream = (
-    stream: ActiveFollowStream,
-    done?: { state: JobState; result?: unknown; error?: string | null },
-  ) => {
+  const closeFollowStream = (stream: ActiveFollowStream, end?: JobEnd) => {
     if (!followStreams.has(stream.streamId)) return
     followStreams.delete(stream.streamId)
-    if (done) {
-      stream.ws.send(binaryFrame(stream.streamId, `${JSON.stringify(done)}\n`))
+    if (end) {
+      stream.ws.send(binaryFrame(stream.streamId, `${JSON.stringify(end)}\n`))
     }
     stream.ws.send(
       JSON.stringify({
@@ -154,33 +195,38 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
 
   const pushJobChanged = (job: JobInfo) => {
     jobs.set(job.id, structuredClone(job))
-    broadcast("jobs.changed", { job })
+    const changed: JobChanged = { job }
+    broadcast("jobs.changed", changed)
   }
 
   const finishJob = (
     jobId: string,
     state: JobState,
-    opts: { result?: unknown; error?: string | null } = {},
+    opts: { result?: unknown; error?: ErrorBody | null } = {},
   ) => {
     const existing = jobs.get(jobId)
     if (existing) {
-      const now = new Date().toISOString()
+      const finishedAt = new Date().toISOString()
       const updated: JobInfo = {
         ...existing,
         state,
-        updatedAt: now,
-        finishedAt: now,
-        error: opts.error ?? (state === "failed" ? "Job failed" : undefined),
+        finishedAt,
+        result: opts.result ?? null,
+        error: opts.error ?? (state === "failed" ? errorBody("Job failed") : null),
       }
       pushJobChanged(updated)
     }
-    const done = { state, result: opts.result ?? null, error: opts.error ?? null }
+    const end: JobEnd = {
+      state,
+      result: opts.result ?? null,
+      error: opts.error ?? (state === "failed" ? errorBody("Job failed") : null),
+    }
     for (const s of Array.from(followStreams.values())) {
-      if (s.jobId === jobId) closeFollowStream(s, done)
+      if (s.jobId === jobId) closeFollowStream(s, end)
     }
   }
 
-  const pushJobLog = (jobId: string, item: JobLogItem) => {
+  const pushJobLog = (jobId: string, item: LogItem) => {
     const list = jobLogs.get(jobId) ?? []
     list.push(structuredClone(item))
     jobLogs.set(jobId, list)
@@ -201,9 +247,8 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
         return new Response("upgrade failed", { status: 400 })
       }
       if (url.pathname === "/auth/session") {
-        return Response.json({
-          user: { id: "u-ada", name: "Ada Lovelace", email: "ada@example.test", admin: true },
-        })
+        const body: { user: User } = { user: TEST_USER }
+        return Response.json(body)
       }
       if (url.pathname === "/auth/logout" && req.method === "POST") {
         return Response.json({ redirect: null })
@@ -247,29 +292,36 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
         calls.push({ method: msg.method, params: structuredClone(params) })
 
         switch (msg.method) {
-          case "auth.me":
-            sendReply(ws, msg.id, {
-              user: { id: "u-ada", name: "Ada Lovelace", email: "ada@example.test", admin: true },
-              principal: { kind: "user", id: "u-ada" },
-              dev: false,
-              localAuth: true,
-              kernelVersion: "0.4.0",
+          case "auth.me": {
+            const me: Me = {
+              user: TEST_USER,
+              principal: { kind: "user", id: TEST_USER.id },
+              admin: true,
+              auth: "local",
+              version: "0.4.0",
               apiVersion: 1,
-            })
+            }
+            sendReply(ws, msg.id, me)
             return
+          }
 
-          case "plugins.list":
-            sendReply(ws, msg.id, { plugins })
+          case "plugins.list": {
+            const list: PluginList = { plugins }
+            sendReply(ws, msg.id, list)
             return
+          }
 
-          case "commands.list":
-            sendReply(ws, msg.id, { commands: [] })
+          case "commands.list": {
+            const list: CommandList = { commands: [] }
+            sendReply(ws, msg.id, list)
             return
+          }
 
           case "events.subscribe": {
             const subId = `sub-${nextSubSeq++}`
             eventSubs.set(subId, { ws, topic: String(params.topic ?? "") })
-            sendReply(ws, msg.id, { subscription: subId })
+            const subscribed: EventSubscribed = { subscription: subId }
+            sendReply(ws, msg.id, subscribed)
             return
           }
 
@@ -278,10 +330,12 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
             sendReply(ws, msg.id, {})
             return
 
-          // ---------------- Hosts (plugins/fleet/src/api.ts) ----------------
-          case "hosts.list":
-            sendReply(ws, msg.id, { hosts: Array.from(hosts.values()) })
+          // ---------------- Hosts (hosts.* is not on the server yet) ----------------
+          case "hosts.list": {
+            const list: HostsListResult = { hosts: Array.from(hosts.values()) }
+            sendReply(ws, msg.id, list)
             return
+          }
 
           case "hosts.get": {
             const name = String(params.host ?? "")
@@ -290,7 +344,8 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
               sendError(ws, msg.id, "NOT_FOUND", `host ${name} not found`)
               return
             }
-            sendReply(ws, msg.id, h)
+            const result: HostsGetResult = h
+            sendReply(ws, msg.id, result)
             return
           }
 
@@ -321,7 +376,8 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
                 }
             hosts.set(p.host, saved)
             profiles.set(p.host, structuredClone(p.profile))
-            sendReply(ws, msg.id, { host: saved })
+            const result: HostsSaveResult = { host: saved }
+            sendReply(ws, msg.id, result)
             return
           }
 
@@ -330,7 +386,8 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
             hosts.delete(name)
             profiles.delete(name)
             actionsByHost.delete(name)
-            sendReply(ws, msg.id, {})
+            const result: HostsRemoveResult = {}
+            sendReply(ws, msg.id, result)
             return
           }
 
@@ -350,27 +407,30 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
               profiles.delete(from)
               profiles.set(to, prof)
             }
-            sendReply(ws, msg.id, { host: renamed })
+            const result: HostsRenameResult = { host: renamed }
+            sendReply(ws, msg.id, result)
             return
           }
 
           case "hosts.profile": {
             const name = String(params.host ?? "")
             const prof = profiles.get(name) ?? {}
-            sendReply(ws, msg.id, { profile: prof })
+            const result: HostsProfileResult = { profile: prof }
+            sendReply(ws, msg.id, result)
             return
           }
 
           case "hosts.check": {
             const key = `${String(params.host ?? "")}:${String(params.capability ?? "")}`
-            const res = checks.get(key) ?? { allowed: true, refusal: null }
+            const res: HostsCheckResult = checks.get(key) ?? { allowed: true, refusal: null }
             sendReply(ws, msg.id, res)
             return
           }
 
           case "hosts.actions": {
             const name = String(params.host ?? "")
-            sendReply(ws, msg.id, { actions: actionsByHost.get(name) ?? [] })
+            const result: HostsActionsResult = { actions: actionsByHost.get(name) ?? [] }
+            sendReply(ws, msg.id, result)
             return
           }
 
@@ -380,24 +440,19 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
             const now = new Date().toISOString()
             const created = makeJob({
               id: jobId,
-              plugin: "hosts",
-              name: `${p.host}.${p.action}`,
+              kind: `host.${p.action}`,
+              subject: `host://${p.host}`,
               params: { host: p.host, action: p.action, ...(p.arguments ? { arguments: p.arguments } : {}) },
               state: "running",
               createdAt: now,
               startedAt: now,
-              updatedAt: now,
             })
             jobs.set(jobId, created)
-            jobLogs.set(jobId, [
-              {
-                seq: 1,
-                at: now,
-                payload: { type: "output", level: "info", text: `Starting ${p.action} on ${p.host}` },
-              },
-            ])
-            broadcast("jobs.changed", { job: created })
-            sendReply(ws, msg.id, { job: jobId, state: "running" })
+            jobLogs.set(jobId, [makeLogItem({ seq: 1, at: now, text: `Starting ${p.action} on ${p.host}` })])
+            const changed: JobChanged = { job: created }
+            broadcast("jobs.changed", changed)
+            const result: HostsActResult = { job: jobId, state: "running" }
+            sendReply(ws, msg.id, result)
             return
           }
 
@@ -407,13 +462,17 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
             if (typeof params.state === "string" && params.state) {
               list = list.filter((j) => j.state === params.state)
             }
-            if (typeof params.plugin === "string" && params.plugin) {
-              list = list.filter((j) => j.plugin === params.plugin)
+            if (typeof params.kind === "string" && params.kind) {
+              list = list.filter((j) => j.kind === params.kind)
+            }
+            if (typeof params.subject === "string" && params.subject) {
+              list = list.filter((j) => j.subject === params.subject)
             }
             if (typeof params.limit === "number") {
               list = list.slice(0, params.limit)
             }
-            sendReply(ws, msg.id, { jobs: list })
+            const res: JobList = { jobs: list }
+            sendReply(ws, msg.id, res)
             return
           }
 
@@ -453,25 +512,20 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
             const retried: JobInfo = {
               ...prev,
               id: retryId,
-              uri: `job://${retryId}`,
               state: "running",
               attempts: prev.attempts + 1,
               maxAttempts: Math.max(prev.maxAttempts, prev.attempts + 1),
               createdAt: now,
               startedAt: now,
-              updatedAt: now,
-              finishedAt: undefined,
-              error: undefined,
+              finishedAt: null,
+              progress: null,
+              result: null,
+              error: null,
             }
             jobs.set(retryId, retried)
-            jobLogs.set(retryId, [
-              {
-                seq: 1,
-                at: now,
-                payload: { type: "output", level: "info", text: `Retrying ${prev.name}` },
-              },
-            ])
-            broadcast("jobs.changed", { job: retried })
+            jobLogs.set(retryId, [makeLogItem({ seq: 1, at: now, text: `Retrying ${prev.kind}` })])
+            const changed: JobChanged = { job: retried }
+            broadcast("jobs.changed", changed)
             sendReply(ws, msg.id, retried)
             return
           }
@@ -486,7 +540,8 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
               return
             }
             const streamId = nextStreamId++
-            sendReply(ws, msg.id, { stream: streamId })
+            const opened: StreamOpened = { stream: streamId }
+            sendReply(ws, msg.id, opened)
             const entry: ActiveFollowStream = { ws, streamId, jobId }
             followStreams.set(streamId, entry)
 
@@ -496,7 +551,8 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
               ws.send(binaryFrame(streamId, ndjson))
             }
             if (isTerminal(job.state)) {
-              closeFollowStream(entry, { state: job.state, error: job.error ?? null })
+              const end: JobEnd = { state: job.state, result: job.result, error: job.error }
+              closeFollowStream(entry, end)
             }
             return
           }
@@ -504,111 +560,56 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
           // ---------------- Notifications ----------------
           case "notify.list": {
             let list = Array.from(notifications.values())
-            if (params.archived === true) {
-              list = list.filter((n) => Boolean(n.archivedAt))
-            } else {
-              list = list.filter((n) => !n.archivedAt)
-            }
-            if (params.unreadOnly === true) {
+            if (params.unread === true) {
               list = list.filter((n) => !n.readAt)
             }
-            if (typeof params.kind === "string" && params.kind) {
-              list = list.filter((n) => n.kind === params.kind)
+            if (typeof params.limit === "number") {
+              list = list.slice(0, params.limit)
             }
             list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-            sendReply(ws, msg.id, { notifications: list, unread: unreadCount() })
+            const page: NotificationList = { notifications: list, unread: unreadCount() }
+            sendReply(ws, msg.id, page)
             return
           }
 
           case "notify.read": {
-            const ids = Array.isArray(params.ids)
-              ? (params.ids as string[])
-              : typeof params.id === "string"
-                ? [params.id]
-                : []
+            const ids = Array.isArray(params.ids) ? (params.ids as string[]) : null
             const now = new Date().toISOString()
-            for (const id of ids) {
-              const n = notifications.get(id)
-              if (n && !n.readAt) {
-                const updated = { ...n, readAt: now }
-                notifications.set(id, updated)
-                broadcast("notify.changed", { notification: updated, unread: unreadCount() })
-              }
-            }
-            sendReply(ws, msg.id, { unread: unreadCount() })
-            return
-          }
-
-          case "notify.unread": {
-            const ids = Array.isArray(params.ids)
-              ? (params.ids as string[])
-              : typeof params.id === "string"
-                ? [params.id]
-                : []
-            for (const id of ids) {
-              const n = notifications.get(id)
-              if (n) {
-                const updated = { ...n, readAt: undefined }
-                notifications.set(id, updated)
-                broadcast("notify.changed", { notification: updated, unread: unreadCount() })
-              }
-            }
-            sendReply(ws, msg.id, { unread: unreadCount() })
-            return
-          }
-
-          case "notify.readAll": {
-            const now = new Date().toISOString()
+            const changed: NotificationInfo[] = []
+            let count = 0
             for (const [id, n] of notifications.entries()) {
-              if (!n.readAt && !n.archivedAt) {
-                notifications.set(id, { ...n, readAt: now })
-              }
+              if (ids && !ids.includes(id)) continue
+              if (n.readAt) continue
+              const updated: NotificationInfo = { ...n, readAt: now }
+              notifications.set(id, updated)
+              changed.push(updated)
+              count++
             }
-            sendReply(ws, msg.id, { unread: unreadCount() })
-            return
-          }
-
-          case "notify.archive": {
-            const ids = Array.isArray(params.ids)
-              ? (params.ids as string[])
-              : typeof params.id === "string"
-                ? [params.id]
-                : []
-            const now = new Date().toISOString()
-            for (const id of ids) {
-              const n = notifications.get(id)
-              if (n) {
-                const updated = { ...n, archivedAt: now, readAt: n.readAt ?? now }
-                notifications.set(id, updated)
-                broadcast("notify.changed", { notification: updated, unread: unreadCount() })
-              }
+            if (changed.length > 0) {
+              const event: NotifyChanged = { notifications: changed, unread: unreadCount() }
+              broadcast("notify.changed", event)
             }
-            sendReply(ws, msg.id, { unread: unreadCount() })
+            const res: Count = { count }
+            sendReply(ws, msg.id, res)
             return
           }
 
           case "notify.answer": {
             const id = String(params.id ?? "")
-            const action = String(params.action ?? "")
-            const text = typeof params.text === "string" ? params.text : undefined
+            const action = String(params.answer ?? "")
             const n = notifications.get(id)
             if (!n) {
               sendError(ws, msg.id, "NOT_FOUND", `notification ${id} not found`)
               return
             }
-            const now = new Date().toISOString()
             const updated: NotificationInfo = {
               ...n,
-              readAt: n.readAt ?? now,
-              answer: {
-                action,
-                by: "u-ada",
-                at: now,
-                ...(text !== undefined ? { text } : {}),
-              },
+              readAt: n.readAt ?? new Date().toISOString(),
+              answer: action,
             }
             notifications.set(id, updated)
-            broadcast("notify.changed", { notification: updated, unread: unreadCount() })
+            const event: NotifyChanged = { notifications: [updated], unread: unreadCount() }
+            broadcast("notify.changed", event)
             sendReply(ws, msg.id, updated)
             return
           }
@@ -632,11 +633,13 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
     pushJobChanged,
     pushNotification(notification) {
       notifications.set(notification.id, structuredClone(notification))
-      broadcast("notify.new", { notification, unread: unreadCount() })
+      const event: NotifyNew = { notification, unread: unreadCount(), native: false }
+      broadcast("notify.new", event)
     },
     pushNotificationChanged(notification) {
       notifications.set(notification.id, structuredClone(notification))
-      broadcast("notify.changed", { notification, unread: unreadCount() })
+      const event: NotifyChanged = { notifications: [notification], unread: unreadCount() }
+      broadcast("notify.changed", event)
     },
     pushHostChanged(event) {
       if (event.removed) {
@@ -646,13 +649,8 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
       }
       for (const [subscription, sub] of eventSubs.entries()) {
         if (sub.topic === "hosts.changed") {
-          sub.ws.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              method: "events.event",
-              params: { subscription, topic: "hosts.changed", payload: event },
-            }),
-          )
+          const notice: Event = { subscription, topic: "hosts.changed", payload: event }
+          sub.ws.send(JSON.stringify({ jsonrpc: "2.0", method: "events.event", params: notice }))
         }
       }
     },

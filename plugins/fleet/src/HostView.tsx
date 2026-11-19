@@ -16,11 +16,13 @@ import {
   ViewHeader,
   ViewLayout,
 } from "@aiviarium/nocturne"
+import type { JobInfo } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { createEffect, createMemo, createSignal, For, type JSX, on, Show } from "solid-js"
 import { ActionDialog } from "./ActionDialog"
-import type { Action, FleetApi, HostCheckResult, HostInfo, HostProfile, JobInfo } from "./api"
+import type { Action, HostCheckResult, HostInfo, HostProfile } from "./api"
 import type { FleetStore } from "./FleetView"
+import type { FleetApi } from "./fleetApi"
 import {
   errorMessage,
   formatRelativeTime,
@@ -29,6 +31,8 @@ import {
   hostTypeTone,
   jobMatchesHost,
   jobStatus,
+  jobSubtitle,
+  jobTitle,
   profileFeatures,
   profileUserName,
 } from "./format"
@@ -472,8 +476,8 @@ export function HostView(props: {
                         const s = jobStatus(job.state)
                         return (
                           <ListRow
-                            title={job.name}
-                            secondary={job.id}
+                            title={jobTitle(job)}
+                            secondary={jobSubtitle(job)}
                             meta={formatRelativeTime(job.createdAt)}
                             leading={<State status={s.dot}>{s.label}</State>}
                             onClick={() => openJob(job.id)}

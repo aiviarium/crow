@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import * as nocturne from "@aiviarium/nocturne"
-import { type PluginInfo, publishSharedModules, SHARED_MODULE_GLOBAL, type SignedOut } from "@rookery/client"
+import {
+  type Me,
+  type PluginInfo,
+  publishSharedModules,
+  SHARED_MODULE_GLOBAL,
+  type SignedOut,
+} from "@rookery/client"
 import { render } from "solid-js/web"
 import { App } from "../src/app/App"
 import { createShellApp } from "../src/app/state"
@@ -40,6 +46,7 @@ function startFakeRookery(opts: {
   signedOutBody?: Partial<SignedOut>
   plugins?: PluginInfo[]
   bundles?: Record<string, string>
+  me?: Me
 }): FakeRookery {
   let authState: { ok: true } | { ok: false; body: Partial<SignedOut> } = opts.authenticated
     ? { ok: true }
@@ -100,12 +107,12 @@ function startFakeRookery(opts: {
             JSON.stringify({
               jsonrpc: "2.0",
               id: msg.id,
-              result: {
+              result: opts.me ?? {
                 user: { id: "u-ada", name: "Ada Lovelace", email: "ada@example.test", admin: true },
                 principal: { kind: "user", id: "u-ada" },
-                dev: false,
-                localAuth: true,
-                kernelVersion: "0.4.0",
+                admin: true,
+                auth: "local",
+                version: "0.4.0",
                 apiVersion: 1,
               },
             }),
@@ -269,6 +276,50 @@ describe("@crow/shell authenticated chrome, navigation, plugins, and connection 
     await app.signOut()
     expect(fake.logoutCount()).toBe(1)
     await waitFor(() => host.querySelector("[data-part='signin']") !== null)
+  })
+
+  test("shows a local principal when auth.me has no user", async () => {
+    const fake = startFakeRookery({
+      authenticated: true,
+      me: {
+        user: null,
+        principal: { kind: "local", id: "server" },
+        admin: true,
+        auth: "local",
+        version: "0.4.0",
+        apiVersion: 1,
+      },
+    })
+    cleanup.push(() => fake.stop())
+
+    const app = createShellApp({
+      baseUrl: fake.baseUrl,
+      wsUrl: fake.wsUrl,
+      initialUrl: "/",
+      reconnect: false,
+    })
+    cleanup.push(() => app.dispose())
+
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    cleanup.push(render(() => <App app={app} />, host))
+
+    await app.boot()
+    await waitFor(() => host.querySelector("[data-part='user-menu']") !== null)
+
+    // No person: the menu names the server's own machine principal instead of crashing.
+    expect(host.querySelector("[data-part='user-menu']")?.textContent).toContain("Local session")
+
+    const menuTrigger = host.querySelector("[data-part='user-menu']") as HTMLButtonElement
+    menuTrigger.click()
+    await waitFor(() => document.body.querySelector("[data-part='account-who']") !== null)
+    expect(document.body.querySelector("[data-part='account-who']")?.textContent).toContain("local:server")
+
+    app.setAboutOpen(true)
+    await waitFor(() => document.body.querySelector("[data-part='about']") !== null)
+    expect(document.body.querySelector("[data-part='about']")?.textContent).toContain("v0.4.0")
+    expect(document.body.querySelector("[data-part='about']")?.textContent).toContain("—")
+    app.setAboutOpen(false)
   })
 
   test("navigates to plugin view, reflects connection drop/recovery, and overlays ended session", async () => {
