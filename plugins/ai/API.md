@@ -34,7 +34,7 @@ completed text.
 - `connections.types` / `connections.create` / `connections.update` / `connections.delete`: **exists in Rookery now** for hardcoded `"registry"` and `"http"` types.
   - **Gap (`needed`)**: Dynamic registration of plugin-contributed `contributes.connectionTypes` (`ai.openai-compatible`, `model-anthropic.api`), including `secret: ["apiKey"]` schema stripping and credential sealing on `create`/`update`.
 - `connections.test` (`IdRef` -> `ConnectionTested`): **exists in Rookery now** for hardcoded HTTP probe types.
-  - **Gap (`needed`)**: Routing `connections.test` for plugin-owned connection types to the declaring plugin's test handler (for `ai.openai-compatible`: app service `router.test` via `"testMethod": "test"`; for `model-anthropic.api`: host-half handler registered via `connections.test("model-anthropic.api", ...)`).
+  - **Gap (`needed`)**: Routing `connections.test` for plugin-owned connection types (the server probes Rookery's own types only; `model-anthropic` no longer registers a host-half test handler).
 
 ### Settings, Secrets, and Storage
 
@@ -93,7 +93,7 @@ completed text.
 ### `@rookery/sdk` (Node/Bun Host Half, used by `model-anthropic`)
 
 - `definePlugin`, `z`, `RookeryError`, `services.provide("anthropic", { *generate, models })`, `connections.resolve(id)`: **types exist in `@rookery/sdk`**; **host runtime needed in M2**.
-- `rookery.connections.test(type, handler)`: **needed** (not yet in `@rookery/sdk` `Connections` interface; `model-anthropic/src/host.ts` checks for it dynamically and exports `testConnection` for direct testing).
+- `rookery.connections.test(type, handler)`: **not in the SDK, and not coming**: a host half lists, gets and resolves connections; `model-anthropic/src/host.ts` exports `testConnection` for direct testing only.
 - `MigrationTx` (`rookery/sdk/src/data.ts`): **types exist in `@rookery/sdk`**; migration execution loop on server is **needed**.
 
 ---

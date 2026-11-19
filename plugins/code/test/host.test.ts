@@ -2,6 +2,9 @@
 // the plugin's collections and into Projects, and detaching it again.
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import type { Ctx, JobHandle, Rookery } from "@rookery/sdk"
+import { activate, createHost, type HostTransport } from "@rookery/sdk/runtime/host"
+import api from "../rookery/interface"
+import manifest from "../rookery/plugin.json"
 import hostPlugin from "../src/host"
 import { MockGitHub } from "./mock/github"
 
@@ -155,8 +158,8 @@ function createFakeRookery(mock: MockGitHub, token: string) {
       },
     },
     services: {
-      provide: (name, methods) => {
-        services.set(name, methods as Record<string, Handler>)
+      provide: (service: string | { name: string }, methods: Record<string, Handler>) => {
+        services.set(typeof service === "string" ? service : service.name, methods)
         return { dispose() {} }
       },
       call: (async (_plugin: string, service: string, method: string, params: Record<string, unknown>) => {
@@ -164,6 +167,7 @@ function createFakeRookery(mock: MockGitHub, token: string) {
         if (!s?.[method]) throw new Error(`no service ${service}.${method}`)
         return s[method](ctx(), params)
       }) as never,
+      stream: async function* () {},
     },
     extensions: { list: async () => [] },
     events: { publish: async () => {}, subscribe: async () => ({ dispose() {} }) },
@@ -482,5 +486,28 @@ describe("the service", () => {
     })) as { title: string; text: string }
     expect(read.title).toContain("Gearbox")
     expect(read.text).toContain("acme/widgets#")
+  })
+})
+
+describe("the GitHub host half on the extension host", () => {
+  test("activates: its service matches its interface, and its jobs are declared", async () => {
+    const transport: HostTransport = {
+      call: async () => ({}),
+      registered: () => {},
+      unregistered: () => {},
+      log: () => {},
+    }
+    const { runtime, rookery } = createHost("code", manifest as never, transport)
+    runtime.interface = api
+    const registered = await activate(runtime, rookery, hostPlugin)
+    const kinds = registered.map((r) => `${r.kind}:${r.key}`)
+    expect(kinds).toContain("service:github")
+    expect(kinds).toContain("job:code.sync")
+    expect(kinds).toContain("job:code.delivery")
+    // The interface's methods are exactly what the service provides.
+    const service = registered.find((r) => r.kind === "service" && r.key === "github")
+    expect(Object.keys(service?.methods ?? {}).sort()).toEqual(
+      Object.keys(api.services.github.methods).sort(),
+    )
   })
 })

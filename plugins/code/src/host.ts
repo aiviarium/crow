@@ -2,38 +2,24 @@
 // job and the webhook job, the rpc methods the views call, commands (including the workbench's pull request
 // provider), the service `github` (with the push Projects calls for issues), `entities.text` for repositories
 // and pull requests, and the agent tools.
-import { type Ctx, definePlugin, type Rookery, RookeryError, z } from "@rookery/sdk"
+import { type Ctx, definePlugin, RookeryError, z } from "@rookery/sdk"
+import api from "../rookery/interface"
 import { Accounts } from "./lib/accounts"
 import { createPullRequest, read, write } from "./lib/actions"
-import { appComplete, appManifest, testConnection } from "./lib/connect"
+import { appComplete, appManifest } from "./lib/connect"
 import { PROVIDER, projects } from "./lib/issues"
 import { Linker } from "./lib/linker"
 import { Notifier } from "./lib/notifier"
 import { APP, Pool, TOKEN } from "./lib/pool"
 import { apiBaseFor, attach, detach, parseRepo, remember, scheduleName, setPoll } from "./lib/repos"
 import { gh, ghSpace, type RepoRow, type Rows } from "./lib/rows"
-import {
-  type ConnectionView,
-  connectionView,
-  entitiesOf,
-  extrasOf,
-  jobCtx,
-  lookupEntity,
-  requireLevel,
-} from "./lib/sdk"
+import { connectionView, entitiesOf, extrasOf, jobCtx, lookupEntity, requireLevel } from "./lib/sdk"
 import { itemText, makeService, repoText, tools } from "./lib/service"
 import { type Services, syncRepo } from "./lib/sync"
 import { handleDelivery } from "./lib/webhook"
 
 const Uri = z.object({ uri: z.string() })
 const Names = z.array(z.string()).optional()
-
-/** A connection a connection test is handed: the prototype's shape, or one this plugin reads itself. */
-const viewOfConnection = async (
-  rookery: Rookery,
-  c: ConnectionView | { id: string },
-): Promise<ConnectionView> =>
-  "values" in c && c.values ? (c as ConnectionView) : connectionView(rookery, c.id)
 
 export default definePlugin((rookery) => {
   const pool = new Pool(rookery)
@@ -48,10 +34,6 @@ export default definePlugin((rookery) => {
   }
 
   // ── Connections ──────────────────────────────────────────────────────────────────────────────────
-
-  const connections = extrasOf(rookery).connections
-  for (const type of [APP, TOKEN])
-    connections.test?.(type, async (ctx, c) => testConnection(sv, ctx, await viewOfConnection(rookery, c)))
 
   rookery.rpc.handle("me", {
     level: "own",
@@ -338,7 +320,7 @@ export default definePlugin((rookery) => {
 
   // ── Service, entity text, tools ──────────────────────────────────────────────────────────────────
 
-  rookery.services.provide("github", makeService(sv))
+  rookery.services.provide(api.services.github, makeService(sv))
 
   const entities = entitiesOf(rookery)
   entities?.text?.("gh-pr", (ctx, { id }) => itemText(sv, ctx, `gh-pr://${id}`))

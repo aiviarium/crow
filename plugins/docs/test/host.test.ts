@@ -1,6 +1,9 @@
 // Tests for the Docs host plugin (`src/host.ts`) against an in-memory fake HostRookery.
 import { describe, expect, test } from "bun:test"
 import type { Ctx } from "@rookery/sdk"
+import { activate, createHost, type HostTransport } from "@rookery/sdk/runtime/host"
+import api from "../rookery/interface"
+import manifest from "../rookery/plugin.json"
 import docsHostPlugin from "../src/host"
 import type { HostRookery } from "../src/types"
 
@@ -193,8 +196,11 @@ function createFakeHost() {
       },
     },
     services: {
-      provide(name: string, impl: Record<string, (ctx: Ctx, p: any) => Promise<unknown> | unknown>) {
-        services.set(name, impl)
+      provide(
+        service: string | { name: string },
+        impl: Record<string, (ctx: Ctx, p: any) => Promise<unknown> | unknown>,
+      ) {
+        services.set(typeof service === "string" ? service : service.name, impl)
         return { dispose() {} }
       },
     },
@@ -340,5 +346,22 @@ describe("docs host plugin", () => {
     }
     expect(extracted.title).toBe("On-Call Handbook")
     expect(extracted.text).toContain("Priority: 1")
+  })
+})
+
+describe("the Docs host half on the extension host", () => {
+  test("activates: the docs service matches its interface", async () => {
+    const transport: HostTransport = {
+      call: async () => ({}),
+      registered: () => {},
+      unregistered: () => {},
+      log: () => {},
+    }
+    const { runtime, rookery } = createHost("docs", manifest as never, transport)
+    runtime.interface = api
+    const registered = await activate(runtime, rookery, docsHostPlugin)
+    const service = registered.find((r) => r.kind === "service" && r.key === "docs")
+    expect(service).toBeDefined()
+    expect(Object.keys(service?.methods ?? {}).sort()).toEqual(Object.keys(api.services.docs.methods).sort())
   })
 })

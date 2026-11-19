@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { Ctx, Rookery, RpcHandlerDef } from "@rookery/sdk"
+import { activate, createHost, type HostTransport } from "@rookery/sdk/runtime/host"
+import api from "../rookery/interface"
+import manifest from "../rookery/plugin.json"
 import hostPlugin from "../src/host"
 
 interface StoredRow {
@@ -220,11 +223,15 @@ function createFakeHost() {
       },
     },
     services: {
-      provide(name: string, methods: Record<string, (ctx: Ctx, params: any) => unknown>) {
-        services.set(name, methods)
+      provide(
+        service: string | { name: string },
+        methods: Record<string, (ctx: Ctx, params: any) => unknown>,
+      ) {
+        services.set(typeof service === "string" ? service : service.name, methods)
         return { dispose() {} }
       },
       call: async () => ({}),
+      stream: async function* () {},
     },
     jobs: {
       handle(name: string, handler: unknown) {
@@ -433,5 +440,32 @@ describe("projects host half", () => {
     const byKeys = (await svc.resolveKeys!(h.ctx, { keys: ["CROW-1", "CROW-2"] })) as Record<string, string>
     expect(byKeys["CROW-1"]).toBe(`issue://${parent.id}`)
     expect(byKeys["CROW-2"]).toBe(`issue://${child.id}`)
+  })
+})
+
+describe("the Projects host half on the extension host", () => {
+  test("activates: its service matches its interface, and its jobs are declared", async () => {
+    const transport: HostTransport = {
+      call: async () => ({}),
+      registered: () => {},
+      unregistered: () => {},
+      log: () => {},
+    }
+    const { runtime, rookery } = createHost("projects", manifest as never, transport)
+    runtime.interface = api
+    const registered = await activate(runtime, rookery, hostPlugin)
+    const kinds = registered.map((r) => `${r.kind}:${r.key}`)
+    for (const job of [
+      "projects.pushToSource",
+      "projects.import",
+      "projects.rollover",
+      "projects.cycleSummary",
+    ])
+      expect(kinds).toContain(`job:${job}`)
+    const service = registered.find((r) => r.kind === "service" && r.key === "projects")
+    expect(service).toBeDefined()
+    expect(Object.keys(service?.methods ?? {}).sort()).toEqual(
+      Object.keys(api.services.projects.methods).sort(),
+    )
   })
 })

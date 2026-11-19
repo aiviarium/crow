@@ -100,10 +100,6 @@ export interface HostRookeryExtras {
     repositories?(ctx: Ctx, space: string): Promise<unknown[]>
     addRepository?(ctx: Ctx, params: { space: string; url: string; name?: string }): Promise<unknown>
   }
-  services: Rookery["services"] & {
-    find?(name: string): Record<string, (ctx: Ctx, params: any) => Promise<any>> | null
-    contributed?(name: string): Record<string, (ctx: Ctx, params: any) => Promise<any>>
-  }
 }
 
 export function extrasOf(rookery: Rookery): HostRookeryExtras {
@@ -172,7 +168,7 @@ export async function sendNotice(
   }
 }
 
-/** Calls a method on another plugin's service (prefers `services.find`/`contributed` if present, else `services.call`). */
+/** Calls a method on another plugin's service; the server records the caller as the plugin. */
 export async function callPluginService<T = unknown>(
   rookery: Rookery,
   ctx: Ctx | null,
@@ -181,19 +177,7 @@ export async function callPluginService<T = unknown>(
   method: string,
   params: Record<string, unknown>,
 ): Promise<T> {
-  const services = extrasOf(rookery).services
-  if (typeof services.find === "function") {
-    const found = services.find(service)
-    if (found && typeof found[method] === "function") {
-      return (await found[method]!(ctx as Ctx, params)) as T
-    }
-  }
-  if (typeof services.contributed === "function") {
-    const contributed = services.contributed(service)
-    if (contributed && typeof contributed[method] === "function") {
-      return (await contributed[method]!(ctx as Ctx, params)) as T
-    }
-  }
+  void ctx
   return rookery.services.call<T>(plugin, service, method, params)
 }
 
