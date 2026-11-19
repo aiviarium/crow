@@ -1,7 +1,7 @@
 // The service the Models plugin calls for this provider (the `service` of the contribution to `ai.providers`): it
 // gets the request and the id of the connection, and resolves the connection itself (`rookery.connections.resolve`)
 // so the API key stays sealed in Rookery's credential store and is never sent to or stored in other plugins.
-import { z } from "@rookery/sdk"
+import { defineInterface, z } from "@rookery/sdk"
 
 export const Task = z.enum(["text", "fast", "transcription"])
 export type Task = z.infer<typeof Task>
@@ -49,7 +49,7 @@ export const ModelsResult = z.object({
 })
 export type ModelsResult = z.infer<typeof ModelsResult>
 
-export const anthropicInterface = {
+export default defineInterface({
   services: {
     anthropic: {
       generate: {
@@ -65,6 +65,4 @@ export const anthropicInterface = {
       },
     },
   },
-} as const
-
-export default anthropicInterface
+})

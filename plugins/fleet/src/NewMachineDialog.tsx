@@ -16,8 +16,14 @@ import { createMemo, createResource, createSignal, For, type JSX, onCleanup, Sho
 import { ArgumentFields } from "./ArgumentField"
 import type { FleetApi } from "./fleetApi"
 import { validateHostName } from "./format"
-import { argumentDefaults, argumentProblems, argumentsOf, profileFor } from "./provisionApi"
-import type { Catalogue, ProvisionerInfo } from "./types"
+import {
+  argumentDefaults,
+  argumentProblems,
+  argumentsOf,
+  catalogueDefaults,
+  profileFor,
+} from "./provisionApi"
+import type { MachineCatalogue, ProvisionerInfo, SetupCatalogue } from "./types"
 
 export interface NewMachineDialogProps {
   open: boolean
@@ -39,13 +45,13 @@ function provisionerLabel(provisioner: ProvisionerInfo): string {
 
 /** The catalogue features a machine of `types` can install, grouped as the catalogue groups them. */
 function featuresFor(
-  catalogue: Catalogue,
+  catalogue: SetupCatalogue,
   types: string[],
-): Array<{ group: string; features: Catalogue["features"] }> {
+): Array<{ group: string; features: SetupCatalogue["features"] }> {
   const fits = catalogue.features.filter(
     (feature) => feature.types.length === 0 || feature.types.some((type) => types.includes(type)),
   )
-  const groups = new Map<string, Catalogue["features"]>()
+  const groups = new Map<string, SetupCatalogue["features"]>()
   for (const feature of fits) {
     const group = feature.group || "Features"
     const list = groups.get(group)
@@ -59,6 +65,7 @@ export function NewMachineDialog(props: NewMachineDialogProps): JSX.Element {
   const [name, setName] = createSignal("")
   const [chosen, setChosen] = createSignal("")
   const [values, setValues] = createSignal<Record<string, string>>({})
+  const [picks, setPicks] = createSignal<Record<string, string>>({})
   const [features, setFeatures] = createSignal<string[]>([])
   const [touched, setTouched] = createSignal(false)
   const [submitError, setSubmitError] = createSignal<string | null>(null)
@@ -80,8 +87,8 @@ export function NewMachineDialog(props: NewMachineDialogProps): JSX.Element {
           .catch((error: unknown) => (error instanceof Error ? error : new Error(String(error)))),
       ])
       return { catalogue: cat, provisioners } as
-        | { catalogue: Catalogue | null; provisioners: ProvisionerInfo[] }
-        | { catalogue: Catalogue | null; provisioners: Error }
+        | { catalogue: SetupCatalogue | null; provisioners: ProvisionerInfo[] }
+        | { catalogue: SetupCatalogue | null; provisioners: Error }
     },
   )
 
@@ -96,14 +103,44 @@ export function NewMachineDialog(props: NewMachineDialogProps): JSX.Element {
     return loaded && !Array.isArray(loaded.provisioners) ? (loaded.provisioners as Error).message : null
   }
 
+  const machineFor = (found: ProvisionerInfo | null | undefined): MachineCatalogue | null => {
+    const cat = catalogueOf()
+    if (!found || !cat) return null
+    return (
+      (cat.machines ?? []).find(
+        (one) =>
+          one.provisioner === found.type || one.provisioner === found.name || one.provisioner === found.id,
+      ) ?? null
+    )
+  }
+
   const provisioner = createMemo(
     () => provisioners().find((known) => (known.name || known.id) === chosen()) ?? null,
   )
 
+  /** The kind the chosen provisioner makes for a host, with what its plugin offers to choose from. */
+  const machine = createMemo<MachineCatalogue | null>(() => machineFor(provisioner()))
+
+  const catalogueGroups = createMemo(() => {
+    const one = machine()
+    if (!one) return []
+    return [
+      { key: "sizes", label: "Size", choices: one.catalogue.sizes },
+      { key: "images", label: "Image", choices: one.catalogue.images },
+      { key: "regions", label: "Region", choices: one.catalogue.regions },
+    ].filter((group) => (group.choices?.length ?? 0) > 0)
+  })
+
   const choose = (key: string) => {
     setChosen(key)
+    setPicks({})
     const found = provisioners().find((known) => (known.name || known.id) === key)
-    setValues(found ? argumentDefaults(found.arguments, found.settings ?? {}) : {})
+    const choices = machineFor(found)
+    setValues(
+      found
+        ? { ...argumentDefaults(found.arguments, found.settings ?? {}), ...catalogueDefaults(choices) }
+        : {},
+    )
     setSubmitError(null)
   }
 
@@ -132,6 +169,7 @@ export function NewMachineDialog(props: NewMachineDialogProps): JSX.Element {
     setName("")
     setChosen("")
     setValues({})
+    setPicks({})
     setFeatures([])
     setTouched(false)
     setSubmitError(null)
@@ -197,13 +235,13 @@ export function NewMachineDialog(props: NewMachineDialogProps): JSX.Element {
     setLines([])
     setFailedJob(null)
     try {
-      // The machine is made for a saved host: its profile is what the machine is set up as.
-      await props.api.saveHost(host, profileFor(host, cat.template, features()))
+      // One call saves the host's profile and asks its provisioner for the machine.
       const created = await props.api.resources.create({
         provisioner: found.name || found.id,
-        kind: "machine",
+        kind: machine()?.kind ?? "machine",
         name: host,
         host,
+        profile: profileFor(host, cat.template, features()) as never,
         arguments: argumentsOf(found.arguments, values()),
       })
       await follow(host, created.job.id)
@@ -367,6 +405,38 @@ export function NewMachineDialog(props: NewMachineDialogProps): JSX.Element {
                         setSubmitError(null)
                       }}
                     />
+                  </Show>
+
+                  <Show when={catalogueGroups().length > 0}>
+                    <span class="section">What it makes</span>
+                    <For each={catalogueGroups()}>
+                      {(group) => {
+                        const choices = group.choices ?? []
+                        return (
+                          <Select
+                            label={group.label}
+                            data-part={`new-machine-${group.key}`}
+                            options={choices.map((choice) => ({
+                              value: choice.id,
+                              label: choice.label || choice.id,
+                              description: choice.help || undefined,
+                            }))}
+                            value={
+                              picks()[group.key] ??
+                              (choices.find((choice) => choice.default) ?? choices[0])?.id
+                            }
+                            onChange={(id) => {
+                              setPicks((prev) => ({ ...prev, [group.key]: id }))
+                              const choice = choices.find((one) => one.id === id)
+                              if (choice) {
+                                setValues((prev) => ({ ...prev, ...choice.values }))
+                                setSubmitError(null)
+                              }
+                            }}
+                          />
+                        )
+                      }}
+                    </For>
                   </Show>
                 </>
               )}

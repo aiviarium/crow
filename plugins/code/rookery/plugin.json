@@ -1,6 +1,7 @@
 {
   "$schema": "https://github.com/aiviarium/rookery/blob/main/schemas/plugin.schema.json",
   "apiVersion": "1",
+  "interface": "interface.ts",
   "name": "GitHub",
   "description": "GitHub in Crow: repositories attached to a space, their pull requests kept in sync by polling or webhooks, their issues synced both ways as Projects issues, reviews, merges and comments from the workbench, links to Crow entities and agent sessions, notifications and tools for agents.",
   "host": "host/host.js",

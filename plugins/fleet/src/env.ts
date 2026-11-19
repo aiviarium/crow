@@ -49,39 +49,14 @@ export function portPath(env: string, port: number, path = ""): string {
   return `/env/${encodeURIComponent(envName(env))}/port/${port}/${path.replace(/^\//, "")}`
 }
 
-/** Bytes (or text as UTF-8) in base64, for `env.writeFile`. */
-function toBase64(content: string | Uint8Array): string {
-  const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content
-  let binary = ""
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-  }
-  return btoa(binary)
-}
-
 export function createFleetEnvApi(rookery: ClientRookery): FleetEnvApi {
   return {
-    list: async () => {
-      const res = await rookery.rpc.call<{ environments: EnvInfo[] }>("env.list", {})
-      return res.environments ?? []
-    },
-    get: (env) => rookery.rpc.call<EnvInfo>("env.get", { env: envUri(env) }),
-    presence: (env) => rookery.rpc.call<EnvPresence>("env.presence", { env: envUri(env) }),
-    readFile: (env, path) => rookery.rpc.call<FileData>("env.readFile", { env: envUri(env), path }),
-    writeFile: (env, path, content, opts = {}) =>
-      rookery.rpc.call<FileWritten>("env.writeFile", {
-        env: envUri(env),
-        path,
-        base64: toBase64(content),
-        ...(opts.ifMatch ? { ifMatch: opts.ifMatch } : {}),
-        ...(opts.overwrite ? { overwrite: true } : {}),
-      }),
-    portUrl: (env, port, path) =>
-      rookery.rpc.call<PortUrl>("env.portUrl", {
-        env: envUri(env),
-        port,
-        ...(path ? { path } : {}),
-      }),
+    list: () => rookery.env.list(),
+    get: (env) => rookery.env.get(envUri(env)),
+    presence: (env) => rookery.env.presence(envUri(env)),
+    readFile: (env, path) => rookery.env.readFile(envUri(env), path),
+    writeFile: (env, path, content, opts = {}) => rookery.env.writeFile(envUri(env), path, content, opts),
+    portUrl: (env, port, path) => rookery.env.portUrl(envUri(env), port, path),
     onChanged(fn) {
       let off: (() => void) | undefined
       let stopped = false

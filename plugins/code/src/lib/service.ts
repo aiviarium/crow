@@ -112,7 +112,7 @@ export function makeService(sv: Services) {
         projectLink: p.link.id,
       } as never)
       await sv.rookery.jobs.enqueue(
-        "code.sync",
+        "code/sync",
         { repo: id, space: p.link.repoSpace, force: true },
         { dedupeKey: `sync:${id}` },
       )

@@ -1,8 +1,2 @@
-// Copied from Rookery's M5 branch until Crow repins its client dependency.
-export type AgentConnect = { env: string }
-
-export interface AgentHostCapability {
-  agents?: boolean
-}
-
+// Rookery's agent stream and the host info it answers with.
 export const AGENT_CONNECT = "agents.connect"

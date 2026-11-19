@@ -1,4 +1,4 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src", "test", "interface.ts"]
+  "include": ["src", "test", "rookery/interface.ts"]
 }

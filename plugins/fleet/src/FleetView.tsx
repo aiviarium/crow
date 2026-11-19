@@ -93,8 +93,8 @@ export function FleetView(props: {
     if (applying()) return
     setApplying(host.name)
     try {
-      const acted = await props.api.act({ host: host.name, action: "apply" })
-      openJob(acted.job, host.name)
+      const acted = await props.api.act({ host: host.name, action: "apply", arguments: {} })
+      if (acted.job) openJob(acted.job, host.name)
     } catch (err) {
       props.rookery.workbench.toast({
         kind: "danger",

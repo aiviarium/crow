@@ -116,9 +116,9 @@ export function AddHostDialog(props: AddHostDialogProps): JSX.Element {
         const acted = await props.api.act({
           host: cleanName,
           action: "trust-key",
-          arguments: Object.keys(args).length > 0 ? args : undefined,
+          arguments: args,
         })
-        jobId = acted.job
+        jobId = acted.job ?? undefined
       }
       reset()
       props.onAdded({ host: saved, jobId })

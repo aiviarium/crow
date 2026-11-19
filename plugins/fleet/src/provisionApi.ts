@@ -6,11 +6,11 @@ import type {
   Acted,
   Action,
   Argument,
-  Catalogue,
   Checked,
   Created,
   Generate,
   Generated,
+  MachineCatalogue,
   NewResource,
   ProvisionerAct,
   ProvisionerGet,
@@ -21,6 +21,7 @@ import type {
   Resource,
   SecretNames,
   Setting,
+  SetupCatalogue,
 } from "./types"
 
 // ---------------------------------------------------------------------------
@@ -189,6 +190,17 @@ export function profileFor(
   return profile
 }
 
+/** The values the default choices of a machine's catalogue set: its size, image and region. */
+export function catalogueDefaults(machine: MachineCatalogue | null | undefined): Record<string, string> {
+  const values: Record<string, string> = {}
+  for (const choices of [machine?.catalogue.sizes, machine?.catalogue.images, machine?.catalogue.regions]) {
+    if (!choices?.length) continue
+    const choice = choices.find((one) => one.default) ?? choices[0]
+    if (choice) Object.assign(values, choice.values)
+  }
+  return values
+}
+
 /** The features a profile already has switched on, by their `PLUGIN/FEATURE` keys. */
 export function profileFeatures(profile: Record<string, unknown> | null | undefined): string[] {
   const vars = profile?.ansible_vars as { rookery_plugin_features?: unknown } | undefined
@@ -232,7 +244,7 @@ export interface ResourcesApi {
 }
 
 export interface SetupApi {
-  catalogue(): Promise<Catalogue>
+  catalogue(): Promise<SetupCatalogue>
   generate(generate: Generate): Promise<Generated>
 }
 
@@ -312,7 +324,7 @@ export function createAdminApi(rookery: ClientRookery): AdminApi {
       remove: (id) => call<Acted>("resources.remove", { id, token: null }),
     },
     setup: {
-      catalogue: () => call<Catalogue>("setup.catalogue"),
+      catalogue: () => call<SetupCatalogue>("setup.catalogue"),
       generate: (generate) =>
         call<Generated>("setup.generate", generate as unknown as Record<string, unknown>),
     },

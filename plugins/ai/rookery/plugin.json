@@ -1,6 +1,7 @@
 {
   "$schema": "https://github.com/aiviarium/rookery/blob/main/schemas/plugin.schema.json",
   "apiVersion": "1",
+  "interface": "interface.ts",
   "name": "Models",
   "description": "Model services: text generation and speech to text through connections to model APIs, tasks mapped to models per deployment, space and person, usage and limits. Other plugins add providers; callers use the `ai` service.",
   "client": "client/client.js",

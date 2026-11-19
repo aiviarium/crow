@@ -387,7 +387,7 @@ describe("attaching and syncing a repository", () => {
       repoId: repo.id,
     })
     expect(fake.schedules[0]).toMatchObject({ name: `code:sync:${repo.id}`, job: "code.sync", everySecs: 60 })
-    expect(fake.enqueued[0]).toMatchObject({ name: "code.sync", params: { repo: repo.id, space: "proj-1" } })
+    expect(fake.enqueued[0]).toMatchObject({ name: "code/sync", params: { repo: repo.id, space: "proj-1" } })
   })
 
   test("a sync writes pull requests and comments, and issues go to Projects", async () => {

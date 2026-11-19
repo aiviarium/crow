@@ -21,7 +21,7 @@ import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, Show } from "solid-js"
 import { ActionDialog } from "./ActionDialog"
 import { allows, type Who } from "./access"
-import type { Action, HostCheckResult, HostInfo, HostProfile } from "./api"
+import type { Action, HostChecked, HostInfo, HostProfile } from "./api"
 import { envUri } from "./env"
 import type { FleetStore } from "./FleetView"
 import type { FleetApi } from "./fleetApi"
@@ -55,7 +55,7 @@ export function HostView(props: {
   const [host, setHost] = createSignal<HostInfo | null>(null)
   const [profile, setProfile] = createSignal<HostProfile | null>(null)
   const [actions, setActions] = createSignal<Action[]>([])
-  const [applyCheck, setApplyCheck] = createSignal<HostCheckResult | null>(null)
+  const [applyCheck, setApplyCheck] = createSignal<HostChecked | null>(null)
   const [recentJobs, setRecentJobs] = createSignal<JobInfo[]>([])
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal<string | null>(null)
@@ -171,8 +171,8 @@ export function HostView(props: {
     if (runningAction()) return
     setRunningAction(act.name)
     try {
-      const acted = await props.api.act({ host: hostName(), action: act.name })
-      openJob(acted.job)
+      const acted = await props.api.act({ host: hostName(), action: act.name, arguments: {} })
+      if (acted.job) openJob(acted.job)
     } catch (err) {
       props.rookery.workbench.toast({
         kind: "danger",
@@ -193,8 +193,8 @@ export function HostView(props: {
     if (runningAction()) return
     setRunningAction("apply")
     try {
-      const acted = await props.api.act({ host: hostName(), action: "apply" })
-      openJob(acted.job)
+      const acted = await props.api.act({ host: hostName(), action: "apply", arguments: {} })
+      if (acted.job) openJob(acted.job)
     } catch (err) {
       props.rookery.workbench.toast({
         kind: "danger",

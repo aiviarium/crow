@@ -1,6 +1,7 @@
 {
   "$schema": "https://github.com/aiviarium/rookery/blob/main/schemas/plugin.schema.json",
   "apiVersion": "1",
+  "interface": "interface.ts",
   "name": "Docs",
   "description": "Documents, planning and a knowledge base: a tree of pages per space, each a collaborative document with typed properties, comments, history and backlinks; inline databases, templates, and Markdown in and out.",
   "host": "host/host.js",
@@ -11,6 +12,14 @@
   },
   "namespace": "docs",
   "contributes": {
+    "composer": [
+      {
+        "type": "mention",
+        "id": "docs.mention",
+        "title": "Pages",
+        "schemes": ["doc"]
+      }
+    ],
     "collections": [
       {
         "name": "pages",

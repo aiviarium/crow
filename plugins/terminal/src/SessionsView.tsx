@@ -24,7 +24,6 @@ import type { EnvInfo } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { createEffect, createResource, createSignal, For, type JSX, on, onCleanup, Show } from "solid-js"
 import type { SessionSummary, Update } from "../../agents/src/parrot"
-import type { AgentHostCapability } from "../../agents/src/rookery-wire"
 import { formatChatPath } from "../../agents/src/store"
 import { connectParrot, type ParrotConnection } from "../../agents/src/transport"
 import { envName } from "./env"
@@ -159,8 +158,7 @@ export function SessionsView(props: {
   )
   const agentHost = () => {
     const host = current()
-    const supports: (EnvInfo["supports"] & AgentHostCapability) | undefined = host?.supports
-    return host?.state === "online" && host.level !== "view" && supports?.agents ? host.name : undefined
+    return host?.state === "online" && host.level !== "view" && host.supports.agents ? host.name : undefined
   }
   const [agentSessions, setAgentSessions] = createSignal<SessionSummary[]>([])
   // One `agents.connect` stream per selected host, kept open so the index subscription pushes the
