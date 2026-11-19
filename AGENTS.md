@@ -10,7 +10,7 @@ Crow is the web shell and first-party plugin workspace built on Rookery (`@rooke
 | `plugins/` | Workspace folder for Crow's plugins. Each is a Hatchery package with a `package.kdl`, and its manifest is `rookery/plugin.json`, in the shape Rookery's `schemas/plugin.schema.json` describes |
 | `plugins/fleet/` | Hosts, machines, provisioners, jobs, desktops and ports, with the server's admin pages, including the plugin system's |
 | `deps.json` | Commit pins for cross-repo TypeScript dependencies (`rookery` and `nocturne`) |
-| `scripts/sync-deps.ts` | Populates `.deps/` from local sibling checkouts inside `aiviarium/mono` or from pinned commits in `deps.json` standalone and in CI |
+| `scripts/sync-deps.ts` | Populates `.deps/` from local sibling checkouts inside `aiviarium/mono`, or from pinned commits in `deps.json` standalone and with `CROW_USE_PINS=1` |
 | `scripts/builtins.ts`, `scripts/pack.ts` | The dev-and-test seam that bundles `plugins/*` into the shell, and the build that packs the shell and every plugin into a static Hatchery registry in `dist/registry/` |
 
 ## Cross-repo dependencies
@@ -19,8 +19,8 @@ Crow depends on TypeScript source packages from two sibling repositories: `@rook
 
 `shell/package.json` references those packages under `.deps/` (`file:../.deps/rookery/client`, `file:../.deps/rookery/sdk`, `file:../.deps/nocturne`). Run `bun run sync-deps` (or `bun run bootstrap`) before `bun install`:
 
-- Inside `aiviarium/mono`, when `../rookery` and `../nocturne` exist, `scripts/sync-deps.ts` symlinks `.deps/rookery` and `.deps/nocturne` to the sibling checkouts so local edits apply immediately.
-- Outside `mono`, in CI (`CI=true`), or when `CROW_USE_PINS=1` is set, `scripts/sync-deps.ts` shallow-fetches the exact commit SHA recorded in `deps.json` into `.deps/<name>`.
+- Inside `aiviarium/mono`, when `../rookery` and `../nocturne` exist, `scripts/sync-deps.ts` symlinks `.deps/rookery` and `.deps/nocturne` to the sibling checkouts so local edits apply immediately. That holds in mono's own CI, where the run is meant to build the checkouts it just checked out; a runner's `CI=true` does not change it.
+- Outside `mono`, or when `CROW_USE_PINS=1` is set, `scripts/sync-deps.ts` shallow-fetches the exact commit SHA recorded in `deps.json` into `.deps/<name>`.
 
 When updating a pinned upstream commit, update the `commit` and `ref` fields in `deps.json`, run `CROW_USE_PINS=1 bun run bootstrap && bun run check`, and commit `deps.json` and `bun.lock`.
 
