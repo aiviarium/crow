@@ -6,6 +6,16 @@ const backend = process.env.ROOKERY_URL ?? "http://127.0.0.1:4790"
 
 export default defineConfig({
   plugins: [solid()],
+  resolve: {
+    dedupe: [
+      "solid-js",
+      "solid-js/web",
+      "solid-js/store",
+      "@aiviarium/nocturne",
+      "@rookery/client",
+      "@rookery/sdk",
+    ],
+  },
   server: {
     host: "127.0.0.1",
     port,

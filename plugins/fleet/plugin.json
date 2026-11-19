@@ -1,0 +1,27 @@
+{
+  "id": "fleet",
+  "name": "Fleet",
+  "version": "0.1.0",
+  "namespace": "fleet",
+  "contributes": {
+    "views": [
+      { "id": "fleet.hosts", "title": "Hosts", "icon": "server" },
+      { "id": "fleet.host", "title": "Host", "icon": "server" },
+      { "id": "fleet.job", "title": "Job", "icon": "activity" }
+    ],
+    "routes": [
+      { "path": "", "view": "fleet.hosts" },
+      { "path": "hosts", "view": "fleet.hosts" },
+      { "path": "hosts/:name", "view": "fleet.host" },
+      { "path": "jobs/:id", "view": "fleet.job" }
+    ],
+    "nav": [{ "id": "fleet.hosts", "title": "Fleet", "view": "fleet.hosts", "icon": "server" }],
+    "commands": [
+      { "id": "fleet.hosts", "title": "Open Fleet", "category": "Fleet" },
+      { "id": "fleet.addHost", "title": "Add host", "category": "Fleet" }
+    ],
+    "collections": [],
+    "settings": [],
+    "adminPages": []
+  }
+}

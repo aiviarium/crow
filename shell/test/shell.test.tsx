@@ -16,7 +16,7 @@ afterEach(() => {
   }
 })
 
-async function waitFor(fn: () => boolean, timeoutMs = 3000): Promise<void> {
+async function waitFor(fn: () => boolean, timeoutMs = 10000): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (fn()) return

@@ -24,8 +24,15 @@ import {
 } from "@rookery/client"
 import type { OpenViewOptions } from "@rookery/sdk/runtime/client"
 import { type Accessor, createMemo, createSignal } from "solid-js"
+import { createInboxStore, type InboxStore } from "../inbox/state"
+import { createJobsStore, type JobsStore } from "../jobs/state"
+import { withBuiltinImporter, withBuiltinPlugins } from "./builtins"
 
 export const HOME_VIEW = "crow.home"
+export const JOBS_VIEW = "crow.jobs"
+export const JOB_VIEW = "crow.job"
+export const INBOX_VIEW = "crow.inbox"
+export const INBOX_ITEM_VIEW = "crow.inboxItem"
 
 export type AuthPhase = "checking" | "signed-out" | "ready" | "ended"
 
@@ -36,6 +43,8 @@ export interface ShellAppOptions {
   wsUrl?: string
   /** Custom module importer for plugin client halves (useful in tests). */
   importModule?: (url: string) => Promise<{ default?: unknown }>
+  /** Include pre-M2 built-in plugins from `crow/plugins/*`. Default `true`. */
+  includeBuiltins?: boolean
   /** Navigation callback for full-page redirects (OIDC, local link, devLogin). Defaults to `location.assign`. */
   goExternal?: (url: string) => void
   /** Initial pathname + search. Defaults to `location.pathname + location.search`. */
@@ -51,6 +60,8 @@ export interface ShellApp {
   readonly conn: Connection
   readonly bus: EventBus
   readonly session: SessionStore
+  readonly jobs: JobsStore
+  readonly inbox: InboxStore
   readonly phase: Accessor<ConnectionPhase>
   readonly loader: PluginLoader
   readonly authPhase: Accessor<AuthPhase>
@@ -138,6 +149,8 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
 
   const bus = createEventBus(conn)
   const session = createSession(conn)
+  const jobs = createJobsStore(conn)
+  const inbox = createInboxStore(conn)
   const phase = createConnectionPhase(conn, opts.phaseTimings)
 
   const navigate = (to: string, navOpts?: { replace?: boolean }) => {
@@ -155,10 +168,14 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
     }
   }
 
-  const loader = createPluginLoader(conn, {
+  const useBuiltins = opts.includeBuiltins !== false
+  const loaderConn = useBuiltins ? withBuiltinPlugins(conn) : conn
+  const importModule = useBuiltins ? withBuiltinImporter(opts.importModule) : opts.importModule
+
+  const loader = createPluginLoader(loaderConn, {
     eventBus: bus,
     baseUrl,
-    importModule: opts.importModule,
+    importModule,
     runtime: {
       openView: (id, openOpts) => openView(id, openOpts),
       href: (id, linkOpts) => href(id, linkOpts),
@@ -184,7 +201,13 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
   })
 
   const routeTable = createMemo(() =>
-    buildRouteTable(Object.values(loader.plugins), [{ view: HOME_VIEW, pattern: "/", title: "Home" }]),
+    buildRouteTable(Object.values(loader.plugins), [
+      { view: HOME_VIEW, pattern: "/", title: "Home" },
+      { view: JOBS_VIEW, pattern: "/jobs", title: "Jobs" },
+      { view: JOB_VIEW, pattern: "/jobs/:id", title: "Job" },
+      { view: INBOX_VIEW, pattern: "/inbox", title: "Inbox" },
+      { view: INBOX_ITEM_VIEW, pattern: "/inbox/:id", title: "Inbox" },
+    ]),
   )
 
   const routeMatch = createMemo(() => {
@@ -207,6 +230,8 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
     if (custom) return custom
     const m = routeMatch()
     if (!m || m.view === HOME_VIEW) return "Home"
+    if (m.view === JOBS_VIEW || m.view === JOB_VIEW) return "Jobs"
+    if (m.view === INBOX_VIEW || m.view === INBOX_ITEM_VIEW) return "Inbox"
     const declared = loader.declaredView(m.view)
     return declared?.view.title ?? m.view
   })
@@ -229,11 +254,15 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
     }
     setAuthPhase("ready")
     loader.start()
+    jobs.start()
+    inbox.start()
     conn.connect()
   }
 
   const signOut = async () => {
     loader.stop()
+    jobs.stop()
+    inbox.stop()
     const { redirect } = await rookerySignOut({ baseUrl, conn })
     if (redirect) {
       goExternal(redirect)
@@ -251,6 +280,8 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
       window.removeEventListener("popstate", onPopState)
     }
     loader.stop()
+    jobs.stop()
+    inbox.stop()
     session.dispose()
     bus.dispose()
     conn.stop()
@@ -261,6 +292,8 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
     conn,
     bus,
     session,
+    jobs,
+    inbox,
     phase,
     loader,
     authPhase,

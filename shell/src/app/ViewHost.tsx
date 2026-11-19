@@ -2,8 +2,10 @@
 // or a clean not-found / loading state.
 import { Button, Callout, EmptyState } from "@aiviarium/nocturne"
 import { ErrorBoundary, type JSX, Match, Show, Switch } from "solid-js"
+import { InboxView } from "../inbox/InboxView"
+import { JobsView } from "../jobs/JobsView"
 import { Home } from "./Home"
-import { HOME_VIEW, type ShellApp } from "./state"
+import { HOME_VIEW, INBOX_ITEM_VIEW, INBOX_VIEW, JOB_VIEW, JOBS_VIEW, type ShellApp } from "./state"
 
 export function ViewHost(props: { app: ShellApp }): JSX.Element {
   const match = () => props.app.routeMatch()
@@ -21,6 +23,12 @@ export function ViewHost(props: { app: ShellApp }): JSX.Element {
       <Switch>
         <Match when={match()?.view === HOME_VIEW}>
           <Home app={props.app} />
+        </Match>
+        <Match when={match()?.view === JOBS_VIEW || match()?.view === JOB_VIEW}>
+          <JobsView app={props.app} jobId={match()?.params.id} />
+        </Match>
+        <Match when={match()?.view === INBOX_VIEW || match()?.view === INBOX_ITEM_VIEW}>
+          <InboxView app={props.app} notificationId={match()?.params.id} />
         </Match>
         <Match when={match() && viewEntry()}>
           <Show when={{ match: match()!, entry: viewEntry()! }} keyed>

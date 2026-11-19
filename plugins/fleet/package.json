@@ -1,0 +1,13 @@
+{
+  "name": "@crow/plugin-fleet",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "@aiviarium/nocturne": "file:../../.deps/nocturne",
+    "@rookery/client": "file:../../.deps/rookery/client",
+    "@rookery/sdk": "file:../../.deps/rookery/sdk",
+    "solid-js": "^1.9.19"
+  }
+}

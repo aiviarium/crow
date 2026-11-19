@@ -8,7 +8,7 @@
   },
   "nocturne": {
     "repo": "https://github.com/aiviarium/nocturne.git",
-    "commit": "1de5ff166de9add253a9106080a828ad931369b9",
+    "commit": "3bb1187dce269e8e915d21adf84690f90acf5373",
     "ref": "main",
     "sibling": "../nocturne",
     "probe": "package.json"

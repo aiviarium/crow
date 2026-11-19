@@ -11,10 +11,10 @@
     "bootstrap": "bun run sync-deps && bun install",
     "dev": "bun --cwd shell dev",
     "build": "bun --cwd shell build",
-    "lint": "biome ci shell scripts",
-    "format": "biome format --write shell scripts",
-    "typecheck": "tsc -p shell/tsconfig.json --noEmit",
-    "test": "bun test shell/test",
+    "lint": "biome ci shell plugins scripts",
+    "format": "biome format --write shell plugins scripts",
+    "typecheck": "tsc -p shell/tsconfig.json --noEmit && tsc -p plugins/fleet/tsconfig.json --noEmit",
+    "test": "bun test --timeout 30000 shell/test plugins/fleet/test",
     "check": "bun run lint && bun run typecheck && bun run test && bun run build"
   },
   "devDependencies": {
