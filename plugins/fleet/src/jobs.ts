@@ -2,23 +2,14 @@
 //
 // `jobs.follow` streams one JSON line per `LogItem` (`{ seq, at, attempt, level, text, data }`)
 // and a last `JobEnd` (`{ state, result, error }`) whose `error` is an `ErrorBody`.
-import type {
-  ErrorBody,
-  JobDetail,
-  JobEnd,
-  JobInfo,
-  JobList,
-  JobQuery,
-  JobRetry,
-  LogItem,
-} from "@rookery/client"
+import type { ErrorBody, JobEnd, JobInfo, JobList, JobQuery, JobRetry, LogItem } from "@rookery/client"
 import type { ClientRookery, ClientStream } from "@rookery/sdk/client"
 
-export type { ErrorBody, JobDetail, JobEnd, JobInfo, JobList, JobQuery, JobRetry, LogItem }
+export type { ErrorBody, JobEnd, JobInfo, JobList, JobQuery, JobRetry, LogItem }
 
 export interface JobsApi {
   listJobs(query?: JobQuery): Promise<JobInfo[]>
-  getJob(id: string): Promise<JobDetail>
+  getJob(id: string): Promise<JobInfo>
   cancelJob(id: string): Promise<void>
   retryJob(id: string, attempts?: number): Promise<JobInfo>
   followJob(
@@ -102,7 +93,8 @@ export function createJobsApi(rookery: ClientRookery): JobsApi {
       return res.jobs ?? []
     },
     getJob(id) {
-      return rookery.rpc.call<JobDetail>("jobs.get", { id })
+      // `jobs.get` answers with the job itself: its state, attempts, progress and outcome.
+      return rookery.rpc.call<JobInfo>("jobs.get", { id })
     },
     async cancelJob(id) {
       await rookery.rpc.call("jobs.cancel", { id })

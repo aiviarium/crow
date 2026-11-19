@@ -17,7 +17,7 @@ import {
   ViewLayout,
   WidgetProgress,
 } from "@aiviarium/nocturne"
-import type { JobDetail, JobInfo, JobState } from "@rookery/client"
+import type { JobInfo, JobState } from "@rookery/client"
 import { createEffect, createMemo, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js"
 import type { ShellApp } from "../app/state"
 import { JobLog } from "./JobLog"
@@ -42,7 +42,7 @@ function matchesFilter(state: JobState, filter: JobFilter): boolean {
 export function JobsView(props: { app: ShellApp; jobId?: string }): JSX.Element {
   const [filter, setFilter] = createSignal<JobFilter>("all")
   const [search, setSearch] = createSignal("")
-  const [detail, setDetail] = createSignal<JobDetail | null>(null)
+  const [detail, setDetail] = createSignal<JobInfo | null>(null)
   const [detailError, setDetailError] = createSignal<string | null>(null)
   const [acting, setActing] = createSignal<"cancel" | "retry" | null>(null)
 
@@ -77,7 +77,7 @@ export function JobsView(props: { app: ShellApp; jobId?: string }): JSX.Element 
     try {
       const d = await props.app.jobs.get(id)
       setDetail(d)
-      props.app.setViewTitle(jobTitle(d.job))
+      props.app.setViewTitle(jobTitle(d))
     } catch (err) {
       setDetailError(err instanceof Error ? err.message : String(err))
     }
@@ -143,7 +143,7 @@ export function JobsView(props: { app: ShellApp; jobId?: string }): JSX.Element 
   }
 
   const activeJob = () => {
-    const d = detail()?.job
+    const d = detail()
     if (d) return d
     const id = selectedId()
     return id ? (props.app.jobs.jobs().find((j) => j.id === id) ?? null) : null
