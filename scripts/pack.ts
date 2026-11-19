@@ -6,18 +6,19 @@
 //   rookery plugin add crow/fleet
 //
 // A package is a folder with `package.kdl`: `shell/`, whose built page goes in `rookery/web/`, and each
-// plugin under `plugins/` that has one, whose client half is bundled into `rookery/client/`. The
-// registry is written under `dist/registry/<group>/<id>/`, in the layout `plugins/` of Rookery's own
-// source has: an egg, its `index.json`, its `package.kdl` and `rookery/` folder, and a catalog of every
-// package at the root.
+// plugin under `plugins/` that has one, whose client half is bundled into `rookery/client/` and whose
+// host half, when it has one, into `rookery/host/`. The registry is written under
+// `dist/registry/<group>/<id>/`, in the layout `plugins/` of Rookery's own source has: an egg, its
+// `index.json`, its `package.kdl` and `rookery/` folder, and a catalog of every package at the root.
 //
 // Client halves import `solid-js`, `@aiviarium/nocturne`, `@rookery/sdk/client` and `@rookery/client`
 // without bundling them: each import is a lookup in `globalThis.__rookery.modules`, which the shell
-// fills before it imports any plugin, so a page has one copy of each.
+// fills before it imports any plugin, so a page has one copy of each. Host halves import
+// `@rookery/sdk` the same way, from the extension host's own modules, which is why it stays external.
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { readFile } from "node:fs/promises"
-import { dirname, join } from "node:path"
+import { basename, dirname, join } from "node:path"
 import { transformAsync } from "@babel/core"
 // @ts-expect-error no types
 import presetTs from "@babel/preset-typescript"
@@ -190,12 +191,90 @@ const solid: BunPlugin = {
   },
 }
 
+/**
+ * `import worker from "./x?worker"`, which Vite provides and Bun does not: the module as a module worker
+ * of its own, bundled beside the client half, and a factory that starts it. The worker's URL is relative
+ * to the client half's entry, which the server serves under the same `client/` folder.
+ */
+function workers(built: Map<string, string>): BunPlugin {
+  return {
+    name: "crow-workers",
+    setup(build) {
+      build.onResolve({ filter: /\?worker$/ }, (args) => {
+        const path = Bun.resolveSync(args.path.slice(0, -"?worker".length), args.resolveDir)
+        if (!built.has(path)) throw new Error(`${args.path} is not a worker of the plugin that was built`)
+        return { path, namespace: "crow-worker" }
+      })
+      build.onLoad({ filter: /.*/, namespace: "crow-worker" }, (args) => ({
+        loader: "js",
+        contents: `const url = new URL(${JSON.stringify(built.get(args.path))}, import.meta.url)
+export default (options) => new Worker(url, { type: "module", ...options })`,
+      }))
+    },
+  }
+}
+
+/** The files of a folder, at any depth. */
+function files(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name)
+    return entry.isDirectory() ? files(path) : [path]
+  })
+}
+
+/** The `?worker` modules a plugin's sources import, resolved: each is built before the client half. */
+function workerEntries(dir: string): string[] {
+  const src = join(root, dir, "src")
+  if (!existsSync(src)) return []
+  const found = new Set<string>()
+  for (const file of files(src)) {
+    // A declaration such as `declare module "*?worker"` names no module to build.
+    if (!/\.[cm]?[jt]sx?$/.test(file) || file.endsWith(".d.ts")) continue
+    for (const match of readFileSync(file, "utf8").matchAll(/["']([^"'\n]+\?worker)["']/g)) {
+      try {
+        found.add(Bun.resolveSync(match[1]!.slice(0, -"?worker".length), dirname(file)))
+      } catch {
+        // A pattern rather than a path: the build reports an import that resolves to nothing.
+      }
+    }
+  }
+  return [...found]
+}
+
+/**
+ * Builds each of a plugin's workers into `<outdir>/workers/`, and answers the URL each is served at.
+ * They are built before the client half: a build started inside the client build's plugin never finishes.
+ */
+async function buildWorkers(source: Package, outdir: string): Promise<Map<string, string>> {
+  const built = new Map<string, string>()
+  for (const entry of workerEntries(source.dir)) {
+    const name = basename(entry).replace(/\.[cm]?[jt]sx?$/, "")
+    const result = await Bun.build({
+      target: "browser",
+      format: "esm",
+      minify: true,
+      sourcemap: "none",
+      entrypoints: [entry],
+      outdir: join(outdir, "workers"),
+      naming: { entry: `${name}-[hash].[ext]`, asset: "[name]-[hash].[ext]" },
+      define: { "process.env.NODE_ENV": '"production"' },
+      throw: true,
+    })
+    const file = result.outputs.find((output) => output.kind === "entry-point")
+    if (!file) throw new Error(`the worker ${entry} of ${source.id} did not build`)
+    built.set(entry, `./workers/${basename(file.path)}`)
+  }
+  return built
+}
+
 /** Bundles a plugin's client half into `<stage>/rookery/client/`, the folder the server serves. */
 async function buildClient(source: Package): Promise<void> {
   const entry = join(root, source.dir, "src", "client.tsx")
   if (!existsSync(entry)) return
   const outdir = join(stage, source.dir, "rookery", "client")
   rmSync(outdir, { recursive: true, force: true })
+  mkdirSync(outdir, { recursive: true })
+  const built = await buildWorkers(source, outdir)
   const result = await Bun.build({
     target: "browser",
     format: "esm",
@@ -206,7 +285,7 @@ async function buildClient(source: Package): Promise<void> {
     outdir,
     naming: { entry: "[name].[ext]", chunk: "chunk-[hash].[ext]", asset: "[name]-[hash].[ext]" },
     define: { "process.env.NODE_ENV": '"production"' },
-    plugins: [shared, solid],
+    plugins: [shared, solid, workers(built)],
     throw: true,
   })
   // The server serves the entry as a module whose default is the client: `export default defineClient(...)`.
@@ -214,9 +293,50 @@ async function buildClient(source: Package): Promise<void> {
   const code = entryOut ? await entryOut.text() : ""
   if (!/export\s*\{[^}]*\bdefault\b|export\s+default/.test(code))
     throw new Error(`the client half of ${source.id} must \`export default defineClient(...)\``)
-  // The manifest names the entry and the stylesheet, and both are relative to the target's folder.
+}
+
+/**
+ * Bundles a plugin's host half into `<stage>/rookery/host/`, the module the server's extension host
+ * imports. `@rookery/sdk` is bundled with it: the plugin's folder has no `node_modules` of its own, and
+ * what the host half needs of the SDK is structural, so the extension host activates it all the same.
+ */
+async function buildHost(source: Package): Promise<void> {
+  const entry = join(root, source.dir, "src", "host.ts")
+  if (!existsSync(entry)) return
+  const outdir = join(stage, source.dir, "rookery", "host")
+  rmSync(outdir, { recursive: true, force: true })
+  const result = await Bun.build({
+    target: "bun",
+    format: "esm",
+    sourcemap: "none",
+    entrypoints: [entry],
+    outdir,
+    naming: { entry: "[name].[ext]", chunk: "chunk-[hash].[ext]", asset: "[name]-[hash].[ext]" },
+    throw: true,
+  })
+  // The extension host activates the module's default: `export default definePlugin(...)`.
+  const entryOut = result.outputs.find((file) => file.kind === "entry-point")
+  const code = entryOut ? await entryOut.text() : ""
+  if (!/export\s*\{[^}]*\bdefault\b|export\s+default/.test(code))
+    throw new Error(`the host half of ${source.id} must \`export default definePlugin(...)\``)
+}
+
+/**
+ * The manifest names each half and its stylesheet relative to the target's folder, and the build has to
+ * have written each of them: Rookery refuses a package that names a file it does not carry, or one whose
+ * host half it does not name.
+ */
+function checkHalves(source: Package): void {
   const manifest = JSON.parse(readFileSync(join(stage, source.dir, "rookery", "plugin.json"), "utf8"))
-  for (const key of ["client", "styles"]) {
+  const hasHost = existsSync(join(root, source.dir, "src", "host.ts"))
+  const namesHost = typeof manifest.host === "string"
+  if (hasHost !== namesHost)
+    throw new Error(
+      hasHost
+        ? `${source.dir} has a host half that rookery/plugin.json does not name as its host`
+        : `${source.dir}/rookery/plugin.json names a host half the plugin does not have`,
+    )
+  for (const key of ["host", "client", "styles"]) {
     const named = manifest[key] as string | undefined
     if (named && !existsSync(join(stage, source.dir, "rookery", named)))
       throw new Error(
@@ -237,7 +357,7 @@ async function prepare(source: Package): Promise<string> {
   cpSync(join(root, source.dir, "package.kdl"), join(dir, "package.kdl"))
   // What the package carries of its own, such as its manifest and guide; the built halves come after.
   for (const entry of readdirSync(join(root, source.dir, "rookery"), { withFileTypes: true })) {
-    if (entry.name === "client" || entry.name === "web") continue
+    if (entry.name === "client" || entry.name === "host" || entry.name === "web") continue
     cpSync(join(root, source.dir, "rookery", entry.name), join(dir, "rookery", entry.name), {
       recursive: true,
     })
@@ -254,6 +374,8 @@ async function prepare(source: Package): Promise<string> {
     cpSync(join(root, "shell", "dist"), join(dir, "rookery", "web"), { recursive: true })
   } else {
     await buildClient(source)
+    await buildHost(source)
+    checkHalves(source)
   }
   return dir
 }

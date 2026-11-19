@@ -1,0 +1,24 @@
+format 1
+
+package {
+  group crow
+  id docs
+  version "0.1.0"
+}
+
+about {
+  name "Docs"
+  summary "Documents, planning and a knowledge base: a tree of pages per space, with inline databases, templates and Markdown in and out."
+  license MIT
+  license Apache-2.0
+  repository "https://github.com/aiviarium/crow"
+  keywords rookery-plugin
+}
+
+targets {
+  rookery {
+    requires {
+      rookery ">=0.6"
+    }
+  }
+}

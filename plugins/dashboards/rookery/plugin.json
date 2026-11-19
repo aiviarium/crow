@@ -1,19 +1,25 @@
 {
-  "id": "dashboards",
-  "name": "Dashboards",
-  "version": "0.1.0",
+  "$schema": "https://github.com/aiviarium/rookery/blob/main/schemas/plugin.schema.json",
   "apiVersion": "1",
-  "namespace": "dashboards",
+  "name": "Dashboards",
   "description": "Pages of widgets on a grid, for one person in their own space or shared with a team space. A dashboard is an entity, so it can be shared, pinned and mentioned like anything else.",
-  "client": "src/client.tsx",
-  "styles": "src/client.css",
+  "client": "client/client.js",
+  "styles": "client/client.css",
+  "namespace": "dashboards",
   "contributes": {
     "collections": [
       {
         "name": "dashboards",
         "scope": "space",
-        "entity": { "scheme": "dashboard", "title": "title", "subtitle": "description" },
-        "access": { "read": "view", "write": "use" },
+        "entity": {
+          "scheme": "dashboard",
+          "title": "title",
+          "subtitle": "description"
+        },
+        "access": {
+          "read": "view",
+          "write": "use"
+        },
         "history": true,
         "trash": true,
         "fields": [
@@ -24,8 +30,15 @@
             "required": true,
             "default": "Untitled dashboard"
           },
-          { "name": "description", "type": "text", "search": true },
-          { "name": "layout", "type": "json" }
+          {
+            "name": "description",
+            "type": "text",
+            "search": true
+          },
+          {
+            "name": "layout",
+            "type": "json"
+          }
         ]
       }
     ],
@@ -45,11 +58,25 @@
         "description": "Creates a dashboard in the current space and opens it for editing.",
         "icon": "plus"
       },
-      { "id": "dashboards.open", "title": "Open dashboards", "icon": "grid" }
+      {
+        "id": "dashboards.open",
+        "title": "Open dashboards",
+        "icon": "grid"
+      }
     ],
     "views": [
-      { "id": "dashboards.list", "title": "Dashboards", "slot": "main", "icon": "grid" },
-      { "id": "dashboards.dashboard", "title": "Dashboard", "slot": "main", "icon": "grid" }
+      {
+        "id": "dashboards.list",
+        "title": "Dashboards",
+        "slot": "main",
+        "icon": "grid"
+      },
+      {
+        "id": "dashboards.dashboard",
+        "title": "Dashboard",
+        "slot": "main",
+        "icon": "grid"
+      }
     ],
     "nav": [
       {
@@ -61,8 +88,16 @@
       }
     ],
     "routes": [
-      { "path": "/", "view": "dashboards.list", "context": "rookery.space" },
-      { "path": "/:dashboard", "view": "dashboards.dashboard", "context": "rookery.space" }
+      {
+        "path": "/",
+        "view": "dashboards.list",
+        "context": "rookery.space"
+      },
+      {
+        "path": "/:dashboard",
+        "view": "dashboards.dashboard",
+        "context": "rookery.space"
+      }
     ],
     "extensions": {
       "home.actions": [

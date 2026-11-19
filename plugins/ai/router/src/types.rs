@@ -1,4 +1,4 @@
-//! Wire and collection types for the `ai` router service (matching `../methods.json` & `../plugin.json`).
+//! Wire and collection types for the `ai` router service (matching `../rookery/methods.json` & `../rookery/plugin.json`).
 
 use std::collections::BTreeMap;
 

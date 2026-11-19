@@ -1,13 +1,11 @@
 {
-  "id": "workbench",
-  "name": "Workbench",
-  "version": "0.1.0",
+  "$schema": "https://github.com/aiviarium/rookery/blob/main/schemas/plugin.schema.json",
   "apiVersion": "1",
-  "namespace": "workbench",
+  "name": "Workbench",
   "description": "The editor, diffs and version control for a checkout or worktree on a host: files, Monaco, search, source control, history, blame, review of a range of commits, pull requests, a terminal and previews beside the code.",
-  "host": "src/host.ts",
-  "client": "src/client.tsx",
-  "styles": "src/client.css",
+  "host": "host/host.js",
+  "client": "client/client.js",
+  "styles": "client/client.css",
   "extensionPoints": [
     {
       "id": "workbench.pullRequestProviders",
@@ -16,14 +14,22 @@
         "type": "object",
         "required": ["id", "title", "command"],
         "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "command": { "type": "string" },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
           "available": {
             "type": "string",
             "description": "A command that gets { env, path, remote } and returns { available, reason? }."
           },
-          "order": { "type": "number" }
+          "order": {
+            "type": "number"
+          }
         }
       }
     },
@@ -34,15 +40,26 @@
         "type": "object",
         "required": ["id", "title", "view"],
         "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "view": { "type": "string" },
-          "icon": { "type": "string" },
-          "order": { "type": "number" }
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "view": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          }
         }
       }
     }
   ],
+  "namespace": "workbench",
   "contributes": {
     "entityTypes": [
       {
@@ -82,16 +99,48 @@
         "icon": "check",
         "description": "The changes of a range, file by file: /workbench/review/<env>/<path>?base=&head=."
       },
-      { "id": "workbench.file", "title": "File", "slot": "main", "icon": "file" },
-      { "id": "workbench.commit", "title": "Commit", "slot": "main", "icon": "branch" }
+      {
+        "id": "workbench.file",
+        "title": "File",
+        "slot": "main",
+        "icon": "file"
+      },
+      {
+        "id": "workbench.commit",
+        "title": "Commit",
+        "slot": "main",
+        "icon": "branch"
+      }
     ],
-    "nav": [{ "id": "workbench.nav", "title": "Workbench", "view": "workbench.home", "icon": "edit" }],
+    "nav": [
+      {
+        "id": "workbench.nav",
+        "title": "Workbench",
+        "view": "workbench.home",
+        "icon": "edit"
+      }
+    ],
     "routes": [
-      { "path": "", "view": "workbench.home" },
-      { "path": "open/*path", "view": "workbench.open" },
-      { "path": "review/*path", "view": "workbench.review" },
-      { "path": "file/*path", "view": "workbench.file" },
-      { "path": "commit/*path", "view": "workbench.commit" }
+      {
+        "path": "/",
+        "view": "workbench.home"
+      },
+      {
+        "path": "/open/*path",
+        "view": "workbench.open"
+      },
+      {
+        "path": "/review/*path",
+        "view": "workbench.review"
+      },
+      {
+        "path": "/file/*path",
+        "view": "workbench.file"
+      },
+      {
+        "path": "/commit/*path",
+        "view": "workbench.commit"
+      }
     ],
     "commands": [
       {
@@ -114,9 +163,24 @@
         "category": "Workbench",
         "icon": "search"
       },
-      { "id": "workbench.save", "title": "Save", "category": "Workbench", "icon": "check" },
-      { "id": "workbench.saveAll", "title": "Save all", "category": "Workbench", "icon": "check" },
-      { "id": "workbench.format", "title": "Format document", "category": "Workbench", "icon": "edit" },
+      {
+        "id": "workbench.save",
+        "title": "Save",
+        "category": "Workbench",
+        "icon": "check"
+      },
+      {
+        "id": "workbench.saveAll",
+        "title": "Save all",
+        "category": "Workbench",
+        "icon": "check"
+      },
+      {
+        "id": "workbench.format",
+        "title": "Format document",
+        "category": "Workbench",
+        "icon": "edit"
+      },
       {
         "id": "workbench.gotoLine",
         "title": "Go to line",
@@ -177,8 +241,18 @@
         "category": "Workbench",
         "icon": "edit"
       },
-      { "id": "workbench.toggleBlame", "title": "Toggle blame", "category": "Workbench", "icon": "user" },
-      { "id": "workbench.files", "title": "Show files", "category": "Workbench", "icon": "file" },
+      {
+        "id": "workbench.toggleBlame",
+        "title": "Toggle blame",
+        "category": "Workbench",
+        "icon": "user"
+      },
+      {
+        "id": "workbench.files",
+        "title": "Show files",
+        "category": "Workbench",
+        "icon": "file"
+      },
       {
         "id": "workbench.search",
         "title": "Search in the workspace",
@@ -209,16 +283,66 @@
         "category": "Workbench",
         "icon": "link"
       },
-      { "id": "workbench.commit", "title": "Commit", "category": "Git", "icon": "check" },
-      { "id": "workbench.stageAll", "title": "Stage all changes", "category": "Git", "icon": "plus" },
-      { "id": "workbench.push", "title": "Push", "category": "Git", "icon": "arrow-up-right" },
-      { "id": "workbench.pull", "title": "Pull", "category": "Git", "icon": "chevron-down" },
-      { "id": "workbench.fetch", "title": "Fetch", "category": "Git", "icon": "activity" },
-      { "id": "workbench.switchBranch", "title": "Switch branch", "category": "Git", "icon": "branch" },
-      { "id": "workbench.newBranch", "title": "Create a branch", "category": "Git", "icon": "branch" },
-      { "id": "workbench.stash", "title": "Stash changes", "category": "Git", "icon": "archive" },
-      { "id": "workbench.history", "title": "History", "category": "Git", "icon": "clock" },
-      { "id": "workbench.fileHistory", "title": "History of the file", "category": "Git", "icon": "clock" },
+      {
+        "id": "workbench.commit",
+        "title": "Commit",
+        "category": "Git",
+        "icon": "check"
+      },
+      {
+        "id": "workbench.stageAll",
+        "title": "Stage all changes",
+        "category": "Git",
+        "icon": "plus"
+      },
+      {
+        "id": "workbench.push",
+        "title": "Push",
+        "category": "Git",
+        "icon": "arrow-up-right"
+      },
+      {
+        "id": "workbench.pull",
+        "title": "Pull",
+        "category": "Git",
+        "icon": "chevron-down"
+      },
+      {
+        "id": "workbench.fetch",
+        "title": "Fetch",
+        "category": "Git",
+        "icon": "activity"
+      },
+      {
+        "id": "workbench.switchBranch",
+        "title": "Switch branch",
+        "category": "Git",
+        "icon": "branch"
+      },
+      {
+        "id": "workbench.newBranch",
+        "title": "Create a branch",
+        "category": "Git",
+        "icon": "branch"
+      },
+      {
+        "id": "workbench.stash",
+        "title": "Stash changes",
+        "category": "Git",
+        "icon": "archive"
+      },
+      {
+        "id": "workbench.history",
+        "title": "History",
+        "category": "Git",
+        "icon": "clock"
+      },
+      {
+        "id": "workbench.fileHistory",
+        "title": "History of the file",
+        "category": "Git",
+        "icon": "clock"
+      },
       {
         "id": "workbench.openPullRequest",
         "title": "Open a pull request",
@@ -232,19 +356,53 @@
         "category": "Git",
         "icon": "arrow-up-right"
       },
-      { "id": "workbench.gh.available", "title": "Is the GitHub CLI signed in", "category": "Git" }
+      {
+        "id": "workbench.gh.available",
+        "title": "Is the GitHub CLI signed in",
+        "category": "Git"
+      }
     ],
     "keybindings": [
-      { "command": "workbench.quickOpen", "key": "mod+p" },
-      { "command": "workbench.save", "key": "mod+s" },
-      { "command": "workbench.saveAll", "key": "mod+alt+s" },
-      { "command": "workbench.format", "key": "shift+alt+f" },
-      { "command": "workbench.toggleSidebar", "key": "mod+b" },
-      { "command": "workbench.files", "key": "mod+shift+e" },
-      { "command": "workbench.search", "key": "mod+shift+f" },
-      { "command": "workbench.sourceControl", "key": "mod+shift+g" },
-      { "command": "workbench.toggleTerminal", "key": "mod+shift+j" },
-      { "command": "workbench.splitEditor", "key": "mod+alt+backslash" }
+      {
+        "command": "workbench.quickOpen",
+        "key": "mod+p"
+      },
+      {
+        "command": "workbench.save",
+        "key": "mod+s"
+      },
+      {
+        "command": "workbench.saveAll",
+        "key": "mod+alt+s"
+      },
+      {
+        "command": "workbench.format",
+        "key": "shift+alt+f"
+      },
+      {
+        "command": "workbench.toggleSidebar",
+        "key": "mod+b"
+      },
+      {
+        "command": "workbench.files",
+        "key": "mod+shift+e"
+      },
+      {
+        "command": "workbench.search",
+        "key": "mod+shift+f"
+      },
+      {
+        "command": "workbench.sourceControl",
+        "key": "mod+shift+g"
+      },
+      {
+        "command": "workbench.toggleTerminal",
+        "key": "mod+shift+j"
+      },
+      {
+        "command": "workbench.splitEditor",
+        "key": "mod+alt+backslash"
+      }
     ],
     "settings": [
       {

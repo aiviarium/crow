@@ -1,0 +1,24 @@
+format 1
+
+package {
+  group crow
+  id workbench
+  version "0.1.0"
+}
+
+about {
+  name "Workbench"
+  summary "The editor, diffs and version control for a checkout or worktree on a host: files, Monaco, search, source control, history and pull requests."
+  license MIT
+  license Apache-2.0
+  repository "https://github.com/aiviarium/crow"
+  keywords rookery-plugin
+}
+
+targets {
+  rookery {
+    requires {
+      rookery ">=0.6"
+    }
+  }
+}
