@@ -10,6 +10,7 @@ import {
 } from "@aiviarium/parrot-client"
 import type { ClientRookery, ClientStream } from "@rookery/sdk/client"
 import { errorMessage, hostNameFromEnv, toEnvUri } from "./api"
+import { AGENT_CONNECT, type AgentConnect } from "./rookery-wire"
 
 const encoder = new TextEncoder()
 
@@ -112,8 +113,6 @@ export function rookeryStreamTransport(stream: ClientStream): Transport {
 }
 
 export interface ConnectParrotOptions {
-  /** Override the default `agents.connect` stream method name if needed. */
-  method?: string
   /** Options passed to Parrot `initialize`. */
   client?: ClientOptions
 }
@@ -138,8 +137,8 @@ export async function connectParrot(
 ): Promise<ParrotConnection> {
   const host = hostNameFromEnv(hostOrEnv)
   const env = toEnvUri(host)
-  const method = options.method ?? "agents.connect"
-  const stream = await rookery.streams.open(method, { env })
+  const params: AgentConnect = { env }
+  const stream = await rookery.streams.open(AGENT_CONNECT, params)
   const transport = rookeryStreamTransport(stream)
   const client = new Client(transport)
   try {

@@ -4,6 +4,7 @@ import { defineClient } from "@rookery/sdk/client"
 import { createSignal } from "solid-js"
 import { assistant } from "./client/assist"
 import { calls, type TaskInfo } from "./client/calls"
+import { managedModels } from "./client/managed"
 import { ModelsPage } from "./client/page"
 import { speechSource } from "./client/speech"
 import type { ClientRookeryWithAi } from "./client/types"
@@ -11,7 +12,8 @@ import "./client.css"
 
 export default defineClient((baseRookery) => {
   const rookery = baseRookery as ClientRookeryWithAi
-  const api = calls(rookery.host)
+  const managed = managedModels(rookery, calls(rookery.host))
+  const api = managed.calls
   const [tasks, setTasks] = createSignal<TaskInfo[]>([])
   const available = (task: string) => tasks().some((t) => t.task === task && t.available)
 
@@ -28,7 +30,7 @@ export default defineClient((baseRookery) => {
 
   rookery.views.register("ai.models", (props) => {
     props.view.setTitle("Models")
-    return <ModelsPage rookery={rookery} calls={api} refreshTasks={refreshTasks} />
+    return <ModelsPage rookery={rookery} calls={api} managed={managed} refreshTasks={refreshTasks} />
   })
 
   rookery.commands.register("ai.models", {
