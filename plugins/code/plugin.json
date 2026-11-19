@@ -1,0 +1,588 @@
+{
+  "id": "code",
+  "name": "GitHub",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "namespace": "github",
+  "description": "GitHub in Crow: repositories attached to a space, their pull requests kept in sync by polling or webhooks, their issues synced both ways as Projects issues, reviews, merges and comments from the workbench, links to Crow entities and agent sessions, notifications and tools for agents.",
+  "host": "src/host.ts",
+  "interface": "interface.ts",
+  "client": "src/client.tsx",
+  "styles": "src/client.css",
+  "activate": "startup",
+  "dependencies": { "projects": "^0.1" },
+  "provides": { "services": ["github"] },
+  "extensionPoints": [
+    {
+      "id": "github.linkPatterns",
+      "description": "How a Crow entity is named in a pull request or issue: a pattern for its key (`ENG-123`) and the service method that turns keys into entity URIs. A pull request whose title, body or branch matches links to the entity, and the entity shows it as a backlink. The method gets { keys, space } and returns { [key]: uri }. The id is `github.linkPatterns` and not `code.linkPatterns` because the projects plugin already contributes to it under that name.",
+      "schema": {
+        "type": "object",
+        "required": ["id", "pattern", "service", "method"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "pattern": {
+            "type": "string",
+            "description": "A regular expression with one capture group: the key."
+          },
+          "flags": {
+            "type": "string",
+            "description": "Regular expression flags; `i` by default."
+          },
+          "service": { "type": "string" },
+          "method": { "type": "string" },
+          "branches": {
+            "type": "boolean",
+            "description": "Also look in branch names (default true)."
+          }
+        }
+      }
+    }
+  ],
+  "contributes": {
+    "collections": [
+      {
+        "name": "repos",
+        "scope": "space",
+        "access": { "read": "view", "write": "use" },
+        "entity": { "scheme": "gh-repo", "title": "fullName", "subtitle": "description" },
+        "trash": true,
+        "unique": [["host", "fullName"]],
+        "fields": [
+          { "name": "host", "type": "text", "index": true },
+          { "name": "apiBase", "type": "text" },
+          { "name": "owner", "type": "text" },
+          { "name": "name", "type": "text" },
+          { "name": "fullName", "type": "text", "search": true, "required": true },
+          { "name": "githubId", "type": "integer" },
+          { "name": "description", "type": "text", "search": true },
+          { "name": "defaultBranch", "type": "text" },
+          { "name": "private", "type": "boolean", "default": false },
+          { "name": "archived", "type": "boolean", "default": false },
+          { "name": "htmlUrl", "type": "text" },
+          { "name": "connection", "type": "text" },
+          { "name": "mergeMethods", "type": "json" },
+          { "name": "permissions", "type": "json" },
+          {
+            "name": "status",
+            "type": "enum",
+            "values": ["pending", "syncing", "ok", "error", "gone"],
+            "default": "pending",
+            "index": true
+          },
+          { "name": "errorCode", "type": "text" },
+          { "name": "lastError", "type": "text" },
+          { "name": "errorFix", "type": "text" },
+          { "name": "lastSyncAt", "type": "datetime" },
+          { "name": "lastSyncMs", "type": "integer" },
+          { "name": "lastSyncStats", "type": "json" },
+          { "name": "nextSyncAt", "type": "datetime" },
+          { "name": "pollSecs", "type": "integer", "default": 60 },
+          { "name": "lastWebhookAt", "type": "datetime" },
+          { "name": "cursors", "type": "json" },
+          { "name": "rateLimit", "type": "json" },
+          { "name": "openPulls", "type": "integer", "default": 0 },
+          { "name": "openIssues", "type": "integer", "default": 0 },
+          { "name": "syncedBy", "type": "text" },
+          { "name": "repository", "type": "text" },
+          { "name": "project", "type": "text" },
+          { "name": "projectLink", "type": "text" }
+        ],
+        "indexes": [["status"]]
+      },
+      {
+        "name": "prs",
+        "scope": "space",
+        "access": { "read": "view", "write": "use" },
+        "entity": { "scheme": "gh-pr", "title": "title", "subtitle": "subtitle" },
+        "trash": true,
+        "unique": [["repo", "number"]],
+        "fields": [
+          { "name": "repo", "type": "ref", "to": "gh-repo", "index": true },
+          { "name": "number", "type": "integer", "index": true },
+          { "name": "githubId", "type": "integer" },
+          { "name": "title", "type": "text", "search": true, "required": true, "default": "Untitled" },
+          { "name": "subtitle", "type": "text" },
+          { "name": "body", "type": "longtext", "search": true },
+          { "name": "author", "type": "text", "index": true },
+          { "name": "authorName", "type": "text" },
+          { "name": "assignees", "type": "json" },
+          { "name": "labels", "type": "json" },
+          { "name": "milestone", "type": "text" },
+          { "name": "commentCount", "type": "integer", "default": 0 },
+          { "name": "ghCreatedAt", "type": "datetime" },
+          { "name": "ghUpdatedAt", "type": "datetime", "index": true },
+          { "name": "closedAt", "type": "datetime" },
+          { "name": "htmlUrl", "type": "text" },
+          { "name": "removed", "type": "text" },
+          { "name": "links", "type": "refs" },
+          {
+            "name": "state",
+            "type": "enum",
+            "values": ["open", "closed", "merged"],
+            "index": true,
+            "default": "open"
+          },
+          { "name": "draft", "type": "boolean", "default": false },
+          { "name": "reviewers", "type": "json" },
+          { "name": "reviews", "type": "json" },
+          {
+            "name": "reviewState",
+            "type": "enum",
+            "values": ["none", "pending", "approved", "changes_requested", "commented"],
+            "default": "none",
+            "index": true
+          },
+          {
+            "name": "checksState",
+            "type": "enum",
+            "values": ["none", "pending", "success", "failure"],
+            "default": "none",
+            "index": true
+          },
+          { "name": "checks", "type": "json" },
+          { "name": "head", "type": "text", "index": true },
+          { "name": "base", "type": "text" },
+          { "name": "headSha", "type": "text" },
+          { "name": "headRepo", "type": "text" },
+          { "name": "mergeable", "type": "text" },
+          { "name": "mergeableState", "type": "text" },
+          { "name": "additions", "type": "integer", "default": 0 },
+          { "name": "deletions", "type": "integer", "default": 0 },
+          { "name": "changedFiles", "type": "integer", "default": 0 },
+          { "name": "commits", "type": "integer", "default": 0 },
+          { "name": "mergedAt", "type": "datetime" },
+          { "name": "mergedBy", "type": "text" },
+          { "name": "sessions", "type": "refs" }
+        ],
+        "indexes": [["repo", "state"], ["state", "ghUpdatedAt"]]
+      },
+      {
+        "name": "comments",
+        "scope": "space",
+        "access": { "read": "view", "write": "use" },
+        "fields": [
+          { "name": "repo", "type": "ref", "to": "gh-repo", "index": true },
+          { "name": "number", "type": "integer", "index": true },
+          { "name": "onKind", "type": "enum", "values": ["pr", "issue"] },
+          { "name": "kind", "type": "enum", "values": ["comment", "review", "review_comment"] },
+          { "name": "ghId", "type": "integer" },
+          { "name": "author", "type": "text" },
+          { "name": "body", "type": "longtext", "search": true },
+          { "name": "reviewState", "type": "text" },
+          { "name": "path", "type": "text" },
+          { "name": "line", "type": "integer" },
+          { "name": "side", "type": "text" },
+          { "name": "commitSha", "type": "text" },
+          { "name": "inReplyTo", "type": "integer" },
+          { "name": "ghCreatedAt", "type": "datetime" },
+          { "name": "ghUpdatedAt", "type": "datetime" },
+          { "name": "htmlUrl", "type": "text" }
+        ],
+        "unique": [["repo", "kind", "ghId"]],
+        "indexes": [["repo", "onKind", "number"]]
+      },
+      {
+        "name": "branchLinks",
+        "scope": "space",
+        "access": { "read": "view", "write": "use" },
+        "fields": [
+          { "name": "session", "type": "text", "required": true },
+          { "name": "branch", "type": "text", "required": true, "index": true },
+          { "name": "headSha", "type": "text" },
+          { "name": "repo", "type": "text" }
+        ],
+        "unique": [["session", "branch"]]
+      },
+      {
+        "name": "routes",
+        "scope": "global",
+        "access": { "read": "view", "write": "manage" },
+        "fields": [
+          { "name": "repoKey", "type": "text", "required": true, "index": true },
+          { "name": "inSpace", "type": "text", "required": true },
+          { "name": "repoId", "type": "text", "required": true }
+        ],
+        "unique": [["repoKey", "inSpace"]]
+      },
+      {
+        "name": "accounts",
+        "scope": "global",
+        "access": { "read": "view", "write": "manage" },
+        "fields": [
+          { "name": "key", "type": "text", "required": true },
+          { "name": "login", "type": "text", "required": true, "index": true },
+          { "name": "host", "type": "text" },
+          { "name": "user", "type": "ref", "to": "user", "index": true },
+          { "name": "email", "type": "text", "index": true },
+          { "name": "avatar", "type": "text" },
+          {
+            "name": "source",
+            "type": "enum",
+            "values": ["token", "email", "manual"],
+            "default": "token"
+          }
+        ],
+        "unique": [["key"]]
+      }
+    ],
+    "entityTypes": [
+      {
+        "scheme": "gh-repo",
+        "title": "Repository",
+        "icon": "folder",
+        "view": "code.repo",
+        "description": "A GitHub repository attached to a space"
+      },
+      {
+        "scheme": "gh-pr",
+        "title": "Pull request",
+        "icon": "branch",
+        "view": "code.pull",
+        "description": "A GitHub pull request"
+      }
+    ],
+    "connectionTypes": [
+      {
+        "id": "code.github-app",
+        "title": "GitHub App installation",
+        "description": "An installation of a GitHub App: Crow signs in as the app and mints short-lived installation tokens. Create the app from Crow (GitHub › Connect), or enter the ids of one you made. Needs the app's private key.",
+        "icon": "link",
+        "fields": {
+          "type": "object",
+          "properties": {
+            "baseUrl": {
+              "type": "string",
+              "title": "API URL",
+              "description": "https://api.github.com, or https://HOST/api/v3 for GitHub Enterprise Server.",
+              "default": "https://api.github.com"
+            },
+            "appId": { "type": "string", "title": "App ID" },
+            "installationId": {
+              "type": "string",
+              "title": "Installation ID",
+              "description": "The number at the end of the installation's URL. Leave empty when the app is installed in one place: Crow finds it."
+            },
+            "privateKey": {
+              "type": "string",
+              "title": "Private key",
+              "description": "The PEM file GitHub gave you when you generated a key for the app.",
+              "x-multiline": true
+            },
+            "webhookSecret": {
+              "type": "string",
+              "title": "Webhook secret",
+              "description": "Verifies deliveries to /hooks/code/events. Leave empty to poll only."
+            }
+          },
+          "required": ["appId", "privateKey"]
+        },
+        "secret": ["privateKey", "webhookSecret"],
+        "scopes": ["global", "user"],
+        "test": true
+      },
+      {
+        "id": "code.github-token",
+        "title": "GitHub personal access token",
+        "description": "A fine-grained or classic personal access token. Actions you take (comments, reviews, merges) are made as you.",
+        "icon": "user",
+        "fields": {
+          "type": "object",
+          "properties": {
+            "baseUrl": {
+              "type": "string",
+              "title": "API URL",
+              "description": "https://api.github.com, or https://HOST/api/v3 for GitHub Enterprise Server.",
+              "default": "https://api.github.com"
+            },
+            "token": {
+              "type": "string",
+              "title": "Token",
+              "description": "Needs read access to code, issues, pull requests and checks; write access to comment, review and merge."
+            }
+          },
+          "required": ["token"]
+        },
+        "secret": ["token"],
+        "scopes": ["global", "user"],
+        "test": true
+      }
+    ],
+    "settings": [
+      {
+        "key": "code.pollSecs",
+        "title": "Poll every",
+        "description": "How often a repository is checked for changes when webhooks do not reach the server. Idle checks are conditional requests that cost no rate limit.",
+        "category": "GitHub ›",
+        "type": "integer",
+        "default": 60,
+        "minimum": 15,
+        "maximum": 3600,
+        "unit": "seconds",
+        "scopes": ["global"]
+      },
+      {
+        "key": "code.notifyReviewRequests",
+        "title": "Review requests",
+        "description": "A notification when someone asks you to review a pull request.",
+        "category": "GitHub ›",
+        "type": "boolean",
+        "default": true,
+        "scopes": ["user"]
+      },
+      {
+        "key": "code.notifyMentions",
+        "title": "Mentions",
+        "description": "A notification when a comment or description mentions you.",
+        "category": "GitHub ›",
+        "type": "boolean",
+        "default": true,
+        "scopes": ["user"]
+      },
+      {
+        "key": "code.notifyChecks",
+        "title": "Failed checks",
+        "description": "A notification when checks fail on a pull request you opened.",
+        "category": "GitHub ›",
+        "type": "boolean",
+        "default": true,
+        "scopes": ["user"]
+      }
+    ],
+    "jobs": [
+      {
+        "id": "code.sync",
+        "title": "Sync a repository",
+        "description": "Fetches what changed in a repository since the last run: pull requests, issues, comments, reviews and checks.",
+        "timeoutSecs": 900,
+        "maxAttempts": 2,
+        "backoffSecs": 30,
+        "client": true
+      },
+      {
+        "id": "code.delivery",
+        "title": "Handle a GitHub webhook delivery",
+        "description": "Applies one webhook delivery to the repositories it names.",
+        "timeoutSecs": 300,
+        "maxAttempts": 3,
+        "backoffSecs": 10,
+        "client": false
+      }
+    ],
+    "schedules": [],
+    "webhooks": [
+      {
+        "id": "code.events",
+        "job": "code.delivery",
+        "title": "GitHub App events",
+        "maxBytes": 5242880,
+        "verify": {
+          "scheme": "github",
+          "secret": { "connection": "code.github-app", "field": "webhookSecret" }
+        }
+      }
+    ],
+    "commands": [
+      {
+        "id": "code.attach",
+        "title": "Attach a repository",
+        "category": "GitHub",
+        "description": "Attaches a GitHub repository to the current space and starts syncing it.",
+        "icon": "plus"
+      },
+      {
+        "id": "code.sync",
+        "title": "Sync the space's repositories now",
+        "category": "GitHub",
+        "description": "Checks every repository attached to the current space for changes.",
+        "icon": "activity"
+      },
+      {
+        "id": "code.pulls",
+        "title": "Show pull requests",
+        "category": "GitHub",
+        "icon": "branch"
+      },
+      {
+        "id": "code.issues",
+        "title": "Show issues",
+        "category": "GitHub",
+        "icon": "list"
+      },
+      {
+        "id": "code.repos",
+        "title": "Show repositories",
+        "category": "GitHub",
+        "icon": "folder"
+      },
+      {
+        "id": "code.openPullRequest",
+        "title": "Open a pull request on GitHub",
+        "category": "GitHub",
+        "description": "Opens a pull request for a pushed branch through a GitHub connection. The workbench's provider for it.",
+        "icon": "branch"
+      },
+      {
+        "id": "code.canOpenPullRequest",
+        "title": "Check that a pull request can be opened on GitHub",
+        "category": "GitHub",
+        "description": "Says whether a connection reaches the repository of a checkout. Used by the workbench.",
+        "icon": "check"
+      }
+    ],
+    "views": [
+      { "id": "code.repos", "title": "Repositories", "slot": "main", "icon": "folder" },
+      { "id": "code.repo", "title": "Repository", "slot": "main", "icon": "folder" },
+      { "id": "code.pulls", "title": "Pull requests", "slot": "main", "icon": "branch" },
+      { "id": "code.pull", "title": "Pull request", "slot": "main", "icon": "branch" },
+      { "id": "code.issues", "title": "Issues", "slot": "main", "icon": "list" },
+      { "id": "code.connect", "title": "Connect GitHub", "slot": "main", "icon": "link" }
+    ],
+    "nav": [
+      {
+        "id": "code.nav.pulls",
+        "title": "Pull requests",
+        "view": "code.pulls",
+        "icon": "branch",
+        "order": 10,
+        "main": true
+      },
+      { "id": "code.nav.issues", "title": "Issues", "view": "code.issues", "icon": "list", "order": 20 },
+      { "id": "code.nav.repos", "title": "Repositories", "view": "code.repos", "icon": "folder", "order": 30 }
+    ],
+    "routes": [
+      { "path": "/pulls", "view": "code.pulls", "context": "rookery.space" },
+      { "path": "/pull/:pull", "view": "code.pull", "context": "rookery.space" },
+      { "path": "/issues", "view": "code.issues", "context": "rookery.space" },
+      { "path": "/repos", "view": "code.repos", "context": "rookery.space" },
+      { "path": "/repo/:repo", "view": "code.repo", "context": "rookery.space" },
+      { "path": "/connect", "view": "code.connect" }
+    ],
+    "widgets": [
+      {
+        "id": "code.myPulls",
+        "title": "My pull requests",
+        "description": "Your open pull requests, with review and check state, live.",
+        "icon": "branch",
+        "category": "GitHub",
+        "sizes": { "default": { "w": 4, "h": 4 }, "min": { "w": 3, "h": 2 }, "max": { "w": 8, "h": 8 } },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "title": "Pull requests shown",
+              "default": 6,
+              "minimum": 1,
+              "maximum": 20
+            }
+          }
+        }
+      },
+      {
+        "id": "code.reviewRequests",
+        "title": "Review requests",
+        "description": "Pull requests waiting for your review.",
+        "icon": "eye",
+        "category": "GitHub",
+        "sizes": { "default": { "w": 4, "h": 4 }, "min": { "w": 3, "h": 2 }, "max": { "w": 8, "h": 8 } },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "title": "Pull requests shown",
+              "default": 6,
+              "minimum": 1,
+              "maximum": 20
+            }
+          }
+        }
+      },
+      {
+        "id": "code.failingChecks",
+        "title": "Checks failing",
+        "description": "Your open pull requests whose checks fail.",
+        "icon": "bolt",
+        "category": "GitHub",
+        "sizes": { "default": { "w": 4, "h": 3 }, "min": { "w": 3, "h": 2 }, "max": { "w": 8, "h": 8 } },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "title": "Pull requests shown",
+              "default": 6,
+              "minimum": 1,
+              "maximum": 20
+            }
+          }
+        }
+      }
+    ],
+    "extensions": {
+      "projects.issueSources": [
+        {
+          "id": "github",
+          "title": "GitHub",
+          "icon": "branch",
+          "service": "github",
+          "push": "pushIssue",
+          "repositories": "linkableRepositories",
+          "linked": "projectLinked",
+          "unlinked": "projectUnlinked"
+        }
+      ],
+      "home.actions": [
+        {
+          "id": "code.pulls",
+          "title": "Pull requests",
+          "icon": "branch",
+          "view": "code.pulls",
+          "order": 40
+        },
+        {
+          "id": "code.attach",
+          "title": "Attach a repository",
+          "icon": "plus",
+          "command": "code.attach",
+          "order": 41
+        }
+      ],
+      "agents.codeHosts": [
+        {
+          "id": "github",
+          "title": "GitHub",
+          "service": "github",
+          "link": "linkSession",
+          "pullRequests": "pullRequestsFor"
+        }
+      ]
+    },
+    "tools": [
+      {
+        "id": "code.read",
+        "description": "Reads a GitHub pull request or issue with its description, labels, reviews, checks and comments. Takes a repository (owner/name) and a number, or a gh-pr:// or issue:// URI."
+      },
+      {
+        "id": "code.search",
+        "description": "Searches the pull requests and issues of the repositories attached to the current space by text, state, author and label."
+      },
+      {
+        "id": "code.comment",
+        "description": "Adds a comment to a GitHub pull request or issue.",
+        "confirm": true
+      },
+      {
+        "id": "code.openPullRequest",
+        "description": "Opens a pull request from a branch that is already pushed to GitHub.",
+        "confirm": true
+      },
+      {
+        "id": "code.checks",
+        "description": "Reads the check results of a pull request: each check's conclusion and, for a failed one, the end of its log."
+      }
+    ]
+  }
+}
