@@ -14,7 +14,7 @@ import {
   ViewLayout,
   WidgetProgress,
 } from "@aiviarium/nocturne"
-import type { JobDetail, JobEnd, LogItem } from "@rookery/client"
+import type { JobEnd, JobInfo, LogItem } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { createEffect, createSignal, type JSX, on, onCleanup, Show } from "solid-js"
 import type { FleetApi } from "./fleetApi"
@@ -31,7 +31,7 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
   const jobId = () => props.view.params.id ?? props.view.path ?? ""
   const hostFromParams = () => props.view.params.host ?? ""
 
-  const [detail, setDetail] = createSignal<JobDetail | null>(null)
+  const [detail, setDetail] = createSignal<JobInfo | null>(null)
   const [entries, setEntries] = createSignal<LogEntry[]>([])
   const [streamState, setStreamState] = createSignal<StreamStatus>("connecting")
   const [streamOffset, setStreamOffset] = createSignal<number>(0)
@@ -42,7 +42,7 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
   const hostName = () => {
     const fromParam = hostFromParams()
     if (fromParam) return fromParam
-    const p = detail()?.job.params
+    const p = detail()?.params
     if (p && typeof p === "object") {
       const rec = p as Record<string, unknown>
       if (typeof rec.host === "string") return rec.host
@@ -50,7 +50,7 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
     return ""
   }
 
-  const progress = () => jobProgress(detail()?.job.progress)
+  const progress = () => jobProgress(detail()?.progress)
 
   createEffect(
     on(jobId, (id) => {
@@ -72,7 +72,7 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
           const d = await props.api.getJob(id)
           if (disposed) return
           setDetail(d)
-          props.view.setTitle(d.job.kind)
+          props.view.setTitle(d.kind)
         } catch (err) {
           if (!disposed) setError(errorMessage(err))
         }
@@ -104,12 +104,9 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
                 prev
                   ? {
                       ...prev,
-                      job: {
-                        ...prev.job,
-                        state: end.state,
-                        result: end.result ?? prev.job.result,
-                        error: end.error ?? prev.job.error,
-                      },
+                      state: end.state,
+                      result: end.result ?? prev.result,
+                      error: end.error ?? prev.error,
                     }
                   : prev,
               )
@@ -196,17 +193,17 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
         href: props.rookery.views.href("fleet.host", { params: { name: h } }) ?? `/fleet/hosts/${h}`,
       })
     }
-    list.push({ label: detail()?.job.kind ?? jobId() })
+    list.push({ label: detail()?.kind ?? jobId() })
     return list
   }
 
   const active = () => {
-    const state = detail()?.job.state
+    const state = detail()?.state
     return state ? isJobActive(state) : streamState() === "live"
   }
 
   const canRetry = () => {
-    const state = detail()?.job.state
+    const state = detail()?.state
     return state === "failed" || state === "cancelled"
   }
 
@@ -221,7 +218,7 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
           crumbs={crumbs()}
           context={
             <Show when={detail()}>
-              {(d) => <State status={jobStatus(d().job.state).dot}>{jobStatus(d().job.state).label}</State>}
+              {(d) => <State status={jobStatus(d().state).dot}>{jobStatus(d().state).label}</State>}
             </Show>
           }
           actions={[
@@ -268,19 +265,17 @@ export function JobView(props: { view: ViewHandle; rookery: ClientRookery; api: 
               <Card>
                 <MetaLine
                   items={[
-                    { label: <IdBadge>{d().job.id}</IdBadge> },
-                    { label: d().job.kind },
-                    d().job.subject ? { label: d().job.subject! } : null,
-                    { label: `Attempt ${d().job.attempts} of ${d().job.maxAttempts}` },
-                    { label: `Created ${formatRelativeTime(d().job.createdAt)}` },
-                    d().job.finishedAt
-                      ? { label: `Finished ${formatRelativeTime(d().job.finishedAt)}` }
-                      : null,
+                    { label: <IdBadge>{d().id}</IdBadge> },
+                    { label: d().kind },
+                    d().subject ? { label: d().subject! } : null,
+                    { label: `Attempt ${d().attempts} of ${d().maxAttempts}` },
+                    { label: `Created ${formatRelativeTime(d().createdAt)}` },
+                    d().finishedAt ? { label: `Finished ${formatRelativeTime(d().finishedAt)}` } : null,
                   ]}
                 />
               </Card>
 
-              <Show when={d().job.error}>
+              <Show when={d().error}>
                 {(err) => (
                   <Callout
                     tone="danger"

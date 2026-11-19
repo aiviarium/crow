@@ -1,5 +1,5 @@
 // Reusable fake Rookery WebSocket/HTTP server for Bun tests. Answers in the exact shapes of
-// @rookery/client's generated wire types: `auth.me` is a `Me`, `jobs.*` use `JobInfo` / `JobDetail`
+// @rookery/client's generated wire types: `auth.me` is a `Me`, `jobs.*` use `JobInfo`
 // / `LogItem` / `JobEnd`, and `notify.*` use `NotificationInfo` with string actions and answers.
 // `hosts.*` are the generated wire shapes in `@rookery/client`.
 import type {
@@ -19,7 +19,6 @@ import type {
   HostSave,
   HostSaved,
   JobChanged,
-  JobDetail,
   JobEnd,
   JobInfo,
   JobList,
@@ -488,8 +487,7 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
               sendError(ws, msg.id, "NOT_FOUND", `job ${id} not found`)
               return
             }
-            const detail: JobDetail = { job, attempts: [] }
-            sendReply(ws, msg.id, detail)
+            sendReply(ws, msg.id, job)
             return
           }
 
