@@ -19,19 +19,22 @@ import {
   ViewHeader,
   ViewLayout,
 } from "@aiviarium/nocturne"
+import type { PluginInfo } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { createEffect, createResource, createSignal, For, type JSX, on, onMount, Show } from "solid-js"
 import type { FleetApi } from "./fleetApi"
 import { errorMessage } from "./format"
+import { canActivate, PLUGIN_STATE, type PluginNewer, type PluginReport } from "./pluginsApi"
 import { RunActionDialog } from "./RunAction"
 import type { Acted, Action, Registry, Setting } from "./types"
 
-type Section = "settings" | "secrets" | "registries" | "installation"
+type Section = "settings" | "secrets" | "registries" | "installation" | "plugins"
 
 const SECTIONS: Array<{ id: Section; label: string; icon: IconName }> = [
   { id: "settings", label: "Server settings", icon: "settings" },
   { id: "secrets", label: "Secrets", icon: "lock" },
   { id: "registries", label: "Registries", icon: "link" },
+  { id: "plugins", label: "Plugins", icon: "layers" },
   { id: "installation", label: "Installation", icon: "server" },
 ]
 
@@ -98,6 +101,9 @@ export function AdminView(props: { view: ViewHandle; rookery: ClientRookery; api
           </Show>
           <Show when={section() === "registries"}>
             <RegistriesSection api={props.api} rookery={props.rookery} />
+          </Show>
+          <Show when={section() === "plugins"}>
+            <PluginsSection api={props.api} rookery={props.rookery} />
           </Show>
           <Show when={section() === "installation"}>
             <InstallationSection api={props.api} rookery={props.rookery} />
@@ -1023,5 +1029,479 @@ function InstallationSection(props: { api: FleetApi; rookery: ClientRookery }): 
         }
       />
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Plugins
+// ---------------------------------------------------------------------------
+
+/**
+ * The plugin system, for admins: what the server has installed and where each came from, the registries
+ * it installs from, and installing, updating, removing and starting one. The prototype's admin page is
+ * the layout: one row a plugin, its state beside its name, and the actions on the right.
+ */
+function PluginsSection(props: { api: FleetApi; rookery: ClientRookery }): JSX.Element {
+  const [installed, { refetch }] = createResource(() => props.api.listPlugins())
+  const [registries, { refetch: refetchRegistries }] = createResource(() => props.api.pluginRegistries())
+  const [updates, setUpdates] = createSignal<PluginNewer[] | null>(null)
+  const [adding, setAdding] = createSignal(false)
+  const [removing, setRemoving] = createSignal<PluginInfo | null>(null)
+  const [busy, setBusy] = createSignal<string | null>(null)
+  const [error, setError] = createSignal<string | null>(null)
+
+  const reload = () => {
+    void refetch()
+    void refetchRegistries()
+  }
+
+  /** Runs one change, keeping what it reports and what it failed with. */
+  const change = async (what: string, run: () => Promise<PluginReport | PluginInfo>) => {
+    setBusy(what)
+    setError(null)
+    try {
+      const done = await run()
+      const lines = "lines" in done ? done.lines : [`${done.id} ${done.state}`]
+      props.rookery.workbench.toast({
+        kind: "success",
+        title: `${what} done`,
+        body: lines.join("\n") || undefined,
+      })
+      setUpdates(null)
+      reload()
+    } catch (failure) {
+      setError(`${what} failed: ${errorMessage(failure)}`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div class="fleet-admin__section" data-part="admin-plugins">
+      <Show when={error()}>
+        {(text) => (
+          <Callout tone="danger" data-part="plugins-error">
+            {text()}
+          </Callout>
+        )}
+      </Show>
+      <Show when={installed.error}>
+        {(failure) => (
+          <Callout tone="danger" data-part="plugins-error">
+            Could not read the plugins: {errorMessage(failure())}
+          </Callout>
+        )}
+      </Show>
+      <Show when={installed.loading && !installed()}>
+        <LoadingCard title="Loading plugins…" />
+      </Show>
+      <Show when={installed()}>
+        <Card
+          title="Installed"
+          count={installed()?.plugins.length}
+          data-part="plugin-list"
+          action={
+            <span class="fleet-row-actions">
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="refresh-cw"
+                disabled={!!busy()}
+                onClick={reload}
+                data-part="refresh-plugins"
+              >
+                Refresh
+              </Button>
+              <label class="nc-btn nc-btn--secondary nc-btn--sm" data-part="upload-plugin">
+                Upload egg
+                <input
+                  type="file"
+                  accept=".egg,application/gzip"
+                  class="nc-visually-hidden"
+                  onChange={(e) => {
+                    const file = e.currentTarget.files?.[0]
+                    e.currentTarget.value = ""
+                    if (file) void change(`Installing ${file.name}`, () => props.api.uploadPlugin(file))
+                  }}
+                />
+              </label>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="plus"
+                disabled={!!busy()}
+                data-part="add-plugin"
+                onClick={() => setAdding(true)}
+              >
+                Add plugin
+              </Button>
+            </span>
+          }
+        >
+          <p class="nc-meta">
+            A plugin is a package with a `rookery` target: host features, provisioners, and the client half
+            this page's shell loads. Installing one runs none of its code; its tasks run when a host is
+            applied.
+          </p>
+          <Show
+            when={(installed()?.plugins ?? []).length > 0}
+            fallback={
+              <EmptyState
+                icon="layers"
+                title="No plugin installed"
+                description="Add one from a registry, or upload an egg."
+              />
+            }
+          >
+            <For each={installed()?.plugins ?? []}>
+              {(plugin) => (
+                <PluginRow
+                  plugin={plugin}
+                  busy={!!busy()}
+                  onStart={() =>
+                    void change(`Starting ${plugin.label || plugin.id}`, () =>
+                      props.api.activatePlugin(plugin.id),
+                    )
+                  }
+                  onRemove={setRemoving}
+                />
+              )}
+            </For>
+          </Show>
+          <Show when={(installed()?.missing ?? []).length > 0}>
+            <Callout tone="warning" data-part="plugins-missing">
+              The database records {installed()?.missing?.join(", ")} as installed, and the plugin folder does
+              not have them. Reload the plugins to read the folder again.
+            </Callout>
+          </Show>
+        </Card>
+
+        <Card
+          title="Updates"
+          data-part="plugin-updates"
+          action={
+            <Button
+              size="sm"
+              variant="secondary"
+              icon="refresh-cw"
+              disabled={!!busy()}
+              data-part="check-plugins"
+              onClick={() =>
+                void props.api
+                  .checkPlugins()
+                  .then(setUpdates)
+                  .catch((failure) => setError(`Checking for updates failed: ${errorMessage(failure)}`))
+              }
+            >
+              Check for updates
+            </Button>
+          }
+        >
+          <p class="nc-meta">
+            Asks every registry whether a newer version of each plugin is there. A version younger than the
+            registry's minimum release age waits, and is named with that reason.
+          </p>
+          <Show when={updates()} fallback={<span class="nc-meta">Not checked yet.</span>}>
+            {(found) => (
+              <Show
+                when={found().some((one) => one.latest)}
+                fallback={<span class="nc-meta">Every plugin is at its newest version.</span>}
+              >
+                <For each={found().filter((one) => one.latest)}>
+                  {(one) => (
+                    <div class="fleet-admin__row" data-plugin-update={one.id}>
+                      <div class="fleet-admin__row-main">
+                        <span class="mono fleet-admin__key">{one.package}</span>
+                        <span class="nc-meta">
+                          {one.version} → {one.latest}
+                          {one.note ? ` · ${one.note}` : ""}
+                        </span>
+                      </div>
+                      <div class="fleet-admin__row-actions">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={!!busy()}
+                          data-part="update-plugin"
+                          onClick={() =>
+                            void change(`Updating ${one.package}`, () => props.api.updatePlugin(one.id))
+                          }
+                        >
+                          Update to {one.latest}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </For>
+              </Show>
+            )}
+          </Show>
+        </Card>
+
+        <Card
+          title="Registries"
+          count={registries()?.registries.length}
+          data-part="plugin-registries"
+          action={
+            <Button
+              size="sm"
+              variant="ghost"
+              icon="refresh-cw"
+              disabled={!!busy()}
+              onClick={() => void refetchRegistries()}
+            >
+              Refresh
+            </Button>
+          }
+        >
+          <p class="nc-meta">
+            Rookery searches the registry named `rookery` first, then these in order. They are the lines of{" "}
+            <span class="mono">{registries()?.file ?? "hatchery.kdl"}</span>.
+          </p>
+          <Show when={registries.error}>
+            {(failure) => (
+              <Callout tone="danger" data-part="plugin-registries-error">
+                Could not read the plugin registries: {errorMessage(failure())}
+              </Callout>
+            )}
+          </Show>
+          <Show
+            when={(registries()?.registries ?? []).length > 0}
+            fallback={<span class="nc-meta">No plugin registry is added.</span>}
+          >
+            <For each={registries()?.registries ?? []}>
+              {(registry) => (
+                <div class="fleet-admin__row" data-plugin-registry={registry.location}>
+                  <div class="fleet-admin__row-main">
+                    <span class="fleet-admin__key">
+                      {registry.name}{" "}
+                      {registry.builtin ? (
+                        <Badge square tone="outline">
+                          built in
+                        </Badge>
+                      ) : null}
+                    </span>
+                    <span class="mono nc-meta">
+                      {registry.kind} {registry.location}
+                    </span>
+                  </div>
+                  <div class="fleet-admin__row-actions">
+                    <Show when={registry.only.length > 0}>
+                      <span class="nc-meta">Only {registry.only.join(", ")}</span>
+                    </Show>
+                  </div>
+                </div>
+              )}
+            </For>
+          </Show>
+        </Card>
+      </Show>
+
+      <AddPluginDialog
+        open={adding()}
+        busy={!!busy()}
+        onClose={() => setAdding(false)}
+        onAdd={(spec, options) => {
+          setAdding(false)
+          void change(`Installing ${spec || options.git}`, () => props.api.addPlugin(spec, options))
+        }}
+      />
+
+      <Dialog
+        open={removing() !== null}
+        onClose={() => {
+          if (!busy()) setRemoving(null)
+        }}
+        title={`Remove ${removing()?.label || removing()?.id || ""}?`}
+        description="Its settings, secrets and data stay with the server. Its host features stop being offered when a host is applied again."
+        footer={
+          <>
+            <Button variant="ghost" disabled={!!busy()} onClick={() => setRemoving(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              disabled={!!busy()}
+              data-part="confirm-remove-plugin"
+              onClick={() => {
+                const plugin = removing()
+                setRemoving(null)
+                if (plugin) void change(`Removing ${plugin.id}`, () => props.api.removePlugin(plugin.id))
+              }}
+            >
+              Remove plugin
+            </Button>
+          </>
+        }
+      >
+        <Callout tone="warning">
+          Remove <span class="mono">{removing()?.package || removing()?.id}</span> and its files from the
+          server.
+        </Callout>
+      </Dialog>
+    </div>
+  )
+}
+
+/** One installed plugin: what it is, its state and why it is not usable, and what can be done with it. */
+function PluginRow(props: {
+  plugin: PluginInfo
+  busy: boolean
+  onStart(): void
+  onRemove(plugin: PluginInfo): void
+}): JSX.Element {
+  const state = () => PLUGIN_STATE[props.plugin.state]
+  const problem = () => props.plugin.problem || props.plugin.error?.message || ""
+  return (
+    <div class="fleet-admin__row" data-plugin={props.plugin.id}>
+      <div class="fleet-admin__row-main">
+        <span class="fleet-admin__key">
+          {props.plugin.label || props.plugin.id} <span class="mono nc-muted">{props.plugin.version}</span>{" "}
+          <Badge square tone={state().tone}>
+            {state().label}
+          </Badge>
+        </span>
+        <Show when={props.plugin.description}>
+          <span class="nc-meta">{props.plugin.description}</span>
+        </Show>
+        <span class="mono nc-meta">
+          {[props.plugin.package, props.plugin.origin, props.plugin.source].filter(Boolean).join(" · ")}
+        </span>
+        <Show when={props.plugin.dir}>
+          <span class="mono nc-meta">{props.plugin.dir}</span>
+        </Show>
+        <Show when={problem()}>
+          <Callout tone="danger" code={props.plugin.error?.code} data-part="plugin-problem">
+            {problem()}
+          </Callout>
+        </Show>
+      </div>
+      <div class="fleet-admin__row-actions">
+        <Show when={canActivate(props.plugin.state)}>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={props.busy}
+            data-part="activate-plugin"
+            onClick={props.onStart}
+          >
+            Start
+          </Button>
+        </Show>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={props.busy}
+          data-part="remove-plugin"
+          onClick={() => props.onRemove(props.plugin)}
+        >
+          Remove
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** Installing a plugin: a package of the registries, an egg's address, or one folder of a git repository. */
+function AddPluginDialog(props: {
+  open: boolean
+  busy: boolean
+  onClose: () => void
+  onAdd(spec: string, options: { git?: string; path?: string; ref?: string }): void
+}): JSX.Element {
+  const [spec, setSpec] = createSignal("")
+  const [git, setGit] = createSignal("")
+  const [path, setPath] = createSignal("")
+  const [ref, setRef] = createSignal("")
+
+  createEffect(
+    on(
+      () => props.open,
+      (open) => {
+        if (!open) return
+        setSpec("")
+        setGit("")
+        setPath("")
+        setRef("")
+      },
+      { defer: true },
+    ),
+  )
+
+  const ready = () => (git().trim() ? !spec().trim() : !!spec().trim())
+
+  return (
+    <Dialog
+      open={props.open}
+      onClose={() => {
+        if (!props.busy) props.onClose()
+      }}
+      title="Add a plugin"
+      description="A package of the plugin registries, an egg's https address, or one folder of a git repository."
+      size="lg"
+      closeOnBackdrop={false}
+      footer={
+        <>
+          <Button variant="ghost" disabled={props.busy} onClick={props.onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={props.busy || !ready()}
+            data-part="install-plugin"
+            onClick={() =>
+              props.onAdd(spec().trim(), {
+                ...(git().trim() ? { git: git().trim() } : {}),
+                ...(path().trim() ? { path: path().trim() } : {}),
+                ...(ref().trim() ? { ref: ref().trim() } : {}),
+              })
+            }
+          >
+            {props.busy ? "Installing…" : "Install"}
+          </Button>
+        </>
+      }
+    >
+      <div class="fleet-form" data-part="plugin-form">
+        <TextField
+          id="plugin-spec"
+          label="Package or egg"
+          placeholder="crow/fleet"
+          mono
+          value={spec()}
+          disabled={!!git().trim()}
+          help="`GROUP/ID`, `ID`, `ID@^1.2`, or the https address of an egg. Leave it empty with a git repository."
+          onInput={(e) => setSpec(e.currentTarget.value)}
+        />
+        <TextField
+          id="plugin-git"
+          label="Git repository"
+          placeholder="https://github.com/aiviarium/crow.git"
+          mono
+          value={git()}
+          help="Installs one folder of it, at a tag, a branch or a commit."
+          onInput={(e) => setGit(e.currentTarget.value)}
+        />
+        <div class="fleet-form__row">
+          <TextField
+            id="plugin-git-path"
+            label="Folder"
+            placeholder="plugins/fleet"
+            mono
+            value={path()}
+            help="The package's folder in the repository; its root when empty."
+            onInput={(e) => setPath(e.currentTarget.value)}
+          />
+          <TextField
+            id="plugin-git-ref"
+            label="Tag or branch"
+            placeholder="v0.1.0"
+            mono
+            value={ref()}
+            onInput={(e) => setRef(e.currentTarget.value)}
+          />
+        </div>
+      </div>
+    </Dialog>
   )
 }

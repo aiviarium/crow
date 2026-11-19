@@ -43,7 +43,7 @@ export interface ShellAppOptions {
   wsUrl?: string
   /** Custom module importer for plugin client halves (useful in tests). */
   importModule?: (url: string) => Promise<{ default?: unknown }>
-  /** Include pre-M2 built-in plugins from `crow/plugins/*`. Default `true`. */
+  /** Include the built-in plugins from `crow/plugins/*`. Default: only under `bun run dev` and the tests. */
   includeBuiltins?: boolean
   /** Navigation callback for full-page redirects (OIDC, local link, devLogin). Defaults to `location.assign`. */
   goExternal?: (url: string) => void
@@ -168,7 +168,11 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
     }
   }
 
-  const useBuiltins = opts.includeBuiltins !== false
+  // A packaged shell loads the server's plugins from `plugins.list`, each client half from its hashed
+  // address. `bun run dev` and the tests read a server with none installed, so they add the ones in
+  // `crow/plugins` from this bundle instead.
+  const development = (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true
+  const useBuiltins = opts.includeBuiltins ?? (development || process.env.NODE_ENV === "test")
   const loaderConn = useBuiltins ? withBuiltinPlugins(conn) : conn
   const importModule = useBuiltins ? withBuiltinImporter(opts.importModule) : opts.importModule
 

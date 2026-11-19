@@ -62,7 +62,7 @@ export default definePlugin((rookery: Rookery) => {
     name: string,
     shape: S,
     run: (ctx: Ctx, p: z.infer<z.ZodObject<S>>) => unknown,
-  ) => rookery.rpc.handle(name, { params: z.object(shape), run: run as never })
+  ) => rookery.rpc.handle(name, { level: "own", params: z.object(shape), run: run as never })
 
   // ── Workspace ────────────────────────────────────────────────────────────────────────────────────
 

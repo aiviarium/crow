@@ -1,0 +1,128 @@
+{
+  "$schema": "https://github.com/aiviarium/rookery/blob/main/schemas/plugin.schema.json",
+  "apiVersion": "1",
+  "name": "Fleet",
+  "description": "Hosts, machines, the provisioners that make them, jobs, desktops and ports, and the server's admin pages.",
+  "client": "client/client.js",
+  "styles": "client/client.css",
+  "contributes": {
+    "views": [
+      {
+        "id": "fleet.hosts",
+        "title": "Hosts",
+        "icon": "server"
+      },
+      {
+        "id": "fleet.host",
+        "title": "Host",
+        "icon": "server"
+      },
+      {
+        "id": "fleet.job",
+        "title": "Job",
+        "icon": "activity"
+      },
+      {
+        "id": "fleet.desktop",
+        "title": "Desktop",
+        "icon": "grid"
+      },
+      {
+        "id": "fleet.port",
+        "title": "Port",
+        "icon": "link"
+      },
+      {
+        "id": "fleet.provisioners",
+        "title": "Provisioners",
+        "icon": "layers"
+      },
+      {
+        "id": "fleet.admin",
+        "title": "Admin",
+        "icon": "settings"
+      }
+    ],
+    "routes": [
+      {
+        "path": "/",
+        "view": "fleet.hosts"
+      },
+      {
+        "path": "/hosts",
+        "view": "fleet.hosts"
+      },
+      {
+        "path": "/hosts/:name",
+        "view": "fleet.host"
+      },
+      {
+        "path": "/hosts/:name/desktop",
+        "view": "fleet.desktop"
+      },
+      {
+        "path": "/hosts/:name/port/:port",
+        "view": "fleet.port"
+      },
+      {
+        "path": "/provisioners",
+        "view": "fleet.provisioners"
+      },
+      {
+        "path": "/admin",
+        "view": "fleet.admin"
+      },
+      {
+        "path": "/admin/:section",
+        "view": "fleet.admin"
+      },
+      {
+        "path": "/jobs/:id",
+        "view": "fleet.job"
+      }
+    ],
+    "nav": [
+      {
+        "id": "fleet.hosts",
+        "title": "Fleet",
+        "view": "fleet.hosts",
+        "icon": "server"
+      }
+    ],
+    "commands": [
+      {
+        "id": "fleet.hosts",
+        "title": "Open Fleet",
+        "category": "Fleet"
+      },
+      {
+        "id": "fleet.addHost",
+        "title": "Add host",
+        "category": "Fleet"
+      },
+      {
+        "id": "fleet.newMachine",
+        "title": "New machine",
+        "category": "Fleet"
+      },
+      {
+        "id": "fleet.provisioners",
+        "title": "Open provisioners",
+        "category": "Fleet"
+      },
+      {
+        "id": "fleet.admin",
+        "title": "Open server admin",
+        "category": "Fleet"
+      }
+    ],
+    "adminPages": [
+      {
+        "id": "fleet.admin",
+        "title": "Fleet",
+        "icon": "server",
+        "view": "fleet.admin"
+      }
+    ]
+  }
+}

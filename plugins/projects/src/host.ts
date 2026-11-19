@@ -74,7 +74,7 @@ export default definePlugin((rookery) => {
   }
 
   const rpc = <S extends z.ZodTypeAny>(name: string, params: S, run: (ctx: Ctx, p: z.infer<S>) => unknown) =>
-    rookery.rpc.handle(name, { params, run: run as never })
+    rookery.rpc.handle(name, { level: "own", params, run: run as never })
 
   // ── projects ──────────────────────────────────────────────────────────────────────────────────────
 

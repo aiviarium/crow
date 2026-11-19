@@ -274,7 +274,7 @@ export function createAdminApi(rookery: ClientRookery): AdminApi {
       list: () => call<ProvisionerInfo[]>("provisioners.list"),
       types: () => call<ProvisionerInfo[]>("provisioners.types"),
       get: (name, given) => {
-        const params: ProvisionerGet = given === undefined ? { name } : { name, given }
+        const params: ProvisionerGet = { name, given: given ?? {} }
         return call<ProvisionerState>("provisioners.get", params as unknown as Record<string, unknown>)
       },
       save: (save) => call<ProvisionerInfo>("provisioners.save", save as unknown as Record<string, unknown>),

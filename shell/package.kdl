@@ -1,0 +1,24 @@
+format 1
+
+package {
+  group crow
+  id shell
+  version "0.1.0"
+}
+
+about {
+  name "Crow"
+  summary "The web shell on a Rookery server: hosts, jobs and the plugins' own pages."
+  license MIT
+  license Apache-2.0
+  repository "https://github.com/aiviarium/crow"
+  keywords rookery-plugin
+}
+
+targets {
+  rookery {
+    requires {
+      rookery ">=0.6"
+    }
+  }
+}

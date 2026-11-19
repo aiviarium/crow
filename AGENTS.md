@@ -7,9 +7,11 @@ Crow is the web shell and first-party plugin workspace built on Rookery (`@rooke
 | Path | What it is |
 | --- | --- |
 | `shell/` | `@crow/shell`: the SolidJS web shell built with Nocturne components over `@rookery/client`. `src/auth/` has sign-in and the account menu. `src/app/` has chrome, routing, navigation, status bar, connection status, home and plugin view hosting. `test/` has Bun tests against an in-process fake Rookery server |
-| `plugins/` | Workspace folder for Crow's plugins (empty until plugins land) |
+| `plugins/` | Workspace folder for Crow's plugins. One with a `package.kdl` is a Hatchery package: its manifest is `rookery/plugin.json`, in the shape Rookery's `schemas/plugin.schema.json` describes |
+| `plugins/fleet/` | Hosts, machines, provisioners, jobs, desktops and ports, with the server's admin pages, including the plugin system's |
 | `deps.json` | Commit pins for cross-repo TypeScript dependencies (`rookery` and `nocturne`) |
 | `scripts/sync-deps.ts` | Populates `.deps/` from local sibling checkouts inside `aiviarium/mono` or from pinned commits in `deps.json` standalone and in CI |
+| `scripts/builtins.ts`, `scripts/pack.ts` | The dev-and-test seam that bundles `plugins/*` into the shell, and the build that packs the shell and the plugins into a static Hatchery registry in `dist/registry/` |
 
 ## Cross-repo dependencies
 
@@ -30,8 +32,11 @@ bun run lint          # Biome check on shell/ and scripts/
 bun run typecheck     # tsc --noEmit on shell/
 bun run test          # Bun tests (happy-dom + SolidJS transform)
 bun run build         # static Vite bundle into shell/dist/ for ROOKERY_SHELL_DIR
+bun run pack          # builds the shell and the plugins' client halves into a Hatchery registry in dist/registry/
 bun run check         # lint + typecheck + test + build
 ```
+
+A packaged shell loads the plugins a Rookery server serves, each client half from `/plugins/ID/HASH/PATH`. Only `bun run dev` and the tests bundle `plugins/*` into the shell: `vite.config.ts` replaces `src/app/builtins.ts` with `builtins.none.ts` for a build, so nothing of `plugins/` is in `shell/dist/`.
 
 For interactive development against `rookery serve`:
 

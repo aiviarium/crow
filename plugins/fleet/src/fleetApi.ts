@@ -2,7 +2,8 @@
 // from the generated wire types in `@rookery/client` via `./jobs.ts`, the M3 host parts (`env.*` for a
 // host's state, desktop and ports in `./env.ts`, `access.*` for sharing it in `./access.ts`), and M4's
 // admin half (`provisioners.*`, `resources.*`, `setup.*`, `installation.*`, `registries.*` in
-// `./provisionApi.ts`, typed from the copies in `./types.ts`).
+// `./provisionApi.ts`, typed from `@rookery/client` and the inline answers in `./types.ts`), and the
+// plugin system's own (`plugins.*` in `./pluginsApi.ts`).
 
 import type { ClientRookery } from "@rookery/sdk/client"
 import type { Accessor } from "solid-js"
@@ -11,9 +12,10 @@ import { createHostsApi, type HostsApi } from "./api"
 import { createFleetEnvApi, type FleetEnvApi } from "./env"
 import { createJobsApi, type JobsApi } from "./jobs"
 import { type CurrentUser, createMeApi } from "./me"
+import { createPluginsApi, type PluginsApi } from "./pluginsApi"
 import { type AdminApi, createAdminApi } from "./provisionApi"
 
-export interface FleetApi extends HostsApi, JobsApi, AdminApi {
+export interface FleetApi extends HostsApi, JobsApi, AdminApi, PluginsApi {
   env: FleetEnvApi
   grants: GrantsApi
   /** The signed-in person, once `auth.me` has answered. */
@@ -36,6 +38,7 @@ export function createFleetApi(
     ...createHostsApi(rookery),
     ...createJobsApi(rookery),
     ...createAdminApi(rookery),
+    ...createPluginsApi(rookery),
     env: createFleetEnvApi(rookery),
     grants: createGrantsApi(rookery),
     me: () => current(),
