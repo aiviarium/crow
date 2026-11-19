@@ -8,9 +8,9 @@ import {
   type Transport,
   type TransportHandlers,
 } from "@aiviarium/parrot-client"
-import type { ClientRookery, ClientStream } from "@rookery/sdk/client"
+import type { AgentConnect, ClientRookery, ClientStream } from "@rookery/sdk/client"
 import { errorMessage, hostNameFromEnv, toEnvUri } from "./api"
-import { AGENT_CONNECT, type AgentConnect } from "./rookery-wire"
+import { AGENT_CONNECT } from "./rookery-wire"
 
 const encoder = new TextEncoder()
 

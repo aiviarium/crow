@@ -215,9 +215,20 @@ function SettingRow(props: {
         <Show
           when={props.setting.open}
           fallback={
-            <span class="nc-meta" data-part="setting-fixed">
-              Set on the server
-            </span>
+            <Show
+              when={props.setting.command}
+              fallback={
+                <span class="nc-meta" data-part="setting-fixed">
+                  Set on the server
+                </span>
+              }
+            >
+              {(command) => (
+                <span class="nc-meta" data-part="setting-command">
+                  Run on the server: <span class="mono">{command()}</span>
+                </span>
+              )}
+            </Show>
           }
         >
           <TextField

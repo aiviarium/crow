@@ -1,13 +1,23 @@
 // Reusable fake Rookery WebSocket/HTTP server for Bun tests. Answers in the exact shapes of
 // @rookery/client's generated wire types: `auth.me` is a `Me`, `jobs.*` use `JobInfo` / `JobDetail`
 // / `LogItem` / `JobEnd`, and `notify.*` use `NotificationInfo` with string actions and answers.
-// `hosts.*` is still the hand-written contract in `plugins/fleet/src/api.ts` until it lands.
+// `hosts.*` are the generated wire shapes in `@rookery/client`.
 import type {
+  Acted,
+  Action,
+  ActionList,
   CommandList,
   Count,
   ErrorBody,
   EventNotice,
   EventSubscribed,
+  HostAct,
+  HostChecked,
+  HostInfo,
+  HostList,
+  HostProfile as HostProfileResult,
+  HostSave,
+  HostSaved,
   JobChanged,
   JobDetail,
   JobEnd,
@@ -25,29 +35,13 @@ import type {
   StreamOpened,
   User,
 } from "@rookery/client"
-import type {
-  Action,
-  HostCheckResult,
-  HostInfo,
-  HostProfile,
-  HostsActionsResult,
-  HostsActParams,
-  HostsActResult,
-  HostsCheckResult,
-  HostsGetResult,
-  HostsListResult,
-  HostsProfileResult,
-  HostsRemoveResult,
-  HostsRenameResult,
-  HostsSaveParams,
-  HostsSaveResult,
-} from "../../plugins/fleet/src/api"
+import type { HostProfile } from "../../plugins/fleet/src/api"
 
 export interface FakeRookerySeed {
   hosts?: HostInfo[]
   profiles?: Record<string, HostProfile>
   actions?: Record<string, Action[]>
-  checks?: Record<string, HostCheckResult>
+  checks?: Record<string, HostChecked>
   jobs?: JobInfo[]
   jobLogs?: Record<string, LogItem[]>
   notifications?: NotificationInfo[]
@@ -144,7 +138,7 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
   const actionsByHost = new Map<string, Action[]>(
     Object.entries(seed.actions ?? {}).map(([k, v]) => [k, structuredClone(v)]),
   )
-  const checks = new Map<string, HostCheckResult>(Object.entries(seed.checks ?? {}))
+  const checks = new Map<string, HostChecked>(Object.entries(seed.checks ?? {}))
   const jobs = new Map<string, JobInfo>((seed.jobs ?? []).map((j) => [j.id, structuredClone(j)]))
   const jobLogs = new Map<string, LogItem[]>(
     Object.entries(seed.jobLogs ?? {}).map(([k, v]) => [k, structuredClone(v)]),
@@ -335,7 +329,7 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
 
           // ---------------- Hosts (hosts.* is not on the server yet) ----------------
           case "hosts.list": {
-            const list: HostsListResult = { hosts: Array.from(hosts.values()) }
+            const list: HostList = { hosts: Array.from(hosts.values()) }
             sendReply(ws, msg.id, list)
             return
           }
@@ -347,39 +341,41 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
               sendError(ws, msg.id, "NOT_FOUND", `host ${name} not found`)
               return
             }
-            const result: HostsGetResult = h
+            const result: HostInfo = h
             sendReply(ws, msg.id, result)
             return
           }
 
           case "hosts.save": {
-            const p = params as unknown as HostsSaveParams
+            const p = params as unknown as HostSave
             const existing = hosts.get(p.host)
+            const profile = p.profile as unknown as HostProfile
             const saved: HostInfo = existing
               ? {
                   ...existing,
-                  address: p.profile.access?.address ?? existing.address,
-                  type: p.profile.type ?? existing.type,
+                  address: profile.access?.address ?? existing.address,
+                  type: profile.type ?? existing.type,
                 }
               : {
                   id: `host-${p.host}`,
                   name: p.host,
-                  address: p.profile.access?.address ?? "192.0.2.99",
+                  address: profile.access?.address ?? "192.0.2.99",
                   reachable: true,
+                  agents: false,
                   version: null,
                   api: null,
                   error: null,
                   applied: null,
                   behind: null,
-                  type: p.profile.type ?? "ssh",
+                  type: profile.type ?? "ssh",
                   seen: null,
                   rotating: false,
                   power: { start: false, stop: false, state: "running" },
                   machine: null,
                 }
             hosts.set(p.host, saved)
-            profiles.set(p.host, structuredClone(p.profile))
-            const result: HostsSaveResult = { host: saved }
+            profiles.set(p.host, structuredClone(profile))
+            const result: HostSaved = { host: saved }
             sendReply(ws, msg.id, result)
             return
           }
@@ -389,7 +385,7 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
             hosts.delete(name)
             profiles.delete(name)
             actionsByHost.delete(name)
-            const result: HostsRemoveResult = {}
+            const result: Record<string, never> = {}
             sendReply(ws, msg.id, result)
             return
           }
@@ -410,7 +406,7 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
               profiles.delete(from)
               profiles.set(to, prof)
             }
-            const result: HostsRenameResult = { host: renamed }
+            const result: Acted = { job: null, state: null, info: null, session: null, result: null }
             sendReply(ws, msg.id, result)
             return
           }
@@ -418,27 +414,27 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
           case "hosts.profile": {
             const name = String(params.host ?? "")
             const prof = profiles.get(name) ?? {}
-            const result: HostsProfileResult = { profile: prof }
+            const result: HostProfileResult = { profile: prof as never }
             sendReply(ws, msg.id, result)
             return
           }
 
           case "hosts.check": {
             const key = `${String(params.host ?? "")}:${String(params.capability ?? "")}`
-            const res: HostsCheckResult = checks.get(key) ?? { allowed: true, refusal: null }
+            const res: HostChecked = checks.get(key) ?? { allowed: true, refusal: null }
             sendReply(ws, msg.id, res)
             return
           }
 
           case "hosts.actions": {
             const name = String(params.host ?? "")
-            const result: HostsActionsResult = { actions: actionsByHost.get(name) ?? [] }
+            const result: ActionList = { actions: actionsByHost.get(name) ?? [] }
             sendReply(ws, msg.id, result)
             return
           }
 
           case "hosts.act": {
-            const p = params as unknown as HostsActParams
+            const p = params as unknown as HostAct
             const jobId = `job-${nextJobSeq++}`
             const now = new Date().toISOString()
             const created = makeJob({
@@ -454,7 +450,13 @@ export function startFakeRookery(seed: FakeRookerySeed = {}): FakeRookeryServer 
             jobLogs.set(jobId, [makeLogItem({ seq: 1, at: now, text: `Starting ${p.action} on ${p.host}` })])
             const changed: JobChanged = { job: created }
             broadcast("jobs.changed", changed)
-            const result: HostsActResult = { job: jobId, state: "running" }
+            const result: Acted = {
+              job: jobId,
+              state: "running",
+              info: created,
+              session: null,
+              result: null,
+            }
             sendReply(ws, msg.id, result)
             return
           }

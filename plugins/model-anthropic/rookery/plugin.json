@@ -1,6 +1,7 @@
 {
   "$schema": "https://github.com/aiviarium/rookery/blob/main/schemas/plugin.schema.json",
   "apiVersion": "1",
+  "interface": "interface.ts",
   "name": "Anthropic models",
   "description": "Anthropic's Messages API as a provider of the Models plugin for the text and fast tasks, with streaming and structured output.",
   "host": "host/host.js",

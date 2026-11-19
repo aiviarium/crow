@@ -1,16 +1,16 @@
 // The public API of the Docs plugin: the `docs` service, for other plugins (and agents' tools) to read and
 // write pages with their ctx. A page is named by its id, its URI (doc://…) or its path of titles.
 //
-// `@rookery/sdk` does not yet export `defineInterface`, so this module exports the typed Zod schemas directly
-// alongside the interface declaration shape (`interface.json`).
-import { z } from "@rookery/sdk"
+// The interface is declared with `defineInterface`; the extension host writes `interface.json` and
+// `interface.d.ts` from it.
+import { defineInterface, z } from "@rookery/sdk"
 
 const Page = z.string().describe("The page: its id, doc://… URI, or path of titles")
 const Space = z.string().nullish().describe("The space to look in; the caller's by default")
 
 const PageRef = z.looseObject({ id: z.string(), uri: z.string(), title: z.string() })
 
-export const docsInterface = {
+export default defineInterface({
   services: {
     docs: {
       read: {
@@ -65,6 +65,4 @@ export const docsInterface = {
       },
     },
   },
-} as const
-
-export default docsInterface
+})

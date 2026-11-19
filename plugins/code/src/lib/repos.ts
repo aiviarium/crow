@@ -139,7 +139,7 @@ export async function attach(
     params: { repo: row.id, space },
     missed: "skip",
   })
-  await enqueue(sv.rookery, ctx, "code.sync", { repo: row.id, space, force: true }, `sync:${row.id}`)
+  await enqueue(sv.rookery, ctx, "code/sync", { repo: row.id, space, force: true }, `sync:${row.id}`)
   await remember(sv, ctx, ghClient)
   return row
 }

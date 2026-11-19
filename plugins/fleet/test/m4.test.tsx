@@ -64,6 +64,17 @@ interface FakeState {
   catalogue: {
     template: Record<string, unknown>
     features: Array<{ key: string; label: string; group: string; help: string; types: string[] }>
+    machines: Array<{
+      provisioner: string
+      kind: string
+      label: string
+      description: string
+      catalogue: {
+        sizes?: Array<{ id: string; label: string; default?: boolean; values: Record<string, string> }>
+        images?: Array<{ id: string; label: string; default?: boolean; values: Record<string, string> }>
+        regions?: Array<{ id: string; label: string; default?: boolean; values: Record<string, string> }>
+      }
+    }>
   }
   /** Makes the next `resources.create` job end badly, as a provisioner with no room does. */
   failCreate?: boolean
@@ -175,6 +186,7 @@ function fakeRookery(state: FakeState) {
             name,
             address: profile.access?.address ?? "192.0.2.99",
             reachable: true,
+            agents: false,
             version: null,
             api: null,
             error: null,
@@ -402,6 +414,22 @@ function fakeRookery(state: FakeState) {
 
   const rookery = {
     rpc: { call },
+    env: {
+      list: async () => [],
+      get: async () => {
+        throw Object.assign(new Error("no env"), { code: "NOT_FOUND" })
+      },
+      presence: async () => ({ users: [] }),
+      readFile: async () => {
+        throw Object.assign(new Error("no env"), { code: "NOT_FOUND" })
+      },
+      writeFile: async () => {
+        throw Object.assign(new Error("no env"), { code: "NOT_FOUND" })
+      },
+      portUrl: async () => {
+        throw Object.assign(new Error("no env"), { code: "NOT_FOUND" })
+      },
+    },
     streams: {
       open: async (_method: string, params: Record<string, unknown>) => {
         const stream = new FakeStream()
@@ -476,6 +504,7 @@ function baseState(over: Partial<FakeState> = {}): FakeState {
     ],
     catalogue: {
       template: { target: "laptop", hostname: "", operator_username: "ops", ansible_vars: {} },
+      machines: [],
       features: [
         {
           key: "incus/incus",
@@ -554,15 +583,8 @@ describe("a new machine", () => {
     document.body.querySelector<HTMLButtonElement>("[data-part='new-machine-submit']")!.click()
 
     await waitFor(() => state.resources.length === 1, "the resource asked for")
-    const save = fake.calls.find((one) => one.method === "hosts.save")
-    expect(save?.params.host).toBe("build-02")
-    const savedProfile = (save?.params.profile ?? {}) as {
-      hostname?: string
-      ansible_vars?: { rookery_plugin_features?: string[] }
-    }
-    expect(savedProfile.hostname).toBe("build-02")
-    expect(savedProfile?.ansible_vars?.rookery_plugin_features ?? []).toEqual(["docker/docker"])
-
+    // One call takes the host's profile and the machine: there is no separate `hosts.save`.
+    expect(fake.calls.some((one) => one.method === "hosts.save")).toBe(false)
     const create = fake.calls.find((one) => one.method === "resources.create")
     expect(create?.params).toMatchObject({
       provisioner: "lab-incus",
@@ -571,6 +593,12 @@ describe("a new machine", () => {
       host: "build-02",
       arguments: { server: "incus2.example.test", cpus: "2", memory: "2GiB" },
     })
+    const savedProfile = (create?.params.profile ?? {}) as {
+      hostname?: string
+      ansible_vars?: { rookery_plugin_features?: string[] }
+    }
+    expect(savedProfile.hostname).toBe("build-02")
+    expect(savedProfile?.ansible_vars?.rookery_plugin_features ?? []).toEqual(["docker/docker"])
 
     // The job's log shows as it comes, and the dialog lands on the host when it ends.
     await waitFor(
@@ -912,6 +940,7 @@ describe("a host's machine", () => {
     name: "build-02",
     address: "192.0.2.80",
     reachable: true,
+    agents: false,
     version: null,
     api: null,
     error: null,

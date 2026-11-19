@@ -2,9 +2,9 @@
 // the tools) call with their ctx. Issue sources use the `issues.*`, `comments.*` and `sources.*` methods;
 // their params stay open (`looseObject`) because a source sends what it has.
 //
-// `@rookery/sdk` does not yet export `defineInterface`, so this module exports the typed Zod schemas
-// directly alongside `interface.json`.
-import { z } from "@rookery/sdk"
+// The interface is declared with `defineInterface`; the extension host writes `interface.json` and
+// `interface.d.ts` from it.
+import { defineInterface, z } from "@rookery/sdk"
 
 const Project = z.string().describe("Project key or space id; the current project by default")
 const Issue = z.string().describe("Key (CROW-12) or URI (issue://…)")
@@ -44,7 +44,7 @@ const Source = {
   repoSpace: z.string().nullish(),
 }
 
-export const projectsInterface = {
+export default defineInterface({
   services: {
     projects: {
       createIssue: {
@@ -213,6 +213,4 @@ export const projectsInterface = {
       },
     },
   },
-} as const
-
-export default projectsInterface
+})

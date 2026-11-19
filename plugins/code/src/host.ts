@@ -191,7 +191,7 @@ export default definePlugin((rookery) => {
       const repos = (await gh(ctx).repos.find({ limit: 200 })).rows as RepoRow[]
       for (const r of repos)
         await rookery.jobs.enqueue(
-          "code.sync",
+          "code/sync",
           { repo: r.id, space: ctx.space, force: true },
           { dedupeKey: `sync:${r.id}` },
         )

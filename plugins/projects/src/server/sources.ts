@@ -866,7 +866,7 @@ export function createSources(rookery: Rookery, core: Core) {
 
   async function queue(_ctx: Ctx | null, p: PushParams) {
     try {
-      await rookery.jobs.enqueue("projects.pushToSource", p as unknown as Record<string, unknown>, {
+      await rookery.jobs.enqueue("projects/pushToSource", p as unknown as Record<string, unknown>, {
         ...(p.create ? { dedupeKey: `create:${p.issue}` } : {}),
       })
     } catch (e) {

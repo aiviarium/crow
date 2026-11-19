@@ -23,6 +23,7 @@ const LISTS = [
   "adminPages",
   "routes",
   "contexts",
+  "composer",
   "settings",
   "collections",
   "entityTypes",

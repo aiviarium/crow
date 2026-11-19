@@ -4,9 +4,9 @@
 // Other plugins ask for a task (`text`, `fast`, `transcription`), never a model; an admin maps each task to
 // a connection and a model. A task nobody mapped is `UNAVAILABLE`, so a feature checks `tasks` and hides itself.
 //
-// `@rookery/sdk` does not yet export `defineInterface`, so this module exports the typed Zod schemas directly
-// alongside the manifest declaration shape (`interface.json`).
-import { z } from "@rookery/sdk"
+// The interface is declared with `defineInterface`; the extension host writes `interface.json` and
+// `interface.d.ts` from it.
+import { defineInterface, z } from "@rookery/sdk"
 
 export const Task = z.enum(["text", "fast", "transcription"])
 export type Task = z.infer<typeof Task>
@@ -126,7 +126,7 @@ export const ProviderModelInfo = z.object({
 })
 export type ProviderModelInfo = z.infer<typeof ProviderModelInfo>
 
-export const aiInterface = {
+export default defineInterface({
   services: {
     ai: {
       tasks: {
@@ -176,6 +176,4 @@ export const aiInterface = {
       },
     },
   },
-} as const
-
-export default aiInterface
+})
