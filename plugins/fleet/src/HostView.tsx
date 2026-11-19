@@ -20,7 +20,7 @@ import type { JobInfo } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, Show } from "solid-js"
 import { ActionDialog } from "./ActionDialog"
-import { allows, type Who } from "./access"
+import { allows, type Who, why } from "./access"
 import type { Action, HostChecked, HostInfo, HostProfile } from "./api"
 import { envUri } from "./env"
 import type { FleetStore } from "./FleetView"
@@ -496,6 +496,37 @@ export function HostView(props: {
                   </Show>
                 </Card>
               </div>
+
+              {/* The ways in: a terminal on the host, with the desktop in the header and the ports in
+                  their card below. A view holder is shown it, disabled, and the server refuses them. */}
+              <Card title="Connect" data-part="host-connect">
+                <p class="nc-meta">
+                  A terminal on {h().name}, in the main area or the bottom panel. The desktop is in the
+                  header, and the ports this host serves are in the card below.
+                </p>
+                <div class="fleet-form__row">
+                  <Show when={props.rookery.views.href("terminal.sessions")}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon="terminal"
+                      data-part="open-terminal"
+                      disabled={!env()?.supports.terminal || !allows(who(), "use")}
+                      title={
+                        why(who(), "use", hostName()) ??
+                        (env()?.supports.terminal
+                          ? undefined
+                          : "This host has no controller to open a terminal on.")
+                      }
+                      onClick={() =>
+                        props.rookery.workbench.openView("terminal.sessions", { path: hostName() })
+                      }
+                    >
+                      Terminal
+                    </Button>
+                  </Show>
+                </div>
+              </Card>
 
               <Show when={h().machine}>
                 {(machine) => {

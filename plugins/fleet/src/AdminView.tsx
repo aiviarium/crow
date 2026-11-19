@@ -1297,8 +1297,8 @@ function PluginsSection(props: { api: FleetApi; rookery: ClientRookery }): JSX.E
                     </span>
                   </div>
                   <div class="fleet-admin__row-actions">
-                    <Show when={registry.only.length > 0}>
-                      <span class="nc-meta">Only {registry.only.join(", ")}</span>
+                    <Show when={(registry.only ?? []).length > 0}>
+                      <span class="nc-meta">Only {registry.only!.join(", ")}</span>
                     </Show>
                   </div>
                 </div>

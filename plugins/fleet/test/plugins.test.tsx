@@ -72,7 +72,7 @@ function fakeRookery(state: { plugins: PluginInfo[]; added: PluginInfo[] }) {
               kind: "git",
               location: "https://github.com/aiviarium/crow.git",
               name: "",
-              only: [],
+              // A registry that serves any group leaves `only` out, as the server sends it.
               key: null,
               min_age: null,
               unsigned_tags: false,
