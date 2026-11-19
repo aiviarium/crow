@@ -1,0 +1,188 @@
+@layer app {
+  .crow-widgets {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+  }
+  .crow-widgets__bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  .crow-widget {
+    position: relative;
+    display: flex;
+    height: 100%;
+    min-height: 0;
+  }
+  .crow-widget-menu {
+    display: contents;
+  }
+  .crow-widget > :not(.crow-widget__tools) {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  /* The widget's own card fills the body; a widget that rendered nothing leaves an empty body, which the
+     area hides outside editing and replaces with the placeholder while editing. */
+  .crow-widget__body {
+    display: flex;
+  }
+  .crow-widget__body > * {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  .crow-widget[data-blank] > .crow-widget__body {
+    display: none;
+  }
+  /* No fill: the card of a widget that is not on the page right now. The grid's dashed outline is its edge. */
+  .crow-widget__placeholder {
+    background: transparent;
+  }
+  .crow-widgets__quiet {
+    margin: 0;
+    padding: var(--space-6) 0;
+    text-align: center;
+  }
+  /* Edit tools sit on the card's top edge, so they never cover the widget's own figures. */
+  .crow-widget__tools {
+    position: absolute;
+    top: calc(-1 * var(--space-4));
+    right: var(--space-4);
+    z-index: 4;
+    display: flex;
+    gap: var(--space-1);
+    padding: 2px;
+    background: var(--bg-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-full);
+  }
+  .crow-widget__missing {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .crow-picker {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    max-height: 60vh;
+    overflow: auto;
+  }
+  .crow-picker__group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .crow-picker__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--space-2);
+  }
+  .crow-picker__item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    text-align: left;
+    color: var(--text-1);
+    background: var(--bg-2);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font: inherit;
+  }
+  .crow-picker__item:hover,
+  .crow-picker__item:focus-visible {
+    border-color: var(--line-strong);
+    background: var(--bg-3);
+  }
+  .crow-picker__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-md);
+    background: var(--accent-tint);
+    color: var(--accent-text);
+  }
+  .crow-picker__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+  .crow-picker__text .nc-meta {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .crow-picker__size {
+    flex: none;
+  }
+  .crow-w-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+    overflow: hidden;
+  }
+  .crow-w-list__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    min-width: 0;
+    padding: var(--space-1) 0;
+    border: 0;
+    background: none;
+    color: var(--text-1);
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .crow-w-list__title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .crow-w-list__row:hover .crow-w-list__title {
+    color: var(--accent-text);
+  }
+  .crow-w-list__when {
+    flex: none;
+    min-width: 5ch;
+    text-align: right;
+  }
+  .crow-w-text {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow: hidden;
+    color: var(--text-2);
+  }
+  .crow-w-link {
+    color: var(--accent-text);
+    text-decoration: none;
+  }
+  .crow-w-link:hover {
+    text-decoration: underline;
+  }
+  .crow-w-error {
+    color: var(--danger);
+  }
+}
