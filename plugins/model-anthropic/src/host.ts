@@ -5,7 +5,7 @@
 // Connection credentials are fetched via `rookery.connections.resolve(id)` so API keys stay sealed in Rookery's
 // credential store (`secrets` / `connections`) and never appear in settings, logs, or argv.
 import { type Ctx, definePlugin } from "@rookery/sdk"
-import type { ProviderCallParams } from "../interface"
+import type { ProviderCallParams } from "../rookery/interface"
 import { generate, models, type ProviderCall } from "./provider"
 
 export async function testConnection(

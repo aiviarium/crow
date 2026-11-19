@@ -22,7 +22,7 @@ import type { FleetApi } from "./fleetApi"
 import { errorMessage } from "./format"
 import { argumentDefaults, argumentsOf } from "./provisionApi"
 import { RunActionDialog } from "./RunAction"
-import type { Action, ProvisionerInfo, ProvisionerState } from "./types"
+import type { Action, ProvisionerInfo, Resource } from "./types"
 
 interface Loaded {
   registered: ProvisionerInfo[]
@@ -54,23 +54,6 @@ export function ProvisionersPage(props: {
     const value = list()
     return value && isLoaded(value) ? value : null
   }
-  const [states, { refetch: refetchStates }] = createResource(
-    () => (loaded()?.registered ?? []).map((one) => one.name || one.id),
-    async (names) => {
-      const found = new Map<string, ProvisionerState | string>()
-      await Promise.all(
-        names.map(async (name) => {
-          try {
-            found.set(name, await props.api.provisioners.get(name))
-          } catch (error) {
-            found.set(name, errorMessage(error))
-          }
-        }),
-      )
-      return found
-    },
-  )
-
   const [editing, setEditing] = createSignal<ProvisionerInfo | null>(null)
   const [registering, setRegistering] = createSignal(false)
   const [removing, setRemoving] = createSignal<ProvisionerInfo | null>(null)
@@ -87,7 +70,6 @@ export function ProvisionersPage(props: {
 
   const reload = () => {
     setVersion((n) => n + 1)
-    void refetchStates()
   }
 
   const confirmRemove = async () => {
@@ -101,10 +83,13 @@ export function ProvisionersPage(props: {
       setNotice(`Removed ${one.name || one.id}`)
       reload()
     } catch (error) {
+      const held = heldResources(error)
       props.rookery.workbench.toast({
         kind: "danger",
         title: `Could not remove ${one.name || one.id}`,
-        body: errorMessage(error),
+        body: held.length
+          ? `${errorMessage(error)} Remove first: ${held.map((resource) => resource.name).join(", ")}.`
+          : errorMessage(error),
       })
     } finally {
       setBusy(false)
@@ -187,14 +172,6 @@ export function ProvisionersPage(props: {
               <For each={registered()}>
                 {(provisioner) => {
                   const key = () => provisioner.name || provisioner.id
-                  const found = () => {
-                    const state = states()?.get(key())
-                    return typeof state === "string" ? state : null
-                  }
-                  const state = () => {
-                    const known = states()?.get(key())
-                    return typeof known === "string" ? null : (known ?? null)
-                  }
                   return (
                     <div class="fleet-provisioner-row" data-provisioner={key()}>
                       <div class="fleet-provisioner-row__info">
@@ -210,15 +187,10 @@ export function ProvisionersPage(props: {
                             </span>
                           )}
                         </Show>
-                        <Show when={found()}>
-                          {(error) => (
-                            <span class="nc-meta" data-part="provisioner-unread">
-                              {error()}
-                            </span>
-                          )}
-                        </Show>
                       </div>
-                      <Show when={state()}>{(known) => <ProvisionerStateBadge state={known()} />}</Show>
+                      <Show when={provisioner.state}>
+                        {(state) => <ProvisionerStateBadge state={state()} message={provisioner.message} />}
+                      </Show>
                       <div class="fleet-provisioner-row__actions">
                         <Button
                           size="sm"
@@ -368,9 +340,15 @@ export function ProvisionersPage(props: {
   )
 }
 
-function ProvisionerStateBadge(props: { state: ProvisionerState }): JSX.Element {
+/** The resources a refused `provisioners.remove` says keep it. */
+function heldResources(error: unknown): Resource[] {
+  const details = (error as { details?: { resources?: unknown } } | null)?.details
+  return Array.isArray(details?.resources) ? (details.resources as Resource[]) : []
+}
+
+function ProvisionerStateBadge(props: { state: string; message?: string }): JSX.Element {
   const tone = () => {
-    switch (props.state.state) {
+    switch (props.state) {
       case "ready":
         return "success" as const
       case "unreachable":
@@ -381,9 +359,9 @@ function ProvisionerStateBadge(props: { state: ProvisionerState }): JSX.Element 
     }
   }
   return (
-    <span class="fleet-provisioner-row__state" title={props.state.message || undefined}>
+    <span class="fleet-provisioner-row__state" title={props.message || undefined}>
       <Badge square tone={tone()}>
-        {props.state.state}
+        {props.state}
       </Badge>
     </span>
   )

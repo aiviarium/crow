@@ -69,72 +69,97 @@ function fakeRookery(opts: {
   file?: { base64: string; sha256: string }
 }): ClientRookery {
   const grants = [...(opts.grants ?? [])]
-  return {
-    rpc: {
-      call: async (method: string, params: Record<string, unknown> = {}) => {
-        opts.calls?.push({ method, params })
-        switch (method) {
-          case "auth.me":
-            return {
-              user: opts.me ? { id: opts.me.id, name: opts.me.name, admin: opts.me.admin } : null,
-              principal: { kind: "user", id: opts.me?.id ?? "" },
-              admin: opts.me?.admin ?? false,
-              auth: "local",
-              version: "0.1.0",
-              apiVersion: 1,
-            }
-          case "admin.users":
-            return { users: opts.users ?? [] }
-          case "admin.groups":
-            return { groups: [] }
-          case "env.list":
-            return { environments: opts.envs ?? [] }
-          case "env.get": {
-            const name = envName(String(params.env))
-            return (opts.envs ?? []).find((e) => e.name === name) ?? env(name)
+  const rpc = {
+    call: async (method: string, params: Record<string, unknown> = {}) => {
+      opts.calls?.push({ method, params })
+      switch (method) {
+        case "auth.me":
+          return {
+            user: opts.me ? { id: opts.me.id, name: opts.me.name, admin: opts.me.admin } : null,
+            principal: { kind: "user", id: opts.me?.id ?? "" },
+            admin: opts.me?.admin ?? false,
+            auth: "local",
+            version: "0.1.0",
+            apiVersion: 1,
           }
-          case "env.presence":
-            return { users: [] }
-          case "env.portUrl":
-            return {
-              url: `${opts.ticket ?? "https://5173-port.example.test/.rookery/claim?ticket=t"}`,
-              origin: "https://5173-port.example.test",
-            }
-          case "env.readFile":
-            return { base64: opts.file?.base64 ?? "", size: 4, sha256: opts.file?.sha256 ?? "abc" }
-          case "env.writeFile": {
-            // A stale `ifMatch` is the server's CONFLICT: the file moved on since it was read.
-            if (params.ifMatch && params.ifMatch !== "abc")
-              throw Object.assign(new Error("/srv/app.env changed since it was read"), {
-                code: "CONFLICT",
-              })
-            return { sha256: "def", size: 7 }
-          }
-          case "access.grants": {
-            if (opts.forbidGrants)
-              throw Object.assign(new Error("you may not see who can use env://studio"), {
-                code: "FORBIDDEN",
-              })
-            return { resource: params.resource, owner: opts.owner ?? null, grants }
-          }
-          case "access.grant": {
-            const level = params.level as GrantInfo["level"]
-            const entry = grant(String(params.principal), level)
-            const at = grants.findIndex((g) => g.principal === entry.principal)
-            if (at >= 0) grants[at] = entry
-            else grants.push(entry)
-            return entry
-          }
-          case "access.revoke": {
-            const at = grants.findIndex((g) => g.principal === params.principal)
-            if (at >= 0) grants.splice(at, 1)
-            return {}
-          }
-          default:
-            throw Object.assign(new Error(`unknown method ${method}`), { code: "NOT_FOUND" })
+        case "admin.users":
+          return { users: opts.users ?? [] }
+        case "admin.groups":
+          return { groups: [] }
+        case "env.list":
+          return { environments: opts.envs ?? [] }
+        case "env.get": {
+          const name = envName(String(params.env))
+          return (opts.envs ?? []).find((e) => e.name === name) ?? env(name)
         }
-      },
+        case "env.presence":
+          return { users: [] }
+        case "env.portUrl":
+          return {
+            url: `${opts.ticket ?? "https://5173-port.example.test/.rookery/claim?ticket=t"}`,
+            origin: "https://5173-port.example.test",
+          }
+        case "env.readFile":
+          return { base64: opts.file?.base64 ?? "", size: 4, sha256: opts.file?.sha256 ?? "abc" }
+        case "env.writeFile": {
+          // A stale `ifMatch` is the server's CONFLICT: the file moved on since it was read.
+          if (params.ifMatch && params.ifMatch !== "abc")
+            throw Object.assign(new Error("/srv/app.env changed since it was read"), {
+              code: "CONFLICT",
+            })
+          return { sha256: "def", size: 7 }
+        }
+        case "access.grants": {
+          if (opts.forbidGrants)
+            throw Object.assign(new Error("you may not see who can use env://studio"), {
+              code: "FORBIDDEN",
+            })
+          return { resource: params.resource, owner: opts.owner ?? null, grants }
+        }
+        case "access.grant": {
+          const level = params.level as GrantInfo["level"]
+          const entry = grant(String(params.principal), level)
+          const at = grants.findIndex((g) => g.principal === entry.principal)
+          if (at >= 0) grants[at] = entry
+          else grants.push(entry)
+          return entry
+        }
+        case "access.revoke": {
+          const at = grants.findIndex((g) => g.principal === params.principal)
+          if (at >= 0) grants.splice(at, 1)
+          return {}
+        }
+        default:
+          throw Object.assign(new Error(`unknown method ${method}`), { code: "NOT_FOUND" })
+      }
     },
+  }
+  const call = rpc.call as (method: string, params?: Record<string, unknown>) => Promise<any>
+  const envApi = {
+    list: async () => (await call("env.list", {})).environments,
+    get: (name: string) => call("env.get", { env: name }),
+    presence: (name: string) => call("env.presence", { env: name }),
+    readFile: (name: string, path: string) => call("env.readFile", { env: name, path }),
+    writeFile: (name: string, path: string, content: string | Uint8Array, o: Record<string, unknown> = {}) =>
+      call("env.writeFile", {
+        env: name,
+        path,
+        base64: typeof content === "string" ? btoa(content) : btoa(String.fromCharCode(...content)),
+        ...o,
+      }),
+    deleteFile: async () => {},
+    listDir: async () => ({ entries: [] }),
+    stat: async () => ({}),
+    connect: async () => {
+      throw new Error("not in this test")
+    },
+    portUrl: (name: string, port: number, path?: string) =>
+      call("env.portUrl", { env: name, port, ...(path ? { path } : {}) }),
+    exec: async () => ({}),
+  }
+  return {
+    rpc,
+    env: envApi,
     workbench: {
       openView: (id: string, o?: { path?: string }) => opts.opened?.push(`${id}:${o?.path ?? ""}`),
       toast: () => {},
@@ -198,9 +223,17 @@ describe("ports", () => {
     expect(portFromPath("studio/none")).toBeNull()
   })
 
-  test("a port link keeps the port and opens Rookery's own route", async () => {
+  test("a port link keeps the port and opens it in a tab of its own", async () => {
     const opened: string[] = []
-    const rookery = fakeRookery({ opened })
+    const realOpen = window.open
+    window.open = ((url: string | URL | undefined) => {
+      if (url) opened.push(String(url))
+      return null
+    }) as typeof window.open
+    cleanup.push(() => {
+      window.open = realOpen
+    })
+    const rookery = fakeRookery({ ticket: "https://5173-port.example.test/.rookery/claim?t=t" })
     const dispose = render(
       () => <PortsCard host="studio" env={env("studio")} who={{ level: "use" }} rookery={rookery} />,
       document.body,
@@ -220,8 +253,12 @@ describe("ports", () => {
     expect(link!.getAttribute("href")).toBe("/env/studio/port/5173/")
     expect(link!.getAttribute("target")).toBe("_blank")
 
-    document.body.querySelector<HTMLButtonElement>("[data-port='5173'] button")!.click()
-    expect(opened).toEqual(["fleet.port:studio/5173"])
+    const open = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>("[data-port='5173'] button"),
+    ).find((one) => (one.textContent ?? "").includes("Open"))!
+    open.click()
+    await settle()
+    expect(opened).toEqual(["https://5173-port.example.test/.rookery/claim?t=t"])
   })
 
   test("a viewer may not reach ports", async () => {
@@ -234,15 +271,22 @@ describe("ports", () => {
     expect(document.body.textContent).toContain("403")
   })
 
-  test("the frame goes to env.portUrl's one-use address", async () => {
+  test("the port page opens env.portUrl's one-use address in a new tab", async () => {
     const calls: Call[] = []
+    const opened: string[] = []
+    const realOpen = window.open
+    window.open = ((url: string | URL | undefined) => {
+      if (url) opened.push(String(url))
+      return null
+    }) as typeof window.open
+    cleanup.push(() => {
+      window.open = realOpen
+    })
     const rookery = fakeRookery({ calls, ticket: "https://5173-port.example.test/.rookery/claim?t=t" })
     const envs = fakeEnv(rookery, [env("studio")])
-    // A detached host: an iframe only loads once it is in a document, and nothing here answers it.
-    const host = document.createElement("div")
     const dispose = render(
       () => <PortPage view={view("studio/5173")} rookery={rookery} envs={envs} admin={false} port="5173" />,
-      host,
+      document.body,
     )
     cleanup.push(dispose)
     await settle()
@@ -251,12 +295,21 @@ describe("ports", () => {
     expect(calls.some((c) => c.method === "env.portUrl")).toBe(true)
     const call = calls.find((c) => c.method === "env.portUrl")
     expect(call?.params).toEqual({ env: "env://studio", port: 5173 })
-    const frame = host.querySelector<HTMLIFrameElement>("[data-part='port-frame']")
-    expect(frame).not.toBeNull()
-    expect(frame!.getAttribute("src")).toBe("https://5173-port.example.test/.rookery/claim?t=t")
+    expect(opened).toEqual(["https://5173-port.example.test/.rookery/claim?t=t"])
+    expect(document.body.querySelector("[data-part='port-opened']")).not.toBeNull()
+    expect(document.body.querySelector("[data-part='port-frame']")).toBeNull()
   })
 
   test("a server without env.portUrl falls back to Rookery's route", async () => {
+    const opened: string[] = []
+    const realOpen = window.open
+    window.open = ((url: string | URL | undefined) => {
+      if (url) opened.push(String(url))
+      return null
+    }) as typeof window.open
+    cleanup.push(() => {
+      window.open = realOpen
+    })
     const rookery = {
       rpc: {
         call: async (method: string, params: Record<string, unknown> = {}) => {
@@ -266,21 +319,25 @@ describe("ports", () => {
           return {}
         },
       },
+      env: {
+        get: async (name: string) => env(envName(name)),
+        portUrl: async () => {
+          throw Object.assign(new Error("unknown method"), { code: "NOT_FOUND" })
+        },
+      },
       workbench: { openView: () => {}, toast: () => {} },
       views: { href: () => null },
     } as unknown as ClientRookery
     const envs = fakeEnv(rookery, [env("studio")])
-    const host = document.createElement("div")
     const dispose = render(
       () => <PortPage view={view("studio/5173")} rookery={rookery} envs={envs} admin={false} port="5173" />,
-      host,
+      document.body,
     )
     cleanup.push(dispose)
     await settle()
     await settle()
 
-    const frame = host.querySelector<HTMLIFrameElement>("[data-part='port-frame']")
-    expect(frame?.getAttribute("src")).toBe("/env/studio/port/5173/")
+    expect(opened).toEqual(["/env/studio/port/5173/"])
   })
 })
 

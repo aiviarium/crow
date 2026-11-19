@@ -6,8 +6,8 @@
 // A host half cannot create a connection at the pinned SDK: `rookery.connections` lists, gets and resolves.
 // `app.complete` therefore answers with what the connection is made of, and the admin's browser creates it
 // with `rookery.connections.create` (API.md, "needed (M2)").
+import type { ConnectionCreate } from "@rookery/client"
 import { type Ctx, RookeryError } from "@rookery/sdk"
-import { appJwt } from "./auth"
 import { explain } from "./errors"
 import { GitHubHttp, webBase } from "./http"
 import { normalizeBase, type Pool } from "./pool"
@@ -156,17 +156,18 @@ export async function appComplete(sv: Services, ctx: Ctx, p: { code: string; sta
       fix: "Start again from GitHub › Connect; a code works once and for an hour.",
     })
   }
+  /** What `rookery.connections.create` takes. */
+  const connection: ConnectionCreate = {
+    type: "code.github-app",
+    name: `${app.name || app.slug} (GitHub App)`,
+    scope: "global",
+    config: { baseUrl: pending.apiBase, appId: String(app.id) },
+    credential: JSON.stringify({ privateKey: app.pem, webhookSecret: app.webhook_secret }),
+  }
   return {
     name: app.name || app.slug,
     slug: app.slug,
     install: `${app.html_url}/installations/new`,
-    /** What `rookery.connections.create` takes. */
-    connection: {
-      type: "code.github-app",
-      name: `${app.name || app.slug} (GitHub App)`,
-      scope: "global" as const,
-      config: { baseUrl: pending.apiBase, appId: String(app.id) },
-      credential: JSON.stringify({ privateKey: app.pem, webhookSecret: app.webhook_secret }),
-    },
+    connection,
   }
 }

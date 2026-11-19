@@ -250,7 +250,7 @@ export function ImportView(props: {
   onCleanup(() => follower?.dispose())
   const start = async () => {
     try {
-      const j = await crow.jobs.enqueue("projects.import", {
+      const j = await crow.jobs.enqueue("projects/import", {
         space: space(),
         format: format(),
         text: text(),

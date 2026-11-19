@@ -1,7 +1,8 @@
 // Dialog for running a host action that takes arguments or requires confirmation.
-import { Button, Callout, Dialog, Select, Switch, TextArea, TextField } from "@aiviarium/nocturne"
+import { Button, Callout, Dialog } from "@aiviarium/nocturne"
 import { createEffect, createSignal, For, type JSX, Show } from "solid-js"
-import type { Action, Argument } from "./api"
+import { ArgumentField } from "./ArgumentField"
+import type { Action } from "./api"
 import type { FleetApi } from "./fleetApi"
 import { errorMessage } from "./format"
 
@@ -69,9 +70,9 @@ export function ActionDialog(props: ActionDialogProps): JSX.Element {
       const acted = await props.api.act({
         host: props.host,
         action: act.name,
-        arguments: Object.keys(args).length > 0 ? args : undefined,
+        arguments: args,
       })
-      props.onStarted(acted.job)
+      if (acted.job) props.onStarted(acted.job)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -126,8 +127,10 @@ export function ActionDialog(props: ActionDialogProps): JSX.Element {
             <For each={act().arguments}>
               {(arg) => (
                 <ArgumentField
-                  arg={arg}
+                  argument={arg}
                   value={values()[arg.name] ?? ""}
+                  error={error() ?? undefined}
+                  idPrefix="action-arg"
                   onChange={(v) => setField(arg.name, v)}
                 />
               )}
@@ -136,63 +139,5 @@ export function ActionDialog(props: ActionDialogProps): JSX.Element {
         )}
       </Show>
     </Dialog>
-  )
-}
-
-function ArgumentField(props: {
-  arg: Argument
-  value: string
-  onChange: (value: string) => void
-}): JSX.Element {
-  const choices = () => props.arg.choices ?? []
-
-  if (props.arg.kind === "bool") {
-    return (
-      <Switch
-        label={props.arg.label || props.arg.name}
-        checked={props.value === "true" || props.value === "1"}
-        disabled={props.arg.fixed}
-        onChange={(checked) => props.onChange(checked ? "true" : "false")}
-      />
-    )
-  }
-
-  if (choices().length > 0) {
-    return (
-      <Select
-        label={props.arg.label || props.arg.name}
-        options={choices().map((c) => ({ value: c, label: c }))}
-        value={props.value || undefined}
-        disabled={props.arg.fixed}
-        help={props.arg.help ?? undefined}
-        onChange={(v) => props.onChange(v)}
-      />
-    )
-  }
-
-  if (props.arg.kind === "multiline") {
-    return (
-      <TextArea
-        id={`action-arg-${props.arg.name}`}
-        label={props.arg.label || props.arg.name}
-        value={props.value}
-        disabled={props.arg.fixed}
-        help={props.arg.help ?? undefined}
-        onInput={(e) => props.onChange(e.currentTarget.value)}
-      />
-    )
-  }
-
-  return (
-    <TextField
-      id={`action-arg-${props.arg.name}`}
-      label={props.arg.label || props.arg.name}
-      type={props.arg.secret ? "password" : "text"}
-      mono={props.arg.kind === "path" || props.arg.kind === "host"}
-      value={props.value}
-      disabled={props.arg.fixed}
-      help={props.arg.help ?? undefined}
-      onInput={(e) => props.onChange(e.currentTarget.value)}
-    />
   )
 }

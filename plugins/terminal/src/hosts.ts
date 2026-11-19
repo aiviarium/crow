@@ -2,10 +2,9 @@
 // what the terminal views need: the list for the picker, and the `env.changed` topic that keeps the
 // picker current. `env.checkouts` is not among them: it is deferred to M5 on the server, so the
 // new-terminal form takes a typed directory instead of suggesting one.
-import type { EnvInfo } from "@rookery/client"
+import type { EnvChanged, EnvInfo } from "@rookery/client"
 import type { ClientRookery } from "@rookery/sdk/client"
 import { isMethodMissing, listLegacyAgentHosts } from "../../agents/src/api"
-import type { AgentHostCapability } from "../../agents/src/rookery-wire"
 import { envUri } from "./env"
 
 export interface HostsApi {
@@ -15,28 +14,19 @@ export interface HostsApi {
   onChanged(fn: (e: EnvChanged) => void): () => void
 }
 
-/** The payload of `rookery/env.changed`, as rookery#42 sends it: `env://NAME`, and the environment until
- * it is removed. */
-export interface EnvChanged {
-  /** `env://<name>`. */
-  env: string
-  environment?: EnvInfo
-  removed?: boolean
-}
-
 export function createHostsApi(rookery: ClientRookery): HostsApi {
   return {
     list: async () => {
       try {
         const res = await rookery.rpc.call<{ environments: EnvInfo[] }>("env.list", {})
         const envs = res.environments ?? []
-        if (envs.every((e) => (e.supports as AgentHostCapability).agents !== undefined)) return envs
+        if (envs.every((e) => e.supports.agents !== undefined)) return envs
         const legacy = await listLegacyAgentHosts(rookery).catch(() => [])
         const flags = new Map(legacy.map((h) => [h.name, h.agentsSupported]))
-        return envs.map((e) => {
-          const supports: EnvInfo["supports"] & AgentHostCapability = e.supports
-          return { ...e, supports: { ...supports, agents: supports.agents ?? flags.get(e.name) ?? false } }
-        })
+        return envs.map((e) => ({
+          ...e,
+          supports: { ...e.supports, agents: e.supports.agents ?? flags.get(e.name) ?? false },
+        }))
       } catch (error) {
         if (!isMethodMissing(error)) throw error
       }

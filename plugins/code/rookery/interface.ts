@@ -3,9 +3,9 @@
 // methods it names in its contribution to `projects.issueSources`, and the agents plugin the ones in
 // `agents.codeHosts`.
 //
-// `@rookery/sdk` does not yet export `defineInterface`, so this module exports the typed Zod schemas directly
-// alongside `interface.json`.
-import { z } from "@rookery/sdk"
+// The interface is declared with `defineInterface`; the extension host writes `interface.json` and
+// `interface.d.ts` from it.
+import { defineInterface, z } from "@rookery/sdk"
 
 /** A pull request as the service returns it. */
 export const PullRequestRef = z.object({
@@ -33,7 +33,7 @@ const ProjectLink = z.looseObject({
   repoSpace: z.string().nullish().describe("The space the repository is attached to"),
 })
 
-export const githubInterface = {
+export default defineInterface({
   services: {
     github: {
       createPullRequest: {
@@ -120,6 +120,4 @@ export const githubInterface = {
       },
     },
   },
-} as const
-
-export default githubInterface
+})

@@ -53,7 +53,7 @@ export function RepoCard(props: {
     setBusy(full ? "full" : "sync")
     setError(undefined)
     try {
-      await c.jobs.enqueue("code.sync", {
+      await c.jobs.enqueue("code/sync", {
         repo: r().id,
         space: props.space,
         force: true,

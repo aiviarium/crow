@@ -37,6 +37,7 @@ function seedHosts(): {
       name: "studio",
       address: "192.0.2.10",
       reachable: true,
+      agents: false,
       version: "0.9.1",
       api: 1,
       error: null,
@@ -53,6 +54,7 @@ function seedHosts(): {
       name: "forge",
       address: "192.0.2.20",
       reachable: true,
+      agents: false,
       version: "0.9.0",
       api: 1,
       error: null,
@@ -217,7 +219,7 @@ describe("@crow/plugin-fleet M1 views", () => {
 
     await waitFor(() => root.querySelector("[data-part='fleet-job']") !== null)
     const actCall = fake.calls.find((c) => c.method === "hosts.act")
-    expect(actCall?.params).toEqual({ host: "forge", action: "apply" })
+    expect(actCall?.params).toEqual({ host: "forge", action: "apply", arguments: {} })
     await waitFor(() => (root.textContent ?? "").includes("Starting apply on forge"))
   })
 
@@ -286,7 +288,7 @@ describe("@crow/plugin-fleet M1 views", () => {
       },
     })
     const trustCall = fake.calls.find((c) => c.method === "hosts.act")
-    expect(trustCall?.params).toEqual({ host: "relay", action: "trust-key" })
+    expect(trustCall?.params).toEqual({ host: "relay", action: "trust-key", arguments: {} })
     expect(fake.getHosts().some((h) => h.name === "relay")).toBe(true)
   })
 

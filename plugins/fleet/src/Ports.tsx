@@ -1,11 +1,10 @@
 // Port links: a port on a host's loopback, reached through Rookery at `/env/<name>/port/<n>/`, which
 // mints a one-use ticket and redirects to the port's own origin. The card on the host's page keeps the
-// ports a person opened there (in localStorage: a link is theirs), and `fleet.port` shows one in a frame
-// of its own, asking `env.portUrl` for the address the frame goes to. Ported from the prototype's
-// workbench preview pane.
+// ports a person opened there (in localStorage: a link is theirs), and `fleet.port` opens one at the top
+// level in a tab of its own. Its cookie is SameSite=Lax, so it is a navigation, never an iframe.
 import { Button, Callout, Card, EmptyState, IconButton, TextField, ViewHeader } from "@aiviarium/nocturne"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
-import { createResource, createSignal, For, type JSX, Show } from "solid-js"
+import { createEffect, createResource, createSignal, For, type JSX, Show } from "solid-js"
 import { allows, type Who } from "./access"
 import { envName, type FleetEnvApi, portPath } from "./env"
 import type { EnvInfo } from "./types"
@@ -75,6 +74,14 @@ export function PortsCard(props: {
   const [label, setLabel] = createSignal("")
   const allowed = () => allows(props.who, "use")
   const links = () => savedPorts(name())
+  /** Opens the port at the top level: its cookie is SameSite=Lax and an iframe would not send it. */
+  const open = async (port: number) => {
+    const href = await props.rookery.env
+      .portUrl(name(), port)
+      .then((one: { url: string }) => one.url)
+      .catch(() => portPath(name(), port))
+    window.open(href, "_blank", "noopener,noreferrer")
+  }
   const add = (e?: Event) => {
     e?.preventDefault()
     const n = Number(port())
@@ -142,12 +149,10 @@ export function PortsCard(props: {
                     <Button
                       size="sm"
                       variant="secondary"
-                      icon="eye"
-                      onClick={() =>
-                        props.rookery.workbench.openView("fleet.port", { path: `${name()}/${link.port}` })
-                      }
+                      icon="arrow-up-right"
+                      onClick={() => void open(link.port)}
                     >
-                      Show here
+                      Open
                     </Button>
                     <IconButton
                       label={`Remove port ${link.port}`}
@@ -180,13 +185,13 @@ export function PortPage(props: {
     portFromPath(props.port ?? props.view.params.port ?? props.view.path),
   )
   const [draft, setDraft] = createSignal(port() ? String(port()) : "")
-  const [nonce, setNonce] = createSignal(0)
+  const [opened, setOpened] = createSignal<string | null>(null)
   const [env] = createResource(() => props.envs.get(host()).catch(() => undefined))
   const who = (): Who => ({ level: env()?.level, admin: props.admin })
   props.view.setTitle(port() ? `Port ${port()} on ${host()}` : `Ports on ${host()}`)
-  // The frame goes to `env.portUrl`'s one-use address on the ports' own origin. A server without it, or
+  // The tab goes to `env.portUrl`'s one-use address on the ports' own origin. A server without it, or
   // a refusal, falls back to Rookery's own `/env/<name>/port/<n>/`, which mints the ticket itself.
-  const [address, { refetch: refetchAddress }] = createResource(
+  const [address] = createResource(
     () => (port() && allows(who(), "use") ? ([host(), port()!] as const) : null),
     ([h, p]) =>
       props.envs
@@ -194,7 +199,19 @@ export function PortPage(props: {
         .then((u) => u.url)
         .catch(() => portPath(h, p)),
   )
-  const href = () => (port() ? portPath(host(), port()!) : null)
+  const open = (url: string | undefined) => {
+    if (!url) return
+    window.open(url, "_blank", "noopener,noreferrer")
+  }
+  // A top-level tab, once per address: the port's cookie is SameSite=Lax, so an iframe would not work.
+  createEffect(() => {
+    const url = address()
+    const key = `${port()}:${url}`
+    if (url && port() && opened() !== key) {
+      setOpened(key)
+      open(url)
+    }
+  })
   const go = (e?: Event) => {
     e?.preventDefault()
     const n = Number(draft())
@@ -235,22 +252,21 @@ export function PortPage(props: {
         <Button type="submit" size="sm">
           Show
         </Button>
-        <Show when={href()}>
-          {(u) => (
-            <>
-              <IconButton
-                label="Reload"
-                icon="activity"
-                onClick={() => {
-                  setNonce(nonce() + 1)
-                  void refetchAddress()
-                }}
-              />
-              <Button size="sm" variant="secondary" href={u()}>
-                Open in a new tab
-              </Button>
-            </>
-          )}
+        <Show when={port() && allows(who(), "use")}>
+          <Button
+            size="sm"
+            variant="secondary"
+            icon="arrow-up-right"
+            data-part="open-port"
+            onClick={() => {
+              void props.envs
+                .portUrl(host(), port()!)
+                .then((one) => open(one.url))
+                .catch(() => open(portPath(host(), port()!)))
+            }}
+          >
+            Open again
+          </Button>
         </Show>
       </form>
       <Show
@@ -263,17 +279,11 @@ export function PortPage(props: {
           />
         }
       >
-        {(u) => (
-          <Show when={{ src: u(), reload: nonce() }} keyed>
-            {(frame) => (
-              <iframe
-                class="fleet-port-page__frame"
-                title={`Port ${port()} on ${host()}`}
-                src={frame.src}
-                data-part="port-frame"
-              />
-            )}
-          </Show>
+        {(url) => (
+          <Callout tone="info" data-part="port-opened">
+            <span class="mono">{url()}</span> opens in a tab of its own. Its cookie is SameSite=Lax, so it is
+            not shown in a frame.
+          </Callout>
         )}
       </Show>
     </div>

@@ -1,60 +1,42 @@
-// Hand-written API contract for `hosts.*`, which Rookery's server does not serve yet (M1 is in
-// progress). Every type here is to be replaced by `@rookery/client`'s generated wire types when
-// `hosts.*` lands; jobs already use those generated types, in `./jobs.ts`.
-import type { JobState } from "@rookery/client"
+// The `hosts.*` calls fleet makes over `@rookery/client`'s generated wire types. The shapes the
+// server writes inline, and the saved profile's own JSON, are the few written out here.
+import type {
+  Acted,
+  Action,
+  ActionList,
+  ActionStep,
+  Argument,
+  Behind,
+  HostAct,
+  HostCheck,
+  HostChecked,
+  HostInfo,
+  HostList,
+  HostMachine,
+  HostProfile as HostProfileResult,
+  HostRef,
+  HostRename,
+  HostSave,
+  HostSaved,
+  HostType,
+  JobState,
+  Power,
+  PowerState,
+} from "@rookery/client"
 import type { ClientRookery } from "@rookery/sdk/client"
 
-export type { JobState }
-
-// ---------------------------------------------------------------------------
-// Host types (carried over from rookery-api and rookery local/serve/api.rs)
-// ---------------------------------------------------------------------------
-
-/** What a host can do, from plain SSH up to a full workstation (plus local). */
-export type HostType = "ssh" | "managed" | "node" | "workstation" | "local"
-
-export type PowerState = "running" | "stopped" | "unknown"
-
-export interface Power {
-  start: boolean
-  stop: boolean
-  state: PowerState
-  start_by?: string | null
-  stop_by?: string | null
-}
-
-export interface Change {
-  id: string
-  from: string
-  to: string
-}
-
-export interface Behind {
-  changes: Change[]
-}
-
-export interface HostMachine {
-  resource: string
-  provisioner: string
-  external_id: string
-  state: string
-}
-
-export interface HostInfo {
-  id?: string | null
-  name: string
-  address: string
-  reachable: boolean
-  version?: string | null
-  api?: number | null
-  error?: string | null
-  applied?: string | null
-  behind?: Behind | null
-  type: HostType
-  seen?: HostType | null
-  rotating?: boolean
-  power: Power
-  machine?: HostMachine | null
+export type {
+  Action,
+  ActionStep,
+  Argument,
+  Behind,
+  HostChecked,
+  HostInfo,
+  HostMachine,
+  HostType,
+  JobState,
+  Power,
+  PowerState,
 }
 
 /** Minimal SSH access section of a saved host profile (`rookery host add` shape). */
@@ -90,133 +72,12 @@ export type HostCapability =
   | "agents"
   | string
 
-export interface HostCheckRefusal {
-  why: string
-  raise: string
-}
-
-export interface HostCheckResult {
-  allowed: boolean
-  refusal?: HostCheckRefusal | null
-}
-
-// ---------------------------------------------------------------------------
-// Host actions (carried over from rookery-api/src/types.rs)
-// ---------------------------------------------------------------------------
-
-export interface Argument {
-  name: string
-  label: string
-  required: boolean
-  default: string
-  choices?: string[]
-  kind?: string
-  help?: string | null
-  values?: string[]
-  secret?: boolean
-  fixed?: boolean
-  confirm?: boolean
-}
-
-export interface ActionStep {
-  label: string
-  help?: string | null
-}
-
-export type ActionRuns = "rookery" | "host"
-export type ActionRole = "view" | "operate" | "admin"
-
-export interface Action {
-  name: string
-  label: string
-  help: string
-  group: string
-  arguments: Argument[]
-  confirm?: string | null
-  runs: ActionRuns
-  terminal: boolean
-  changes: boolean
-  role: ActionRole
-  available: boolean
-  why?: string | null
-  steps?: ActionStep[]
-  collection?: string | null
-}
-
 // ---------------------------------------------------------------------------
 // RPC method parameter and result shapes
 // ---------------------------------------------------------------------------
 
-export interface HostsListParams {
-  [key: string]: never
-}
-export interface HostsListResult {
-  hosts: HostInfo[]
-}
-
-export interface HostsGetParams {
-  host: string
-}
-export type HostsGetResult = HostInfo
-
-export interface HostsSaveParams {
-  host: string
-  profile: HostProfile
-}
-export interface HostsSaveResult {
-  host: HostInfo
-}
-
-export interface HostsRemoveParams {
-  host: string
-}
-export type HostsRemoveResult = Record<string, never>
-
-export interface HostsRenameParams {
-  host: string
-  to: string
-}
-export interface HostsRenameResult {
-  host: HostInfo
-}
-
-export interface HostsProfileParams {
-  host: string
-}
 export interface HostsProfileResult {
   profile: HostProfile
-}
-
-export interface HostsCheckParams {
-  host: string
-  capability: HostCapability
-}
-export type HostsCheckResult = HostCheckResult
-
-export interface HostsActionsParams {
-  host: string
-}
-export interface HostsActionsResult {
-  actions: Action[]
-}
-
-export interface HostsActParams {
-  host: string
-  action: string
-  arguments?: Record<string, string>
-  token?: string
-  sudo_password?: string
-}
-
-/** Every host action runs as a Rookery job whose output streams via `jobs.follow`. */
-export interface HostsActResult {
-  job: string
-  state: JobState
-  result?: unknown
-}
-
-export interface HostsDesktopScreenshotParams {
-  host: string
 }
 
 /**
@@ -237,19 +98,16 @@ export interface HostChangedEvent {
 
 /** Map of every `hosts.*` JSON-RPC method called by the fleet plugin. */
 export interface FleetMethods {
-  "hosts.list": { params: HostsListParams; result: HostsListResult }
-  "hosts.get": { params: HostsGetParams; result: HostsGetResult }
-  "hosts.save": { params: HostsSaveParams; result: HostsSaveResult }
-  "hosts.remove": { params: HostsRemoveParams; result: HostsRemoveResult }
-  "hosts.rename": { params: HostsRenameParams; result: HostsRenameResult }
-  "hosts.profile": { params: HostsProfileParams; result: HostsProfileResult }
-  "hosts.check": { params: HostsCheckParams; result: HostsCheckResult }
-  "hosts.actions": { params: HostsActionsParams; result: HostsActionsResult }
-  "hosts.act": { params: HostsActParams; result: HostsActResult }
-  "hosts.desktop.screenshot": {
-    params: HostsDesktopScreenshotParams
-    result: HostsDesktopScreenshotResult
-  }
+  "hosts.list": { params: Record<string, never>; result: HostList }
+  "hosts.get": { params: HostRef; result: HostInfo }
+  "hosts.save": { params: HostSave; result: HostSaved }
+  "hosts.remove": { params: HostRef; result: Record<string, never> }
+  "hosts.rename": { params: HostRename; result: Acted }
+  "hosts.profile": { params: HostRef; result: HostProfileResult }
+  "hosts.check": { params: HostCheck; result: HostChecked }
+  "hosts.actions": { params: HostRef; result: ActionList }
+  "hosts.act": { params: HostAct; result: Acted }
+  "hosts.desktop.screenshot": { params: HostRef; result: HostsDesktopScreenshotResult }
 }
 
 export type FleetMethodName = keyof FleetMethods
@@ -263,11 +121,11 @@ export interface HostsApi {
   getHost(host: string): Promise<HostInfo>
   saveHost(host: string, profile: HostProfile): Promise<HostInfo>
   removeHost(host: string): Promise<void>
-  renameHost(host: string, to: string): Promise<HostInfo>
+  renameHost(host: string, to: string): Promise<Acted>
   getProfile(host: string): Promise<HostProfile>
-  checkCapability(host: string, capability: HostCapability): Promise<HostCheckResult>
+  checkCapability(host: string, capability: HostCapability): Promise<HostChecked>
   listActions(host: string): Promise<Action[]>
-  act(params: HostsActParams): Promise<HostsActResult>
+  act(params: HostAct): Promise<Acted>
   /** A PNG of the host's desktop in base64, which `view` may see. */
   screenshot(host: string): Promise<HostsDesktopScreenshotResult>
 }
@@ -290,19 +148,18 @@ export function createHostsApi(rookery: ClientRookery): HostsApi {
       return call("hosts.get", { host })
     },
     async saveHost(host, profile) {
-      const res = await call("hosts.save", { host, profile })
+      const res = await call("hosts.save", { host, profile: profile as never })
       return res.host
     },
     async removeHost(host) {
       await call("hosts.remove", { host })
     },
-    async renameHost(host, to) {
-      const res = await call("hosts.rename", { host, to })
-      return res.host
+    renameHost(host, to) {
+      return call("hosts.rename", { host, to, hostname: false, token: null })
     },
     async getProfile(host) {
       const res = await call("hosts.profile", { host })
-      return res.profile ?? {}
+      return (res.profile ?? {}) as unknown as HostProfile
     },
     checkCapability(host, capability) {
       return call("hosts.check", { host, capability })

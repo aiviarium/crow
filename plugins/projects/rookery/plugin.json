@@ -1,6 +1,7 @@
 {
   "$schema": "https://github.com/aiviarium/rookery/blob/main/schemas/plugin.schema.json",
   "apiVersion": "1",
+  "interface": "interface.ts",
   "name": "Projects",
   "description": "Project management in the style of Linear: projects as spaces, issues with keys, states, labels, a list and a board, comments, cycles, and links to the docs, agent sessions and pull requests that reference an issue.",
   "host": "host/host.js",
@@ -58,6 +59,16 @@
   "namespace": "projects",
   "activate": "startup",
   "contributes": {
+    "composer": [
+      {
+        "type": "mention",
+        "id": "projects.issues",
+        "title": "Issues",
+        "description": "Add an issue as context: its text, comments and linked docs.",
+        "icon": "list",
+        "schemes": ["issue"]
+      }
+    ],
     "spaceKinds": [
       {
         "id": "projects.project",

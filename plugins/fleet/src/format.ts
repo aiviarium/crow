@@ -34,8 +34,6 @@ export function hostTypeLabel(type: HostType): string {
       return "Node"
     case "workstation":
       return "Workstation"
-    case "local":
-      return "Local"
     default:
       return type
   }
@@ -49,8 +47,6 @@ export function hostTypeTone(type: HostType): BadgeTone {
       return "info"
     case "managed":
       return "success"
-    case "local":
-      return "outline"
     default:
       return "neutral"
   }
