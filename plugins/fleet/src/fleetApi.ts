@@ -1,6 +1,8 @@
 // The fleet plugin's view-facing API: `hosts.*` from the hand-written contract in `./api.ts`, `jobs.*`
-// from the generated wire types in `@rookery/client` via `./jobs.ts`, and the M3 host parts: `env.*` for a
-// host's state, desktop and ports (`./env.ts`) and `access.*` for sharing it (`./access.ts`).
+// from the generated wire types in `@rookery/client` via `./jobs.ts`, the M3 host parts (`env.*` for a
+// host's state, desktop and ports in `./env.ts`, `access.*` for sharing it in `./access.ts`), and M4's
+// admin half (`provisioners.*`, `resources.*`, `setup.*`, `installation.*`, `registries.*` in
+// `./provisionApi.ts`, typed from the copies in `./types.ts`).
 
 import type { ClientRookery } from "@rookery/sdk/client"
 import type { Accessor } from "solid-js"
@@ -9,13 +11,14 @@ import { createHostsApi, type HostsApi } from "./api"
 import { createFleetEnvApi, type FleetEnvApi } from "./env"
 import { createJobsApi, type JobsApi } from "./jobs"
 import { type CurrentUser, createMeApi } from "./me"
+import { type AdminApi, createAdminApi } from "./provisionApi"
 
-export interface FleetApi extends HostsApi, JobsApi {
+export interface FleetApi extends HostsApi, JobsApi, AdminApi {
   env: FleetEnvApi
   grants: GrantsApi
   /** The signed-in person, once `auth.me` has answered. */
   me(): CurrentUser | null
-  /** Whether they hold the org role admin, which is manage on every host. */
+  /** Whether they hold the org role admin, which is manage on every host and the admin of the installation. */
   isAdmin(): boolean
 }
 
@@ -32,6 +35,7 @@ export function createFleetApi(
   return {
     ...createHostsApi(rookery),
     ...createJobsApi(rookery),
+    ...createAdminApi(rookery),
     env: createFleetEnvApi(rookery),
     grants: createGrantsApi(rookery),
     me: () => current(),

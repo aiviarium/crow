@@ -144,3 +144,102 @@ Declared by the plugin: `PortLink` (`{ port, label? }`), and the local storage k
 6. **WebSocket in the port proxy.** Dev servers that use HMR open a WebSocket under the same path. The
    UI cannot tell whether the proxy upgrades; it assumes it does, as the design's "HTTP and WebSocket" line
    says.
+
+# Fleet M4 API Contract
+
+What `crow/plugins/fleet` calls for M4: making a machine from the installation's catalogue, the
+provisioners' page, the machine a host has, and the admin page (server settings, installation secrets and
+registries). The server side is rookery#33 (`feat/cli-client`, not yet merged). Crow pins Rookery at
+`5708f84`, which has none of these methods, so the wire types are copied into
+[`src/types.ts`](./src/types.ts), each marked with where it came from and with the `@rookery/client` import
+that replaces it after the repin. Every method here is `admin` level on the server.
+
+## The new-machine flow
+
+1. `setup.catalogue` once: the profile a new host starts from (`template`) and the features the installed
+   plugins can install, with the types of host each fits.
+2. `provisioners.list`: the provisioners registered under names of their own. One with a `problem`, or
+   with `missing_secrets`, is shown with what to fix and cannot make a machine.
+3. `hosts.save` with the template, the host's name as `hostname`, and the chosen features in
+   `ansible_vars.rookery_plugin_features`: the machine is made for a saved host, and `resources.create`
+   refuses one without a profile.
+4. `resources.create` with `provisioner`, `kind: "machine"`, the host's name, and the provisioner's
+   arguments (its `own` ones, such as the server, start from its settings, the rest from their defaults).
+   The result is the resource and the job that makes it.
+5. `jobs.follow` on that job, as the existing job view does: the log, then how it ended. The dialog lands
+   on the new host's page when the job succeeds, and offers the job when it fails.
+
+The host page then has the host's `apply` (`hosts.act`) and its machine (`host.info.machine`), whose
+`resources.actions` offers the provisioner's verbs, and `resources.remove` deletes the machine.
+
+## RPC methods
+
+| Method                        | Params                                                      | Result                                              | Notes                                                                                                                      |
+| ----------------------------- | ----------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `provisioners.list`           | `{}`                                                        | `ProvisionerInfo[]`                                 | The ones registered under names of their own. **[#33]**                                                                    |
+| `provisioners.types`          | `{}`                                                        | `ProvisionerInfo[]`                                 | Every type the installed plugins bring; its `arguments` are the fields a registration fills. **[#33]**                     |
+| `provisioners.get`            | `{ name, given?: Record<string, string> }`                  | `ProvisionerState`                                  | Its page: what it says of itself (`state`, `message`, `details`) and what it holds (`resources`, `collections`). **[#33]** |
+| `provisioners.save`           | `{ name, type, settings?: Record<string, string> \| null }` | `ProvisionerInfo`                                   | Registers one, or changes its settings; its type stays. Empty settings are not kept. **[#33]**                             |
+| `provisioners.remove`         | `{ name }`                                                  | `{}`                                                | Only one that made nothing kept; a refusal is a sentence to show. **[#33]**                                                |
+| `provisioners.actions`        | `{ name }`                                                  | `{ actions: Action[] }`                             | Its plugin's own actions, such as listing images or pruning. **[#33]**                                                     |
+| `provisioners.act`            | `{ name, action, arguments?, token? }`                      | `Acted`                                             | A changing action is a job; a reading one answers at once in `result`. **[#33]**                                           |
+| `resources.create`            | `NewResource`                                               | `{ resource, job: JobInfo }`                        | Needs the host's profile saved first. **[#33]**                                                                            |
+| `resources.list`              | `{ provisioner?, kind?, host? }`                            | `Resource[]`                                        | **[#33]**                                                                                                                  |
+| `resources.get`               | `{ id }`                                                    | `Resource`                                          | Asks the provisioner for its state. **[#33]**                                                                              |
+| `resources.actions`           | `{ id }`                                                    | `{ actions: Action[] }`                             | Includes `start`, `stop`, `change`, `logs`, `exec` and `remove` as the kind declares them. **[#33]**                       |
+| `resources.act`               | `{ id, action, arguments?, token? }`                        | `Acted`                                             | **[#33]**                                                                                                                  |
+| `resources.remove`            | `{ id, token? }`                                            | `Acted`                                             | Deletes the machine with its provisioner; the host's profile stays. **[#33]**                                              |
+| `setup.catalogue`             | `{}`                                                        | `{ template: object, features: FeatureInfo[] }`     | **[#33]**                                                                                                                  |
+| `installation.settings.list`  | `{}`                                                        | `Array<{ key, value, meaning, open }>`              | A string value; `open: false` is the server's own and cannot be set from a browser session. **[#33]**                      |
+| `installation.settings.set`   | `{ name, value }`                                           | `{}`                                                | An empty value goes back to the default. **[#33]**                                                                         |
+| `installation.secrets.list`   | `{}`                                                        | `{ names: string[], secrets: Array<{ id, name }> }` | Names only; values never leave the server. **[#33]**                                                                       |
+| `installation.secrets.set`    | `{ name, value }`                                           | `{}`                                                | Write-only. **[#33]**                                                                                                      |
+| `installation.secrets.rename` | `{ name, value: newName }`                                  | `{}`                                                | A secret of a name of its own. **[#33]**                                                                                   |
+| `installation.secrets.remove` | `{ name }`                                                  | `{}`                                                | **[#33]**                                                                                                                  |
+| `installation.actions`        | `{}`                                                        | `{ actions: Action[] }`                             | The installation's own: upgrade, rekey, and the checks it offers. **[#33]**                                                |
+| `installation.act`            | `{ action, arguments?, token? }`                            | `Acted`                                             | **[#33]**                                                                                                                  |
+| `registries.list`             | `{}`                                                        | `{ registries: Record<string, Registry> }`          | By name: `id`, `type` (`raw`, `npm`, `docker`, `nexus`), `url`, `username`, and a Nexus server's `repositories`. **[#33]** |
+| `registries.save`             | `{ name, value: Registry }`                                 | `{}`                                                | Its login is the secret `registry/NAME`, set with `installation.secrets.set`. **[#33]**                                    |
+| `registries.check`            | `{ name }`                                                  | `{ lines: string[] }`                               | One line per thing checked, starting with ✓, ! or ✗. **[#33]**                                                             |
+| `registries.rename`           | `{ name, value: newName }`                                  | `{}`                                                | Its login moves with it. **[#33]**                                                                                         |
+| `registries.remove`           | `{ name }`                                                  | `{}`                                                | With its login. **[#33]**                                                                                                  |
+
+`Acted` is `{ job: string | null, state: JobState | null, info: JobInfo | null, session, result }`; the UI
+follows `job` when it is one and shows `result` (`{ lines }` or text) when it is not.
+
+## Levels
+
+All of M4's methods are `admin` on the server. The Provisioners page and the new-machine dialog show what
+the server refuses as a sentence; the Admin page is for admins alone, and the sidebar row for it appears
+only while the signed-in person is one (`auth.me`'s `admin`).
+
+## Needed
+
+Where the UI wants what the server does not have yet, each with the milestone it belongs to.
+
+1. **A catalogue of machines, not only of profiles.** `setup.catalogue` gives the profile template and the
+   features, so "New machine" takes its fields from the chosen provisioner's arguments. A catalogue of
+   sizes and images (the entries the CLI's prompts imply) would let the same flow offer "2 vCPU, 4 GiB,
+   Debian 13" without reading a provisioner's argument names, and would keep working when a provisioner
+   changes its arguments. **M4.**
+2. **One call for a host and its machine.** `resources.create` refuses a host with no saved profile, so the
+   dialog saves one and then asks for the machine: between the two, a host exists with nothing behind it.
+   A `NewResource` that carries the profile (or a `hosts.create` that takes both) would make it one call.
+   **M4.**
+3. **A provisioner's state in its listing.** `provisioners.list` does not say `ready`, `unreachable` or
+   `unusable`, so the page calls `provisioners.get` once per registered provisioner. A `state` and
+   `message` on `ProvisionerInfo`, or a `provisioners.states` over many names, would be one call. **M4.**
+4. **What blocks a removal.** `provisioners.remove` refuses one that made something kept, and says what in
+   the error; the page can only show that sentence. The resources that block it are what
+   `provisioners.get` lists, when its provisioner can be asked at all. **M4.**
+5. **Registries as connections.** `plans/design.md` says host registries become connections of a declared
+   type, while #33 keeps `registries.*` as methods of their own. Crow calls `registries.*`; when they are
+   folded into `connections.*`, the Admin page's section follows. **M4.**
+6. **A registry's login state.** The login is the secret `registry/NAME`, and `registries.check` is the
+   only thing that says whether it fits; `installation.secrets.list` says the name exists, not whether it
+   is the right password. A line in `registries.list` that says the login is kept and last checked would
+   let the page show it without a check. **M4.**
+7. **Settings that are the server's own.** `installation.settings.list` answers `open: false` for the ones
+   only the server's own user sets, and the page shows them read-only. That is the intended split; a
+   sentence per key on what to run (`rookery config set KEY`) rather than only `meaning` would save a
+   reader a lookup. **M4.**

@@ -1,6 +1,7 @@
 // Client-half entry for the Fleet plugin against @rookery/sdk's defineClient contract.
 import { defineClient } from "@rookery/sdk/client"
 import { createSignal } from "solid-js"
+import { AdminView } from "./AdminView"
 import type { HostChangedEvent, HostInfo } from "./api"
 import { DesktopPage } from "./DesktopPage"
 import { type FleetStore, FleetView } from "./FleetView"
@@ -10,6 +11,7 @@ import { HostView } from "./HostView"
 import { JobView } from "./JobView"
 import type { CurrentUser } from "./me"
 import { PortPage } from "./Ports"
+import { ProvisionersPage } from "./ProvisionersPage"
 import "./fleet.css"
 
 export default defineClient(async (rookery) => {
@@ -19,6 +21,7 @@ export default defineClient(async (rookery) => {
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   const [addOpen, setAddOpen] = createSignal(false)
+  const [machineOpen, setMachineOpen] = createSignal(false)
 
   const refresh = async () => {
     setLoading(true)
@@ -38,7 +41,9 @@ export default defineClient(async (rookery) => {
     loading,
     error,
     addOpen,
+    machineOpen,
     setAddOpen,
+    setMachineOpen,
     refresh,
   }
 
@@ -59,6 +64,14 @@ export default defineClient(async (rookery) => {
     <PortPage view={props.view} rookery={rookery} envs={api.env} admin={api.isAdmin()} />
   ))
 
+  rookery.views.register("fleet.provisioners", (props) => (
+    <ProvisionersPage view={props.view} rookery={rookery} api={api} />
+  ))
+
+  rookery.views.register("fleet.admin", (props) => (
+    <AdminView view={props.view} rookery={rookery} api={api} />
+  ))
+
   rookery.commands.register("fleet.hosts", {
     title: "Open Fleet",
     run: () => {
@@ -74,9 +87,46 @@ export default defineClient(async (rookery) => {
     },
   })
 
+  rookery.commands.register("fleet.newMachine", {
+    title: "New machine",
+    run: () => {
+      setMachineOpen(true)
+      rookery.workbench.openView("fleet.hosts")
+    },
+  })
+
+  rookery.commands.register("fleet.provisioners", {
+    title: "Open provisioners",
+    run: () => {
+      rookery.workbench.openView("fleet.provisioners")
+    },
+  })
+
+  rookery.commands.register("fleet.admin", {
+    title: "Open server admin",
+    run: () => {
+      rookery.workbench.openView("fleet.admin")
+    },
+  })
+
   rookery.nav.badge("fleet.hosts", () => {
     const attention = hosts().filter(hostNeedsAttention).length
     return attention > 0 ? attention : undefined
+  })
+
+  // The admin area exists for admins alone: its row in the sidebar shows only while the signed-in person is one.
+  rookery.nav.section("fleet.admin", {
+    items: () =>
+      api.isAdmin()
+        ? [
+            {
+              id: "fleet.admin",
+              title: "Admin",
+              icon: "settings",
+              view: "fleet.admin",
+            },
+          ]
+        : [],
   })
 
   // Best-effort live host updates; falls back cleanly if the server doesn't emit `hosts.changed`.
@@ -106,6 +156,6 @@ export default defineClient(async (rookery) => {
 
   // Initial background load so the sidebar badge reflects hosts needing attention.
   void refresh()
-  // Who is signed in, for the role that holds manage on every host (sharing, the desktop gates).
+  // Who is signed in, for the role that holds manage on every host (sharing, the desktop gates, admin).
   void api.fetchMe().then(setMe)
 })

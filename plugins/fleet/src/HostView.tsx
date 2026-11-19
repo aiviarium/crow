@@ -39,7 +39,10 @@ import {
   profileUserName,
 } from "./format"
 import { PortsCard } from "./Ports"
+import { resourceState } from "./provisionApi"
+import { RunActionDialog } from "./RunAction"
 import { ShareDialog } from "./ShareDialog"
+import type { Action as ResourceAction } from "./types"
 
 export function HostView(props: {
   view: ViewHandle
@@ -61,6 +64,11 @@ export function HostView(props: {
   const [removeOpen, setRemoveOpen] = createSignal(false)
   const [removing, setRemoving] = createSignal(false)
   const [shareOpen, setShareOpen] = createSignal(false)
+  // The machine a provisioner made for this host: what it is, and what its provisioner can do to it.
+  const [machineActions, setMachineActions] = createSignal<ResourceAction[]>([])
+  const [machineAction, setMachineAction] = createSignal<ResourceAction | null>(null)
+  const [destroyOpen, setDestroyOpen] = createSignal(false)
+  const [destroying, setDestroying] = createSignal(false)
   // The host as an environment: its level, state and what it supports (`env.get`). Best effort: a server
   // without `env.*` still shows the M1 host page, without the M3 parts.
   const [env, { refetch: refetchEnv }] = createResource(
@@ -108,6 +116,15 @@ export function HostView(props: {
         setRecentJobs(jobsRes.value.filter((j) => jobMatchesHost(j, name)).slice(0, 8))
       } else {
         setRecentJobs([])
+      }
+      const machine = infoRes.value.machine
+      if (machine?.resource) {
+        void props.api.resources
+          .actions(machine.resource)
+          .then(setMachineActions)
+          .catch(() => setMachineActions([]))
+      } else {
+        setMachineActions([])
       }
     } catch (err) {
       setError(errorMessage(err))
@@ -205,6 +222,27 @@ export function HostView(props: {
       })
     } finally {
       setRemoving(false)
+    }
+  }
+
+  // Deleting the machine is its provisioner's job; the host's profile is what stays.
+  const destroyMachine = async () => {
+    const machine = host()?.machine
+    if (!machine || destroying()) return
+    setDestroying(true)
+    try {
+      const acted = await props.api.resources.remove(machine.resource)
+      setDestroyOpen(false)
+      void load(hostName())
+      if (acted.job) openJob(acted.job)
+    } catch (err) {
+      props.rookery.workbench.toast({
+        kind: "danger",
+        title: `Could not delete the machine of ${hostName()}`,
+        body: errorMessage(err),
+      })
+    } finally {
+      setDestroying(false)
     }
   }
 
@@ -459,6 +497,62 @@ export function HostView(props: {
                 </Card>
               </div>
 
+              <Show when={h().machine}>
+                {(machine) => {
+                  const state = () => resourceState(machine().state)
+                  const started = () =>
+                    machineActions().filter((act) => act.name === "start" || act.name === "stop")
+                  return (
+                    <Card title="Machine" data-part="host-machine">
+                      <PropertyList
+                        items={[
+                          {
+                            id: "machine-state",
+                            label: "State",
+                            value: <State status={state().dot}>{state().label}</State>,
+                          },
+                          {
+                            id: "machine-provisioner",
+                            label: "Provisioner",
+                            value: <span class="mono">{machine().provisioner}</span>,
+                          },
+                          {
+                            id: "machine-external",
+                            label: "Its id there",
+                            value: <span class="mono">{machine().external_id || "Not made yet"}</span>,
+                          },
+                        ]}
+                      />
+                      <div class="fleet-form__row">
+                        <For each={started()}>
+                          {(act) => (
+                            <Button
+                              size="sm"
+                              variant={act.changes ? "secondary" : "ghost"}
+                              disabled={!act.available || !machine().external_id}
+                              title={!act.available ? act.why : undefined}
+                              data-machine-action={act.name}
+                              onClick={() => setMachineAction(act)}
+                            >
+                              {act.label}
+                            </Button>
+                          )}
+                        </For>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          disabled={destroying()}
+                          data-part="destroy-machine"
+                          onClick={() => setDestroyOpen(true)}
+                        >
+                          Delete machine
+                        </Button>
+                      </div>
+                    </Card>
+                  )
+                }}
+              </Show>
+
               <Card title="Actions" count={m1Actions().length} data-part="host-actions">
                 <Show
                   when={groupedActions().length > 0}
@@ -550,6 +644,61 @@ export function HostView(props: {
             openJob(jobId)
           }}
         />
+
+        <RunActionDialog
+          open={machineAction() !== null}
+          action={machineAction()}
+          run={(act) =>
+            act.action === "remove"
+              ? props.api.resources.remove(host()?.machine?.resource ?? "")
+              : props.api.resources.act({
+                  id: host()?.machine?.resource ?? "",
+                  action: act.action,
+                  arguments: act.arguments,
+                })
+          }
+          onClose={() => setMachineAction(null)}
+          onJob={(jobId) => {
+            openJob(jobId)
+            void load(hostName())
+          }}
+          onResult={(text) =>
+            props.rookery.workbench.toast({
+              kind: "info",
+              title: machineAction()?.label ?? "It answered",
+              body: text || "It answered.",
+            })
+          }
+        />
+
+        <Dialog
+          open={destroyOpen()}
+          onClose={() => {
+            if (!destroying()) setDestroyOpen(false)
+          }}
+          title={`Delete the machine of ${hostName()}?`}
+          description="The provisioner destroys the machine and Rookery forgets it. The host's profile stays, and so does its node on a tailnet."
+          footer={
+            <>
+              <Button variant="ghost" disabled={destroying()} onClick={() => setDestroyOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                disabled={destroying()}
+                data-part="confirm-destroy-machine"
+                onClick={() => void destroyMachine()}
+              >
+                {destroying() ? "Deleting…" : "Delete machine"}
+              </Button>
+            </>
+          }
+        >
+          <Callout tone="warning">
+            What is on <span class="mono">{hostName()}</span> is gone. Its profile is kept, so it can be made
+            again.
+          </Callout>
+        </Dialog>
 
         <Dialog
           open={removeOpen()}
