@@ -215,6 +215,19 @@ export interface HostsActResult {
   result?: unknown
 }
 
+export interface HostsDesktopScreenshotParams {
+  host: string
+}
+
+/**
+ * `hosts.desktop.screenshot`: a picture of a workstation's desktop, as a PNG in base64. It is what `view`
+ * sees of a desktop; the live one over `/env/<name>/desktop` needs `use`.
+ */
+export interface HostsDesktopScreenshotResult {
+  base64: string
+  content_type: string
+}
+
 /** Event emitted on topic `hosts.changed` when a host is added, updated, renamed, or removed. */
 export interface HostChangedEvent {
   host: string
@@ -233,6 +246,10 @@ export interface FleetMethods {
   "hosts.check": { params: HostsCheckParams; result: HostsCheckResult }
   "hosts.actions": { params: HostsActionsParams; result: HostsActionsResult }
   "hosts.act": { params: HostsActParams; result: HostsActResult }
+  "hosts.desktop.screenshot": {
+    params: HostsDesktopScreenshotParams
+    result: HostsDesktopScreenshotResult
+  }
 }
 
 export type FleetMethodName = keyof FleetMethods
@@ -251,6 +268,8 @@ export interface HostsApi {
   checkCapability(host: string, capability: HostCapability): Promise<HostCheckResult>
   listActions(host: string): Promise<Action[]>
   act(params: HostsActParams): Promise<HostsActResult>
+  /** A PNG of the host's desktop in base64, which `view` may see. */
+  screenshot(host: string): Promise<HostsDesktopScreenshotResult>
 }
 
 /** Builds a typed hosts API wrapper over a Rookery plugin client handle. */
@@ -294,6 +313,9 @@ export function createHostsApi(rookery: ClientRookery): HostsApi {
     },
     act(params) {
       return call("hosts.act", params)
+    },
+    screenshot(host) {
+      return call("hosts.desktop.screenshot", { host })
     },
   }
 }

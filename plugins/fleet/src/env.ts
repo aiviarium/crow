@@ -1,22 +1,37 @@
 // The hosts the fleet views work with, through `env.*` (a host is an environment, `env://NAME`), and the
-// URL a port on a host is proxied at. Ported from the prototype's `plugins/fleet/lib/{berth,access}.ts`
-// and its client `crow.env`, minus the berth client: Rookery's server opens the host links.
-import type { Checkout, EnvInfo, EnvPresence } from "@rookery/client"
+// two ways a browser reaches a port on a host. Ported from the prototype's
+// `plugins/fleet/lib/{berth,access}.ts` and its client `crow.env`, minus the berth client: Rookery's
+// server opens the host links.
+//
+// rookery#42 settles the addresses: both forms work in params, answers name `env://NAME`, a port is
+// `/env/NAME/port/N/…` on Rookery's origin (which mints a ticket and redirects), or `env.portUrl`'s
+// address on the ports' own origin for one use. `env.checkouts` is deferred on the server, so it is not
+// here.
+import type { EnvPresence } from "@rookery/client"
 import type { ClientRookery } from "@rookery/sdk/client"
+import type { EnvChanged, EnvInfo, FileData, FileWritten, PortUrl } from "./types"
 
 export interface FleetEnvApi {
   list(): Promise<EnvInfo[]>
   get(env: string): Promise<EnvInfo>
   /** Who has terminals running on the host: `view` is enough, and it names nobody's terminal. */
   presence(env: string): Promise<EnvPresence>
-  checkouts(env: string): Promise<Checkout[]>
-  /** `env.changed`: an environment's state or access changed. Returns a function that stops listening. */
-  onChanged(fn: (env: EnvInfo) => void): () => void
-}
-
-/** `env.changed` carries the environment that changed. */
-export interface EnvChanged {
-  environment: EnvInfo
+  /** A file on the host, in base64 with the SHA-256 that is its version. Needs `use`. */
+  readFile(env: string, path: string): Promise<FileData>
+  /**
+   * Writes a file on the host, base64 in, with its new SHA-256 out. With `ifMatch` it writes only while
+   * the file is still at that SHA-256; otherwise the server answers `CONFLICT`. Needs `use`.
+   */
+  writeFile(
+    env: string,
+    path: string,
+    content: string | Uint8Array,
+    opts?: { ifMatch?: string; overwrite?: boolean },
+  ): Promise<FileWritten>
+  /** A one-use address on the ports' own origin for a port of the host. Needs `use`. */
+  portUrl(env: string, port: number, path?: string): Promise<PortUrl>
+  /** `env.changed`: an environment's state or access changed, or it was removed. Returns a function that stops listening. */
+  onChanged(fn: (e: EnvChanged) => void): () => void
 }
 
 /** `dev-01` or `env://dev-01` as the bare name. */
@@ -26,11 +41,22 @@ export const envName = (env: string) => env.replace(/^env:\/\//, "")
 export const envUri = (env: string) => `env://${envName(env)}`
 
 /**
- * Where the server proxies HTTP and WebSocket to a port on a host's loopback:
- * `/env/<name>/port/<n>/<path>`. The browser never needs a route to the host.
+ * Rookery's own route to a port on a host's loopback: `/env/<name>/port/<n>/<path>`. The server checks
+ * `use`, mints a one-use ticket and redirects to the port's origin, so a link here is safe to keep and to
+ * open again. The browser never needs a route to the host.
  */
-export function portUrl(env: string, port: number, path = ""): string {
+export function portPath(env: string, port: number, path = ""): string {
   return `/env/${encodeURIComponent(envName(env))}/port/${port}/${path.replace(/^\//, "")}`
+}
+
+/** Bytes (or text as UTF-8) in base64, for `env.writeFile`. */
+function toBase64(content: string | Uint8Array): string {
+  const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content
+  let binary = ""
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  }
+  return btoa(binary)
 }
 
 export function createFleetEnvApi(rookery: ClientRookery): FleetEnvApi {
@@ -41,17 +67,28 @@ export function createFleetEnvApi(rookery: ClientRookery): FleetEnvApi {
     },
     get: (env) => rookery.rpc.call<EnvInfo>("env.get", { env: envUri(env) }),
     presence: (env) => rookery.rpc.call<EnvPresence>("env.presence", { env: envUri(env) }),
-    checkouts: async (env) => {
-      const res = await rookery.rpc.call<{ checkouts: Checkout[] }>("env.checkouts", { env: envUri(env) })
-      return res.checkouts ?? []
-    },
+    readFile: (env, path) => rookery.rpc.call<FileData>("env.readFile", { env: envUri(env), path }),
+    writeFile: (env, path, content, opts = {}) =>
+      rookery.rpc.call<FileWritten>("env.writeFile", {
+        env: envUri(env),
+        path,
+        base64: toBase64(content),
+        ...(opts.ifMatch ? { ifMatch: opts.ifMatch } : {}),
+        ...(opts.overwrite ? { overwrite: true } : {}),
+      }),
+    portUrl: (env, port, path) =>
+      rookery.rpc.call<PortUrl>("env.portUrl", {
+        env: envUri(env),
+        port,
+        ...(path ? { path } : {}),
+      }),
     onChanged(fn) {
       let off: (() => void) | undefined
       let stopped = false
       void rookery.events
         .subscribe("rookery/env.changed", (payload) => {
           const e = payload as EnvChanged | undefined
-          if (e?.environment) fn(e.environment)
+          if (e?.env) fn(e)
         })
         .then((d) => {
           if (stopped) d.dispose()

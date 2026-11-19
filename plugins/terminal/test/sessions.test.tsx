@@ -1,12 +1,13 @@
 // The terminal session list: the picker, the new-terminal form, the person's terminals with the host's
 // preview, and the host's other sessions. Rendered with fake `terminals.*` and `env.*` answers.
 import { afterEach, describe, expect, test } from "bun:test"
-import type { Checkout, EnvInfo, EnvSession, TerminalInfo } from "@rookery/client"
+import type { EnvInfo } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { render } from "solid-js/web"
 import type { HostsApi } from "../src/hosts"
 import { SessionsView } from "../src/SessionsView"
 import type { TerminalsApi } from "../src/termApi"
+import type { EnvSession, TerminalInfo } from "../src/types"
 
 const cleanup: Array<() => void> = []
 afterEach(() => {
@@ -45,11 +46,13 @@ function terminal(id: string, overrides: Partial<TerminalInfo> = {}): TerminalIn
     env: "env://studio",
     title: "bash on studio",
     command: ["bash", "-l"],
+    user: "agent",
     state: "running",
     size: { cols: 80, rows: 24 },
     viewers: 1,
     offset: 0,
     createdAt: new Date().toISOString(),
+    sessionId: `s-${id}`,
     recording: false,
     level: "use",
     ...overrides,
@@ -88,9 +91,7 @@ function fakes(opts: {
     screen: async () => ({
       size: { cols: 80, rows: 24 },
       lines: [],
-      cursor: { row: 0, col: 0, visible: true },
-      title: "",
-      altScreen: false,
+      cursor: { row: 0, col: 0 },
       offset: 0,
     }),
     onChanged: () => () => {},
@@ -101,7 +102,6 @@ function fakes(opts: {
   const hosts: HostsApi = {
     list: async () => opts.envs,
     get: async (name) => env(name),
-    checkouts: async () => [] as Checkout[],
     onChanged: () => () => {},
   }
   const rookery = {
@@ -133,6 +133,7 @@ describe("SessionsView", () => {
           user: "ops",
           started: new Date().toISOString(),
           lost: false,
+          adopted: false,
           preview: "CPU 1%",
         },
         {
@@ -144,6 +145,7 @@ describe("SessionsView", () => {
           started: new Date().toISOString(),
           lost: false,
           terminal: "term_1",
+          adopted: true,
           preview: "last lines",
         },
       ],
@@ -174,6 +176,69 @@ describe("SessionsView", () => {
     expect(document.body.querySelector("[data-terminal-row] .term-card__preview")?.textContent).toBe(
       "last lines",
     )
+  })
+
+  test("a manager takes over a session the server did not open", async () => {
+    const opened: string[] = []
+    const f = fakes({
+      envs: [env("studio", { level: "manage" })],
+      sessions: [
+        {
+          id: "s-9",
+          kind: "terminal",
+          title: "htop",
+          command: ["htop"],
+          user: "ops",
+          started: new Date().toISOString(),
+          lost: false,
+          adopted: false,
+        },
+      ],
+      opened,
+    })
+    const dispose = render(
+      () => (
+        <SessionsView view={view("studio")} rookery={f.rookery} terminals={f.terminals} hosts={f.hosts} />
+      ),
+      document.body,
+    )
+    cleanup.push(dispose)
+    await settle()
+
+    const button = document.body.querySelector<HTMLButtonElement>("[data-session-row='s-9'] button")
+    expect(button).not.toBeNull()
+    expect(button!.textContent).toContain("Open")
+    button!.click()
+    await settle()
+    expect(opened).toEqual(["terminal.session:term_adopted"])
+  })
+
+  test("a viewer is told that taking a session over needs manage", async () => {
+    const f = fakes({
+      envs: [env("studio", { level: "use" })],
+      sessions: [
+        {
+          id: "s-9",
+          kind: "terminal",
+          title: "htop",
+          command: ["htop"],
+          user: "ops",
+          started: new Date().toISOString(),
+          lost: false,
+          adopted: false,
+        },
+      ],
+    })
+    const dispose = render(
+      () => (
+        <SessionsView view={view("studio")} rookery={f.rookery} terminals={f.terminals} hosts={f.hosts} />
+      ),
+      document.body,
+    )
+    cleanup.push(dispose)
+    await settle()
+    expect(document.body.querySelector("[data-session-row='s-9'] button")).toBeNull()
+    expect(document.body.textContent).toContain("needs manage")
   })
 
   test("says there is no host when the list is empty", async () => {

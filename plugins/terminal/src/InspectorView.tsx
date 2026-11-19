@@ -5,14 +5,14 @@
 // Ported from the prototype's `plugins/terminal/inspector.tsx`, without the labelled TUI tree: TUI trees
 // and screen automation are Parrot's (plans/design.md, the decisions), and no `terminals.*` method here
 // automates a screen. This keeps the part the server does provide: `terminals.screen`.
-import { Badge, Card, EmptyState, StatusDot, StreamState, ViewHeader } from "@aiviarium/nocturne"
-import type { ScreenInfo } from "@rookery/client"
+import { Badge, Card, EmptyState, StreamState, ViewHeader } from "@aiviarium/nocturne"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { Terminal } from "@xterm/xterm"
 import "@xterm/xterm/css/xterm.css"
 import { createSignal, type JSX, onCleanup, onMount, Show } from "solid-js"
 import type { TerminalsApi } from "./termApi"
 import { codeFontSize, monoFont, onThemeChange, xtermTheme } from "./theme"
+import type { ScreenInfo } from "./types"
 
 const POLL_MS = 2000
 
@@ -56,7 +56,7 @@ export function InspectorView(props: {
       setError(undefined)
       if (term.cols !== sc.size.cols || term.rows !== sc.size.rows) term.resize(sc.size.cols, sc.size.rows)
       term.reset()
-      term.write(sc.ansi ?? "")
+      term.write(sc.ansi ?? sc.lines.join("\r\n"))
     } catch (e: any) {
       setLive(false)
       setError(e?.message ?? String(e))
@@ -95,19 +95,14 @@ export function InspectorView(props: {
             <span class="nc-meta term-screen__meta">
               {sc().size.cols}×{sc().size.rows} · line {sc().cursor.row + 1}, column {sc().cursor.col + 1} ·
               offset {sc().offset}
-              <Show when={sc().altScreen}>
+              <Show when={sc().lines.length > sc().size.rows}>
                 {" · "}
-                <Badge tone="outline">alternate screen</Badge>
+                <Badge tone="outline">scrollback</Badge>
               </Show>
             </span>
           )}
         </Show>
       </ViewHeader>
-      <Show when={screen()?.title}>
-        <span class="nc-meta term-screen__title">
-          <StatusDot status={live() ? "live" : "idle"} /> {screen()!.title}
-        </span>
-      </Show>
       <Show when={error()}>
         <p class="body term-screen__error">{error()}</p>
       </Show>

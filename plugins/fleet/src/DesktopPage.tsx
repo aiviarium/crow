@@ -1,20 +1,34 @@
 // A host's desktop in a view of its own (`fleet.desktop`), full size in a frame. Ported from the
 // prototype's `plugins/fleet/views/desktop.tsx`: the same gates, on Rookery's `env.get` and levels.
+//
+// The desktop is a picture below `use` and live from `use` up (rookery#42's levels): `view` gets
+// `hosts.desktop.screenshot`, a PNG of the screen as it is, and the live WebSocket at
+// `/env/NAME/desktop` refuses the upgrade without `use`.
 import { Button, Callout, Card, EmptyState, Skeleton, ViewHeader } from "@aiviarium/nocturne"
-import type { EnvInfo } from "@rookery/client"
 import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { createResource, createSignal, type JSX, Show } from "solid-js"
 import { allows, type Who } from "./access"
+import type { HostsDesktopScreenshotResult } from "./api"
 import { DesktopView } from "./DesktopView"
-import { envName, envUri, type FleetEnvApi } from "./env"
+import { envName, type FleetEnvApi } from "./env"
+import type { EnvInfo } from "./types"
 
-/** The desktop's gates, in the order that says the most: it exists, it has a desktop, you may use it. */
+/** One picture of a host's desktop: the base64 PNG and its type, as `hosts.desktop.screenshot` answers. */
+export interface DesktopPicture {
+  base64: string
+  content_type: string
+}
+
+/** The desktop's gates, in the order that says the most: it exists, it has a desktop, how far you see it. */
 export function DesktopBody(props: {
   name: string
   env: EnvInfo | undefined
   who: Who
   loading?: boolean
   error?: string
+  /** The picture a `view` holder is shown in place of the live desktop. */
+  picture?: DesktopPicture | null
+  pictureLoading?: boolean
   scale?: boolean
   onStateChange?: (state: string, detail?: string) => void
 }): JSX.Element {
@@ -46,10 +60,32 @@ export function DesktopBody(props: {
               <Show
                 when={allows(props.who, "use")}
                 fallback={
-                  <Callout tone="info" data-part="desktop-needs-use">
-                    403 · The live desktop needs use on {name()}; you have {props.who.level ?? "no access"}.
-                    Ask its owner to share it with you.
-                  </Callout>
+                  <Show when={!props.pictureLoading} fallback={<Skeleton height="320px" />}>
+                    <Show
+                      when={props.picture}
+                      fallback={
+                        <Callout tone="info" data-part="desktop-needs-use">
+                          403 · The live desktop needs use on {name()}; you have{" "}
+                          {props.who.level ?? "no access"}. Ask its owner to share it with you.
+                        </Callout>
+                      }
+                    >
+                      {(picture) => (
+                        <>
+                          <img
+                            class="fleet-desktop__picture"
+                            data-part="desktop-picture"
+                            alt={`The desktop of ${name()}`}
+                            src={`data:${picture().content_type};base64,${picture().base64}`}
+                          />
+                          <span class="nc-meta" data-part="desktop-picture-note">
+                            A picture of the desktop. Watching it live needs use on {name()}; you have{" "}
+                            {props.who.level ?? "no access"}.
+                          </span>
+                        </>
+                      )}
+                    </Show>
+                  </Show>
                 }
               >
                 <Show
@@ -85,16 +121,27 @@ export function DesktopPage(props: {
   admin: boolean
   /** The host from the view's path: `env://NAME` or `NAME`. */
   host?: string
+  /** `hosts.desktop.screenshot`, for the picture a `view` holder sees. */
+  screenshot?: (host: string) => Promise<HostsDesktopScreenshotResult>
 }): JSX.Element {
   const name = () => envName(props.host ?? props.view.path)
   props.view.setTitle(`Desktop of ${name()}`)
   // Best effort: a server without `env.*` still opens the page and says the host is not available.
   const [envs, { refetch }] = createResource<EnvInfo | undefined>(() =>
-    props.envs.get(envUri(name())).catch(() => undefined),
+    props.envs.get(name()).catch(() => undefined),
   )
   const who = (): Who => ({ level: envs()?.level, admin: props.admin })
   const [state, setState] = createSignal<string>("connecting")
   const fleetHref = () => props.rookery.views.href("fleet.host", { path: name() }) ?? `/hosts/${name()}`
+  // Of a desktop, `view` sees the picture, so it is asked for once there is a desktop the caller may not
+  // use. Its refusal leaves the 403 sentence, which is what a host with no picture to take says.
+  const [picture, { refetch: refetchPicture }] = createResource<DesktopPicture | undefined, [string, string]>(
+    () =>
+      envs()?.supports.desktop && !allows(who(), "use")
+        ? ([name(), "picture"] as [string, string])
+        : undefined,
+    ([host]) => props.screenshot?.(host).catch(() => undefined),
+  )
   return (
     <div class="fleet fleet-desktop-page" data-part="desktop-page">
       <ViewHeader
@@ -119,7 +166,10 @@ export function DesktopPage(props: {
             id: "refresh",
             label: "Reconnect",
             icon: "refresh-cw",
-            onClick: () => void refetch(),
+            onClick: () => {
+              void refetch()
+              void refetchPicture()
+            },
           },
         ]}
       />
@@ -134,6 +184,8 @@ export function DesktopPage(props: {
           env={envs()}
           who={who()}
           loading={envs.loading && !envs()}
+          picture={picture()}
+          pictureLoading={picture.loading && !picture()}
           onStateChange={(s) => setState(s)}
         />
       </Card>

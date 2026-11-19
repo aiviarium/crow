@@ -1,92 +1,84 @@
 # Terminal M3 API Contract
 
-Everything `crow/plugins/terminal` calls on Rookery, and nothing else. The server half of M3 (terminals
-passed through to `rookeryd` on binary channels) does not exist yet: this file is what the terminal plugin
-is written against, so the server agent can implement exactly that.
+Everything `crow/plugins/terminal` calls on Rookery, and nothing else. The server half is rookery#42
+(`feat/connect`): terminals passed through to `rookeryd` on binary channels, `env.*` over the saved
+hosts, and two event topics. This file is what the plugin is written against, and the answers below are
+the server's.
 
-Most names here are not invented. The wire types are already in `@rookery/client`'s generated types
-(`client/src/generated/Terminal*.ts`, `EnvSession*.ts`, `Screen*.ts`), generated from `rookery-proto`'s
-`wire!` structs; the streaming shape comes from the prototype's `crow_proto::terminals` and its client
-(`sdk/src/client/terminals.ts`). Provenance per row: **[adopted]** means a name and shape that exist in
-Rookery's generated types today, **[prototype]** means the prototype had it but Rookery's types do not,
-**[new]** means this plugin needs it and neither had it. The payload of an event topic is where
-**[prototype]** mostly lands.
+A terminal is private to the person who opened it: `view` on a host sees only `env.presence` counts,
+never another person's terminal, screen or preview. `readonly` is not a level — it is an option of a
+`use` or `manage` caller watching a terminal it may already attach to.
 
-Levels are from `plans/design.md` ("Levels on a host"): `view` ⊂ `use` ⊂ `manage` on `env://NAME`, or the
-org role `admin`. A terminal is private to the person who opened it (see `env.presence`); a `view` holder
-attaches read-only, which is the only way they see someone else's terminal, and only if the server allows
-it. Hosts are addressed as `env://NAME` in every `env.*` and `terminals.*` call.
+Hosts are `env://NAME` in every `env.*` and `terminals.*` call. The server also takes the bare name, and
+always answers `env://NAME` (`EnvInfo.uri`, `TerminalInfo.env`). This plugin sends the URI form
+everywhere.
 
 ## RPC methods
 
-| Method               | Params                                                                                             | Result                          | Level             | Notes                                                                                                                                                                                                                                                      |
-| -------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `terminals.open`     | `TerminalOpen` (`{ env, command?, cwd?, title?, vars?, size?: TermSize, user?, record?, space? }`) | `TerminalInfo`                  | `use` on the host | Starts a session on the host. Default command: the user's login shell. **[adopted]**                                                                                                                                                                       |
-| `terminals.get`      | `{ id: string }`                                                                                   | `TerminalInfo`                  | `view`            | One terminal. **[adopted]**                                                                                                                                                                                                                                |
-| `terminals.list`     | `TerminalQuery` (`{ env?, ended?: boolean }`)                                                      | `{ terminals: TerminalInfo[] }` | `view`            | The caller's terminals, newest first. `ended` includes the last 50 that ended. **[adopted]**                                                                                                                                                               |
-| `terminals.close`    | `{ id: string }`                                                                                   | `{}`                            | `use`             | Ends the session (SIGHUP, then a signal the host documents). **[adopted]**                                                                                                                                                                                 |
-| `terminals.rename`   | `{ id, title }`                                                                                    | `{}`                            | `use`             | The title is the viewer's label; the host's title can replace it again. **[adopted]**                                                                                                                                                                      |
-| `terminals.signal`   | `{ id, signal: string }`                                                                           | `{}`                            | `use`             | A signal by name (`TERM`, `INT`, `KILL`). **[adopted]**, not called by the views yet                                                                                                                                                                       |
-| `terminals.write`    | `{ id, text?: string, base64?: string }`                                                           | `{}`                            | `use`             | Input for a terminal no viewer is attached to (automation). **[adopted]**, not called by the views                                                                                                                                                         |
-| `terminals.input`    | `{ id, input: TermInput[] }`                                                                       | `{}`                            | `use`             | Semantic input (`key`, `text`, `paste`). **[adopted]**, not called by the views                                                                                                                                                                            |
-| `terminals.resize`   | `{ id, size: TermSize }`                                                                           | `{}`                            | `use`             | Sets the size as an active viewer would, for automation. A viewer sends `resize` on its attach stream instead. **[adopted]**, not called by the views                                                                                                      |
-| `terminals.screen`   | `ScreenQuery` (`{ id, history?, ansi? }`)                                                          | `ScreenInfo`                    | `view`            | The screen as the host keeps it: rows, cursor, title, alternate screen, offset, and `ansi` for rendering it. **[prototype]**, pending: decision 2 names `TerminalInfo` for the server but not the screen types, so `terminals.screen` is not yet promised. |
-| `terminals.sessions` | `EnvSessionQuery` (`{ env, preview? }`)                                                            | `{ sessions: EnvSession[] }`    | `view`            | Sessions on the host that are not Rookery terminals yet, so `terminals.adopt` can take one over. `preview` is the last lines of its screen. **[adopted]**                                                                                                  |
-| `terminals.adopt`    | `TerminalAdopt` (`{ env, session }`)                                                               | `TerminalInfo`                  | `use`             | Makes an existing host session a Rookery terminal. Fails `CONFLICT` when another terminal holds it. **[adopted]**                                                                                                                                          |
-| `env.list`           | `{}`                                                                                               | `{ environments: EnvInfo[] }`   | `view`            | The host picker, and each host's `supports` and the caller's `level`. **[adopted]**                                                                                                                                                                        |
-| `env.get`            | `{ env: string }`                                                                                  | `EnvInfo`                       | `view`            | One host's state and `supports` (the sessions view shows why a picker entry is offline). **[adopted]**                                                                                                                                                     |
-| `env.checkouts`      | `{ env: string }`                                                                                  | `{ checkouts: Checkout[] }`     | `use`             | Used only to suggest a directory in the new-terminal form; a refusal leaves the form as it is. **[adopted]**                                                                                                                                               |
+| Method               | Params                                                                  | Result                          | Level                  | Notes                                                                                                                                               |
+| -------------------- | ----------------------------------------------------------------------- | ------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `terminals.open`     | `TerminalOpen` (`{ env, command?, cwd?, title?, vars?, size?, user? }`) | `TerminalInfo`                  | `use` on the host      | Starts a session on the host. Default command: the login shell. `operator` and `root` need manage.                                                  |
+| `terminals.get`      | `{ id: string }`                                                        | `TerminalInfo`                  | `view` on the terminal | The caller's own, or one on a host they manage.                                                                                                     |
+| `terminals.list`     | `TerminalQuery` (`{ env?, ended?, all? }`)                              | `{ terminals: TerminalInfo[] }` | self                   | The caller's terminals, running first and newest first; `ended` adds the last 50 that ended; `all` adds other people's on hosts the caller manages. |
+| `terminals.close`    | `{ id: string }`                                                        | `{}`                            | `use` on the terminal  | Ends the session and forgets its record.                                                                                                            |
+| `terminals.rename`   | `{ id, title }`                                                         | `{}`                            | `use` on the terminal  | The title is the viewer's label; the host's title can replace it again.                                                                             |
+| `terminals.signal`   | `{ id, signal: string }`                                                | `{}`                            | `use` on the terminal  | `INT`, `TERM`, `HUP` or `KILL`, with or without `SIG`. Not called by the views.                                                                     |
+| `terminals.write`    | `{ id, text?: string, base64?: string }`                                | `{}`                            | `use` on the terminal  | Input for a terminal no viewer is attached to (automation). Not called by the views.                                                                |
+| `terminals.resize`   | `{ id, size: TermSize }`                                                | `{}`                            | `use` on the terminal  | Sets the size as an active viewer would, for automation. A viewer sends `resize` on its attach stream instead. Not called by the views.             |
+| `terminals.screen`   | `ScreenQuery` (`{ id, history?, ansi? }`)                               | `ScreenInfo`                    | `use` on the terminal  | The screen as the host keeps it: `size`, `lines`, `cursor`, `offset`, and `ansi` for rendering it elsewhere. `history` puts scrollback lines first. |
+| `terminals.sessions` | `EnvSessionQuery` (`{ env, preview? }`)                                 | `{ sessions: EnvSession[] }`    | `view` on the host     | Every session on the host, each with `adopted` and the `terminal` when the caller may see it. Previews are for a manager and a terminal's owner.    |
+| `terminals.adopt`    | `TerminalAdopt` (`{ env, session }`)                                    | `TerminalInfo`                  | `manage` on the host   | Makes an existing host session a terminal of the caller's. `CONFLICT` when another terminal holds it.                                               |
+| `env.list`           | `{}`                                                                    | `{ environments: EnvInfo[] }`   | self                   | The host picker, and each host's `supports` and the caller's `level`.                                                                               |
+| `env.get`            | `{ env: string }`                                                       | `EnvInfo`                       | `view` on the host     | One host's state and `supports` (the picker shows why an entry is offline).                                                                         |
 
-`TerminalInfo` carries the caller's `level` and `sessionId` (the host's own session id, which is how
-`terminals.sessions` entries are told apart from ones already adopted) and `lastInput` (`InputInfo`, who
-last typed into it). Both are in the generated types and both are shown in the sessions list.
+`terminals.open` returns the terminal and nothing else: the bytes come from `terminals.attach` below.
+The design's one-call `{ terminal, channel }` sketch is dropped by the server, and this plugin never used
+it.
 
-### `terminals.open` returns the terminal, not a channel
+`env.checkouts` and `env.clone` are deferred on the server (M5 and later), so the new-terminal form takes
+a typed directory instead of suggesting one. `terminals.input` (`TermInput[]`) is not on the server:
+`terminals.write` is what automation uses.
 
-`plans/design.md` sketches `terminals.open` answering `{ "terminal": "term_…", "channel": 4 }`, with the
-bytes on the channel it names. This plugin does not use that shape: it opens with `terminals.open` and then
-attaches with `terminals.attach`, which is what the adopted `TerminalOpen`/`TerminalAttached` types and the
-prototype's client do. It also makes re-attach, the size rule and `readonly` attachments the same code path
-as a fresh view. **[new]** as a decision: if the server keeps the one-call shape, `TerminalAttached` has to
-come off the wire, because it is where `mode`, `offset`, `snapshot`, `viewer` and `readonly` live.
+`TerminalInfo` carries the caller's `level` (`use` for one's own, `manage` for another's on a host one
+manages), `user` (the account it runs as), `size`, `viewers`, `offset`, and `sessionId` (always set: the
+host's session id, which is how a `terminals.sessions` entry is matched to its terminal) with `lastInput`
+(`InputInfo`, who last typed into it). Both are in the generated types and both are shown in the sessions
+list.
 
 ## Binary streams
 
 ### `terminals.attach`
 
-Opens a binary stream channel: the result is a `StreamOpened` **with `TerminalAttached` merged in**
-(`{ stream, mode, offset, snapshot, size, viewer, readonly, info }`), the way `jobs.follow` sends
-`{ stream }` and then NDJSON. The stream is duplex: output comes back, input and size controls go out.
-**[adopted]** shape, **[prototype]** framing.
+Opens a binary stream channel: the result is a `TerminalAttached` (`{ stream, mode, offset, snapshot,
+size, viewer, readonly, info }`). The stream is duplex: output comes back, input and size controls go out.
+(The transport itself is `@rookery/client`'s: a 4-byte big-endian stream id, then this frame; credit is
+`streams.credit`.)
 
-Frame layout, both directions: one type byte, then the body. (The transport itself is
-`@rookery/client`'s: a 4-byte big-endian stream id, then this frame; credit is `streams.credit`.)
+Frame layout, both directions: one type byte, then the body.
 
-| Type | Direction     | Body                                                                                                                                                          | Meaning                                                                                                                                                                                           |
-| ---- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`  | server→client | raw output bytes                                                                                                                                              | Counted in the terminal's output `offset`: the resume cursor.                                                                                                                                     |
-| `0`  | client→server | raw input bytes                                                                                                                                               | Exactly what the viewer typed. The server credits these bytes (`streams.credit`), or the viewer stalls after 256 KiB.                                                                             |
-| `1`  | server→client | JSON `TerminalEvent`: `{type:"size",cols,rows,active?}`, `{type:"title",title}`, `{type:"state",state,exitCode?}`, `{type:"viewers",count}`, `{type:"ready"}` | A change to show in the header or apply to xterm.js's size. **[adopted]** `TerminalEvent`.                                                                                                        |
-| `1`  | client→server | JSON `{type:"resize",cols,rows}` or `{type:"active"}`                                                                                                         | The size rule: this viewer fits `cols`×`rows`; this viewer is being used, so the size follows it. **[prototype]**, **[new]** as wire types (the generated `TerminalEvent` is server→client only). |
-| `2`  | server→client | snapshot bytes                                                                                                                                                | The screen the server replays. Shown, **not** counted in `offset`.                                                                                                                                |
+| Type | Direction     | Body                                                                                                                                                          | Meaning                                                                                                               |
+| ---- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `0`  | server→client | raw output bytes                                                                                                                                              | Counted in the terminal's output `offset`: the resume cursor.                                                         |
+| `0`  | client→server | raw input bytes                                                                                                                                               | Exactly what the viewer typed. The server credits these bytes (`streams.credit`), or the viewer stalls after 256 KiB. |
+| `1`  | server→client | JSON `TerminalEvent`: `{type:"size",cols,rows,active?}`, `{type:"title",title}`, `{type:"state",state,exitCode?}`, `{type:"viewers",count}`, `{type:"ready"}` | A change to show in the header or apply to xterm.js's size.                                                           |
+| `1`  | client→server | JSON `AttachControl`: `{type:"resize",cols,rows}` or `{type:"active"}`                                                                                        | The size rule: this viewer fits `cols`×`rows`; this viewer is being used, so the size follows it.                     |
+| `2`  | server→client | snapshot bytes                                                                                                                                                | The screen the server replays. Shown, **not** counted in `offset`.                                                    |
 
 `TerminalAttached`'s fields, as this client reads them: `mode` is `snapshot` (the viewer's `after` is
 behind what the server kept, so it clears the display and draws a fresh screen first) or `resume` (output
-continues from `after`); `offset` is the output offset the first type-`0` frame starts at; `snapshot` is how
-many type-`2` bytes come before that; `size` is the session's size now and `viewer` this viewer's id, to
-compare with a `size` event's `active`; `readonly` says the server refused input; `info` is the
-`TerminalInfo` at attach time. **[new]** as an explicit reading: the generated types document each field,
-but not the order of the frames, which this client takes from the prototype.
+continues from `after`); `offset` is the output offset the first type-`0` frame starts at; `snapshot` is
+how many type-`2` bytes come before that; `size` is the session's size now and `viewer` this viewer's id,
+to compare with a `size` event's `active`; `readonly` says the server ignored this viewer's input; `info`
+is the `TerminalInfo` at attach time. A `ready` event ends the replay.
 
 Attach parameters:
 
-| Field      | Meaning                                                                                                                                                            |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `id`       | The terminal. **[adopted]** (`TerminalAttach.id`; Rookery's SDK stub at `sdk/src/client/api.ts` says `terminal` instead — this plugin follows the generated type). |
-| `after`    | Resume after this output offset. Omitted on the first attach. **[adopted]**                                                                                        |
-| `size`     | The viewer's size, for the size rule. **[adopted]**                                                                                                                |
-| `readonly` | Watch only: input is refused. A caller with only `view` always attaches this way. **[adopted]**                                                                    |
-| `to`       | `"caller"`, for a plugin opening the stream on someone else's connection. Not used by Crow. **[adopted]**                                                          |
+| Field      | Meaning                                                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `id`       | The terminal.                                                                                                             |
+| `after`    | Resume after this output offset. Omitted on the first attach.                                                             |
+| `size`     | The viewer's size, for the size rule.                                                                                     |
+| `readonly` | Watch only: input and size controls are ignored. An option of a caller that may attach at all; there is no `view` attach. |
 
 Behaviour the client expects:
 
@@ -94,60 +86,39 @@ Behaviour the client expects:
   ends it (state `error`) and is not retried; anything else is retried with backoff (250 ms doubling to
   5 s), and the retry passes through `Connection.call`'s wait for the socket, so it recovers from a socket
   drop as well.
-- Input frames must arrive **in order**. The prototype's notes record unordered input frames against
-  berth 0.6 (`plans/design.md`, "Things to check"); `rookeryd`'s behaviour is unverified, and getting this
-  wrong reorders keystrokes.
+- The server resumes when the host still keeps that output and it is at most 1 MiB behind; otherwise it
+  answers `mode: "snapshot"` and the viewer clears its display.
+- Input frames must arrive **in order**. The server forwards them on one host WebSocket per viewer.
 - `state` events (`exited`, `lost`) end the viewer; `lost` means the host's session service restarted under
   the session. The client shows `lost` with its own note.
+- Every `terminals.*` method that takes an `id` declares a level on `terminal://ID`, which the server
+  computes: `manage` for whoever manages the host, `use` for its owner while they still hold `use` on the
+  host, and nothing for anyone else. A `view` holder on the host therefore gets `FORBIDDEN`, not a
+  read-only attachment.
 
 ## Event topics
 
-| Topic                       | Payload                      | Notes                                                                                                                                                                                                                                                         |
-| --------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rookery/terminals.changed` | `{ terminal: TerminalInfo }` | A terminal's title, state or viewers changed; refreshes the sessions list. **[prototype]**: the prototype had `terminals.changed` as a notification, Rookery has no `TerminalChanged` wire type yet, so this is a `events.subscribe` topic with that payload. |
-| `rookery/env.changed`       | `{ environment: EnvInfo }`   | A host's state or access changed; refreshes the picker and the "offline" note. **[prototype]** for the same reason.                                                                                                                                           |
+| Topic                       | Payload                                          | Notes                                                                                                                                                             |
+| --------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rookery/terminals.changed` | `TerminalChanged` (`{ terminal }`)               | A terminal's title, state, size or viewers changed. Built per subscriber, with that subscriber's `level`. Refreshes the sessions list.                            |
+| `rookery/env.changed`       | `EnvChanged` (`{ env, environment?, removed? }`) | A host's state, type or access changed, or it was removed. `environment` is as `env.get` gives it to the subscriber. Refreshes the picker and the "offline" note. |
 
 Both are best effort in the client: a server that does not publish them leaves the views on their 5-second
-poll.
+poll. `env.changed` is sent with `hosts.changed` (save, rename, remove), not on reachability, so the picker
+keeps its poll for online/offline.
 
 ## Types
 
 From `@rookery/client` (generated, do not re-declare):
 
-- `TermSize` `{ cols, rows }`, `TerminalState` `"running" | "exited" | "lost"`, `AttachMode`
-  `"snapshot" | "resume"`, `EnvUser` `"agent" | "operator" | "root"`.
-- `TerminalInfo` `{ id, uri, env, title, command, cwd?, owner?, state, exitCode?, size, viewers, offset,
-  createdAt, sessionId?, recording, level?, lastInput? }`.
-- `TerminalAttached`, `TerminalEvent`, `TerminalOpen`, `TerminalAttach`, `TerminalList`, `TerminalQuery`,
-  `TerminalRef`, `TerminalRecord`, `TerminalRename`, `TerminalResize`, `TerminalSignal`, `TerminalWrite`,
-  `TerminalInput`, `TermInput`, `TerminalAdopt`.
-- `EnvInfo`, `EnvList`, `EnvSession`, `EnvSessionList`, `EnvSessionQuery`, `EnvSupports`, `Checkout`,
-  `CheckoutList`, `ScreenInfo`, `ScreenQuery`, `CursorInfo`, `InputInfo`, `StreamOpened`.
+- `EnvInfo`, `EnvSupports`, `EnvSessionQuery`, `EnvPresence`, `StreamOpened`, `Grant`.
 
-What the plugin declares itself, in `src/termApi.ts`: the type byte constants (`0`, `1`, `2`), the
-client→server control type `AttachControl`, and `TerminalChanged`.
+Copied into [`src/types.ts`](./src/types.ts), each marked with where it came from, because Crow pins
+Rookery at main, which still has the prototype's shapes:
 
-`TerminalInfo` is the name the server takes in M3 (decision 2: the server keeps terminal records with
-levels, viewers and offsets). `ScreenInfo`, `ScreenQuery` and `CursorInfo` are not: they are prototype
-types with no decision behind them yet, so `terminals.screen` is marked pending in `API.md`'s table above
-and the inspector shows the method's error instead of a screen when it is missing.
+- `TermSize`, `TerminalState`, `AttachMode`, `EnvUser`, `InputInfo`, `TerminalInfo`, `TerminalOpen`,
+  `TerminalAttach`, `TerminalAttached`, `TerminalEvent`, `TerminalQuery`, `TerminalChanged`, `EnvSession`,
+  `ScreenInfo`, `CursorInfo`.
 
-## Open questions
-
-1. **The frame type byte.** Is it the prototype's one-byte tag, or should output be raw and events a
-   separate channel? This client implements the tag, because that is what the prototype's client and
-   server did, and because it keeps events and bytes on one ordered stream.
-2. **`snapshot` vs `offset`.** The reading above (snapshot frames uncounted, `offset` where output starts)
-   is the only one that makes resume safe; the server agent should confirm it rather than pick the other
-   one.
-3. **Who may attach read-only.** A terminal is private to its owner, so a `view` holder attaching
-   `readonly` to someone else's terminal may be a refusal instead. If it is, `attach` should answer
-   `FORBIDDEN`, and the sessions list should keep hiding other people's terminals except through
-   `env.presence` counts.
-4. **`open`'s one-call shape** (see above): `{ terminal, channel }` from `plans/design.md`, or the
-   two-step `open` then `attach` this plugin is written against.
-5. **Where `sessionId` comes from.** The sessions list matches `terminals.sessions` entries to terminals by
-   `TerminalInfo.sessionId`. If the server does not keep it, "other sessions" shows sessions that are
-   already adopted as terminals too.
-6. **`terminals.signal`'s names.** Not called by the views; if automation uses it, the accepted names need
-   fixing (POSIX names, without `SIG`).
+What the plugin declares itself, in `src/termApi.ts`: the type byte constants (`0`, `1`, `2`) and
+`AttachControl`. Each copied type is replaced by an `@rookery/client` import after the repin.

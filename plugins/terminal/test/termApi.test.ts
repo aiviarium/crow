@@ -1,9 +1,10 @@
-// The attach stream: frames, resume from the byte offset, the size rule's controls, and the states a
-// viewer shows. A fake `streams.open` stands in for the server; nothing here touches a socket.
+// The attach stream: two-step open and attach, frames, resume from the byte offset, the size rule's
+// controls, read only viewers, a refusal, and the states a viewer shows. A fake `streams.open` stands in
+// for the server; nothing here touches a socket.
 import { describe, expect, test } from "bun:test"
-import type { TerminalAttached, TerminalInfo, TermSize } from "@rookery/client"
 import type { ClientRookery, ClientStream } from "@rookery/sdk/client"
-import { TerminalConnection } from "../src/termApi"
+import { createTerminalsApi, TerminalConnection } from "../src/termApi"
+import type { TerminalAttached, TerminalInfo, TermSize } from "../src/types"
 
 const encoder = new TextEncoder()
 
@@ -49,11 +50,13 @@ function info(overrides: Partial<TerminalInfo> = {}): TerminalInfo {
     env: "env://studio",
     title: "bash",
     command: ["bash", "-l"],
+    user: "agent",
     state: "running",
     size: { cols: 80, rows: 24 },
     viewers: 1,
     offset: 0,
     createdAt: new Date().toISOString(),
+    sessionId: "s-1",
     recording: false,
     ...overrides,
   }
@@ -71,11 +74,6 @@ function attached(overrides: Partial<TerminalAttached> = {}): TerminalAttached {
     info: info(),
     ...overrides,
   }
-}
-
-interface Opened {
-  method: string
-  params: Record<string, unknown>
 }
 
 function fakeRookery(
@@ -97,7 +95,7 @@ function fakeRookery(
 
 describe("TerminalConnection", () => {
   test("renders a snapshot, then output, and follows the events", async () => {
-    const opened: Opened[] = []
+    const opened: Array<{ method: string; params: Record<string, unknown> }> = []
     let stream!: FakeStream
     const rookery = fakeRookery(async (method, params) => {
       opened.push({ method, params })
@@ -123,7 +121,8 @@ describe("TerminalConnection", () => {
 
     expect(opened).toHaveLength(1)
     expect(opened[0]!.method).toBe("terminals.attach")
-    expect(opened[0]!.params).toEqual({ id: "term_1", size, readonly: false })
+    // `id`, not `terminal`; `readonly` is left out unless the viewer asks to watch only.
+    expect(opened[0]!.params).toEqual({ id: "term_1", size })
     // A snapshot attach clears the display before any byte is shown.
     expect(resets).toBe(1)
     expect(conn.state()).toBe("connecting")
@@ -155,7 +154,7 @@ describe("TerminalConnection", () => {
   })
 
   test("resumes from the last byte after the stream drops", async () => {
-    const opened: Opened[] = []
+    const opened: Array<{ method: string; params: Record<string, unknown> }> = []
     const streams: FakeStream[] = []
     const rookery = fakeRookery(async (method, params) => {
       opened.push({ method, params })
@@ -166,7 +165,7 @@ describe("TerminalConnection", () => {
 
     const conn = new TerminalConnection(rookery, "term_1", { onData: () => {} })
     await settle()
-    expect(opened[0]!.params).toEqual({ id: "term_1", readonly: false })
+    expect(opened[0]!.params).toEqual({ id: "term_1" })
     expect(conn.offset()).toBe(10)
 
     streams[0]!.push(0, "abc")
@@ -176,6 +175,7 @@ describe("TerminalConnection", () => {
 
     await Bun.sleep(300)
     expect(opened).toHaveLength(2)
+    // The re-attach asks for the output after the last byte it saw.
     expect(opened[1]!.params.after).toBe(13)
     expect(conn.state()).toBe("live")
     expect(conn.attaches()).toBe(2)
@@ -196,6 +196,20 @@ describe("TerminalConnection", () => {
     conn.dispose()
   })
 
+  test("a refusal is not retried: view holds no terminal to attach", async () => {
+    let attempts = 0
+    const rookery = fakeRookery(async () => {
+      attempts++
+      throw Object.assign(new Error("env://studio is view only"), { code: "FORBIDDEN" })
+    })
+    const conn = new TerminalConnection(rookery, "term_theirs", { onData: () => {} })
+    await settle()
+    await Bun.sleep(300)
+    expect(attempts).toBe(1)
+    expect(conn.state()).toBe("error")
+    conn.dispose()
+  })
+
   test("sends input and the size rule's controls, and nothing when read only", async () => {
     const streams: FakeStream[] = []
     const rookery = fakeRookery(async () => {
@@ -207,6 +221,7 @@ describe("TerminalConnection", () => {
     const conn = new TerminalConnection(rookery, "term_1", { onData: () => {} }, { readonly: true })
     await settle()
     const stream = streams[0]!
+    expect(conn.readonly()).toBe(true)
 
     conn.write("ls\n")
     expect(stream.written).toHaveLength(0)
@@ -236,5 +251,61 @@ describe("TerminalConnection", () => {
 
     conn.dispose()
     writable.dispose()
+  })
+})
+
+describe("terminals.*", () => {
+  test("open returns the terminal, and attach is a second call on its id", async () => {
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const rookery = {
+      rpc: {
+        call: async (method: string, params: Record<string, unknown>) => {
+          calls.push({ method, params })
+          return info({ id: "term_9" })
+        },
+      },
+      streams: {
+        open: async () => new FakeStream(attached({ info: info({ id: "term_9" }) })),
+      },
+      events: { subscribe: async () => ({ dispose() {} }) },
+    } as unknown as ClientRookery
+    const terminals = createTerminalsApi(rookery)
+
+    const opened = await terminals.open("studio", { cwd: "/srv", size: { cols: 80, rows: 24 } })
+    expect(opened.id).toBe("term_9")
+    expect(calls[0]).toEqual({
+      method: "terminals.open",
+      params: { env: "env://studio", cwd: "/srv", size: { cols: 80, rows: 24 } },
+    })
+
+    const conn = terminals.connect(opened.id, { onData: () => {} })
+    await settle()
+    expect(conn.info()?.id).toBe("term_9")
+    conn.dispose()
+  })
+
+  test("list, sessions and adopt name the host as env://NAME", async () => {
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    const rookery = {
+      rpc: {
+        call: async (method: string, params: Record<string, unknown>) => {
+          calls.push({ method, params })
+          if (method === "terminals.list") return { terminals: [] }
+          if (method === "terminals.sessions") return { sessions: [] }
+          return info()
+        },
+      },
+    } as unknown as ClientRookery
+    const terminals = createTerminalsApi(rookery)
+
+    await terminals.list({ env: "env://studio", ended: true })
+    await terminals.sessions("studio", { preview: true })
+    await terminals.adopt("studio", "s-1")
+
+    expect(calls).toEqual([
+      { method: "terminals.list", params: { env: "env://studio", ended: true } },
+      { method: "terminals.sessions", params: { env: "env://studio", preview: true } },
+      { method: "terminals.adopt", params: { env: "env://studio", session: "s-1" } },
+    ])
   })
 })

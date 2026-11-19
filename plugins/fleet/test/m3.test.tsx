@@ -1,14 +1,16 @@
-// The M3 host parts: port links through the server's proxy, sharing a host with grants, and the gates on a
-// host's desktop. Rendered with fakes; nothing here opens a socket or a VNC connection.
+// The M3 host parts: port links and the addresses `env.portUrl` gives, a desktop's picture at view,
+// files with their SHA-256 and the conflict a stale `ifMatch` is, and sharing a host with grants.
+// Rendered with fakes; nothing here opens a socket or a VNC connection.
 import { afterEach, describe, expect, test } from "bun:test"
-import type { EnvInfo, GrantInfo } from "@rookery/client"
-import type { ClientRookery } from "@rookery/sdk/client"
+import type { GrantInfo } from "@rookery/client"
+import type { ClientRookery, ViewHandle } from "@rookery/sdk/client"
 import { render } from "solid-js/web"
 import { allows, explain, why } from "../src/access"
-import { DesktopBody } from "../src/DesktopPage"
-import { envName, envUri, portUrl } from "../src/env"
-import { PortsCard, portFromPath } from "../src/Ports"
+import { DesktopBody, DesktopPage } from "../src/DesktopPage"
+import { createFleetEnvApi, envName, envUri, type FleetEnvApi, portPath } from "../src/env"
+import { PortPage, PortsCard, portFromPath } from "../src/Ports"
 import { ShareDialog } from "../src/ShareDialog"
+import type { EnvInfo } from "../src/types"
 
 const cleanup: Array<() => void> = []
 afterEach(() => {
@@ -53,6 +55,7 @@ interface Call {
   params: Record<string, unknown>
 }
 
+/** The RPC answers the M3 views ask for, recorded so a test can read what was sent. */
 function fakeRookery(opts: {
   me?: { id: string; name: string; admin: boolean } | null
   users?: Array<{ id: string; name: string; email?: string; admin: boolean; disabled: boolean }>
@@ -61,6 +64,9 @@ function fakeRookery(opts: {
   forbidGrants?: boolean
   calls?: Call[]
   opened?: string[]
+  envs?: EnvInfo[]
+  ticket?: string
+  file?: { base64: string; sha256: string }
 }): ClientRookery {
   const grants = [...(opts.grants ?? [])]
   return {
@@ -81,6 +87,29 @@ function fakeRookery(opts: {
             return { users: opts.users ?? [] }
           case "admin.groups":
             return { groups: [] }
+          case "env.list":
+            return { environments: opts.envs ?? [] }
+          case "env.get": {
+            const name = envName(String(params.env))
+            return (opts.envs ?? []).find((e) => e.name === name) ?? env(name)
+          }
+          case "env.presence":
+            return { users: [] }
+          case "env.portUrl":
+            return {
+              url: `${opts.ticket ?? "https://5173-port.example.test/.rookery/claim?ticket=t"}`,
+              origin: "https://5173-port.example.test",
+            }
+          case "env.readFile":
+            return { base64: opts.file?.base64 ?? "", size: 4, sha256: opts.file?.sha256 ?? "abc" }
+          case "env.writeFile": {
+            // A stale `ifMatch` is the server's CONFLICT: the file moved on since it was read.
+            if (params.ifMatch && params.ifMatch !== "abc")
+              throw Object.assign(new Error("/srv/app.env changed since it was read"), {
+                code: "CONFLICT",
+              })
+            return { sha256: "def", size: 7 }
+          }
           case "access.grants": {
             if (opts.forbidGrants)
               throw Object.assign(new Error("you may not see who can use env://studio"), {
@@ -115,6 +144,28 @@ function fakeRookery(opts: {
   } as unknown as ClientRookery
 }
 
+function fakeEnv(rookery: ClientRookery, envs: EnvInfo[]): FleetEnvApi {
+  const api = createFleetEnvApi(rookery)
+  return {
+    ...api,
+    list: async () => envs,
+    get: async (name) => envs.find((e) => e.name === envName(name)) ?? env(envName(name)),
+    presence: async () => ({ users: [] }),
+  }
+}
+
+function view(path: string): ViewHandle {
+  return {
+    id: "fleet.port",
+    plugin: "fleet",
+    path,
+    params: {},
+    setTitle: () => {},
+    setDirty: () => {},
+    setLoading: () => {},
+  } as ViewHandle
+}
+
 describe("levels", () => {
   test("view is below use is below manage, and an admin holds manage", () => {
     expect(allows({ level: "view" }, "view")).toBe(true)
@@ -140,14 +191,14 @@ describe("levels", () => {
 describe("ports", () => {
   test("the proxy URL is /env/<name>/port/<n>/", () => {
     expect(envName("env://studio")).toBe("studio")
-    expect(portUrl("studio", 5173)).toBe("/env/studio/port/5173/")
-    expect(portUrl("env://studio", 5173, "/health")).toBe("/env/studio/port/5173/health")
+    expect(portPath("studio", 5173)).toBe("/env/studio/port/5173/")
+    expect(portPath("env://studio", 5173, "/health")).toBe("/env/studio/port/5173/health")
     expect(portFromPath("studio/5173")).toBe(5173)
     expect(portFromPath("5173")).toBe(5173)
     expect(portFromPath("studio/none")).toBeNull()
   })
 
-  test("a port link keeps the port and opens the proxy", async () => {
+  test("a port link keeps the port and opens Rookery's own route", async () => {
     const opened: string[] = []
     const rookery = fakeRookery({ opened })
     const dispose = render(
@@ -182,6 +233,55 @@ describe("ports", () => {
     await settle()
     expect(document.body.textContent).toContain("403")
   })
+
+  test("the frame goes to env.portUrl's one-use address", async () => {
+    const calls: Call[] = []
+    const rookery = fakeRookery({ calls, ticket: "https://5173-port.example.test/.rookery/claim?t=t" })
+    const envs = fakeEnv(rookery, [env("studio")])
+    // A detached host: an iframe only loads once it is in a document, and nothing here answers it.
+    const host = document.createElement("div")
+    const dispose = render(
+      () => <PortPage view={view("studio/5173")} rookery={rookery} envs={envs} admin={false} port="5173" />,
+      host,
+    )
+    cleanup.push(dispose)
+    await settle()
+    await settle()
+
+    expect(calls.some((c) => c.method === "env.portUrl")).toBe(true)
+    const call = calls.find((c) => c.method === "env.portUrl")
+    expect(call?.params).toEqual({ env: "env://studio", port: 5173 })
+    const frame = host.querySelector<HTMLIFrameElement>("[data-part='port-frame']")
+    expect(frame).not.toBeNull()
+    expect(frame!.getAttribute("src")).toBe("https://5173-port.example.test/.rookery/claim?t=t")
+  })
+
+  test("a server without env.portUrl falls back to Rookery's route", async () => {
+    const rookery = {
+      rpc: {
+        call: async (method: string, params: Record<string, unknown> = {}) => {
+          if (method === "env.get") return env(envName(String(params.env)))
+          if (method === "env.portUrl")
+            throw Object.assign(new Error("unknown method"), { code: "NOT_FOUND" })
+          return {}
+        },
+      },
+      workbench: { openView: () => {}, toast: () => {} },
+      views: { href: () => null },
+    } as unknown as ClientRookery
+    const envs = fakeEnv(rookery, [env("studio")])
+    const host = document.createElement("div")
+    const dispose = render(
+      () => <PortPage view={view("studio/5173")} rookery={rookery} envs={envs} admin={false} port="5173" />,
+      host,
+    )
+    cleanup.push(dispose)
+    await settle()
+    await settle()
+
+    const frame = host.querySelector<HTMLIFrameElement>("[data-part='port-frame']")
+    expect(frame?.getAttribute("src")).toBe("/env/studio/port/5173/")
+  })
 })
 
 describe("the desktop's gates", () => {
@@ -203,7 +303,7 @@ describe("the desktop's gates", () => {
     expect(document.body.textContent).toContain("This host has no desktop")
   })
 
-  test("use is needed, and the host must be online", async () => {
+  test("use is needed for the live desktop, and the host must be online", async () => {
     const first = render(
       () => <DesktopBody name="studio" env={env("studio")} who={{ level: "view" }} />,
       document.body,
@@ -220,6 +320,111 @@ describe("the desktop's gates", () => {
     await settle()
     expect(document.body.textContent).toContain("503")
     second()
+  })
+
+  test("view sees a picture of the desktop, not the live one", async () => {
+    const picture = { base64: "iVBORw0KGgo=", content_type: "image/png" }
+    const dispose = render(
+      () => (
+        <DesktopBody
+          name="studio"
+          env={env("studio", { level: "view" })}
+          who={{ level: "view" }}
+          picture={picture}
+        />
+      ),
+      document.body,
+    )
+    cleanup.push(dispose)
+    await settle()
+
+    const img = document.body.querySelector<HTMLImageElement>("[data-part='desktop-picture']")
+    expect(img).not.toBeNull()
+    expect(img!.getAttribute("src")).toBe("data:image/png;base64,iVBORw0KGgo=")
+    // The live desktop is not rendered, and the picture says what it is.
+    expect(document.body.querySelector("[data-part='desktop-view']")).toBeNull()
+    expect(document.body.textContent).toContain("Watching it live needs use")
+  })
+
+  test("the desktop page asks hosts.desktop.screenshot for the picture at view", async () => {
+    const rookery = fakeRookery({})
+    const envs = fakeEnv(rookery, [env("studio", { level: "view" })])
+    const shots: string[] = []
+    const dispose = render(
+      () => (
+        <DesktopPage
+          view={view("studio")}
+          rookery={rookery}
+          envs={envs}
+          admin={false}
+          screenshot={async (host) => {
+            shots.push(host)
+            return { base64: "AAAA", content_type: "image/png" }
+          }}
+        />
+      ),
+      document.body,
+    )
+    cleanup.push(dispose)
+    await settle()
+    await settle()
+
+    expect(shots).toEqual(["studio"])
+    expect(document.body.querySelector("[data-part='desktop-picture']")).not.toBeNull()
+  })
+})
+
+describe("files", () => {
+  test("readFile gives base64 and its SHA-256, and writeFile sends base64 with ifMatch", async () => {
+    const calls: Call[] = []
+    const rookery = fakeRookery({ calls, file: { base64: "QT0xCg==", sha256: "abc" } })
+    const envs = createFleetEnvApi(rookery)
+
+    const read = await envs.readFile("studio", "/srv/app.env")
+    expect(read).toEqual({ base64: "QT0xCg==", size: 4, sha256: "abc" })
+    expect(calls[0]).toEqual({
+      method: "env.readFile",
+      params: { env: "env://studio", path: "/srv/app.env" },
+    })
+
+    const written = await envs.writeFile("env://studio", "/srv/app.env", "A=2\n", {
+      ifMatch: read.sha256,
+    })
+    expect(written).toEqual({ sha256: "def", size: 7 })
+    expect(calls[1]).toEqual({
+      method: "env.writeFile",
+      params: {
+        env: "env://studio",
+        path: "/srv/app.env",
+        base64: btoa("A=2\n"),
+        ifMatch: "abc",
+      },
+    })
+  })
+
+  test("a stale ifMatch is a 409 conflict to show", async () => {
+    const envs = createFleetEnvApi(fakeRookery({ file: { base64: "", sha256: "abc" } }))
+    try {
+      await envs.writeFile("studio", "/srv/app.env", "A=3\n", { ifMatch: "stale" })
+      throw new Error("the write should not have gone through")
+    } catch (e) {
+      const x = explain(e, { env: "studio", doing: "write /srv/app.env" })
+      expect(x.code).toBe("409")
+      expect(x.what).toContain("changed since it was read")
+      expect(x.fix).toContain("Reload")
+    }
+  })
+
+  test("a new file is written with overwrite and no ifMatch", async () => {
+    const calls: Call[] = []
+    const envs = createFleetEnvApi(fakeRookery({ calls }))
+    await envs.writeFile("studio", "/srv/new.env", new Uint8Array([65, 10]), { overwrite: true })
+    expect(calls[0]?.params).toEqual({
+      env: "env://studio",
+      path: "/srv/new.env",
+      base64: "QQo=",
+      overwrite: true,
+    })
   })
 })
 
@@ -244,6 +449,8 @@ describe("sharing a host", () => {
     await settle()
 
     expect(calls.some((c) => c.method === "access.grants" && c.params.resource === "env://studio")).toBe(true)
+    expect(calls.some((c) => c.method === "admin.users")).toBe(true)
+    expect(calls.some((c) => c.method === "admin.groups")).toBe(true)
     const list = document.body.querySelector("[data-part='share-list']")
     expect(list?.textContent).toContain("Ops")
     expect(list?.textContent).toContain("Owner")
@@ -274,6 +481,35 @@ describe("sharing a host", () => {
     remove!.click()
     await settle()
     expect(calls.some((c) => c.method === "access.revoke" && c.params.principal === "user:u-eve")).toBe(true)
+  })
+
+  test("a manager who is not an admin types a user id", async () => {
+    const calls: Call[] = []
+    const rookery = fakeRookery({
+      me: { id: "u-eve", name: "Eve", admin: false },
+      owner: "u-ops",
+      grants: [],
+      calls,
+    })
+    const dispose = render(
+      () => <ShareDialog host="studio" rookery={rookery} onClose={() => {}} />,
+      document.body,
+    )
+    cleanup.push(dispose)
+    await settle()
+
+    // No admin, so no people list: the dialog asks for `user:<id>` instead.
+    expect(calls.some((c) => c.method === "admin.users")).toBe(true)
+    expect(document.body.querySelector("[data-part='share-search']")).toBeNull()
+    const field = document.body.querySelector<HTMLInputElement>("input[data-part='share-principal']")
+    expect(field).not.toBeNull()
+    field!.value = "user:u-new"
+    field!.dispatchEvent(new Event("input", { bubbles: true }))
+    field!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    await settle()
+
+    const grantCall = calls.find((c) => c.method === "access.grant")
+    expect(grantCall?.params).toEqual({ resource: "env://studio", principal: "user:u-new", level: "use" })
   })
 
   test("a person without manage is told so", async () => {

@@ -207,6 +207,12 @@ export function ShareDialog(props: {
                   </Button>
                 </Show>
               </div>
+              <Show when={!isAdmin()}>
+                <span class="nc-meta" data-part="share-principal-note">
+                  A manager who is not an admin types who to add: user:&lt;id&gt;, or everyone. Searching for
+                  people is an admin's, until the server offers it at manage.
+                </span>
+              </Show>
               <Show when={isAdmin() && people().length}>
                 <div class="fleet-share__results" role="listbox" aria-label="People">
                   <For each={people()}>

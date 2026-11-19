@@ -48,102 +48,99 @@ A topic with a `/` is the server's, taken as it is; a bare name would be `fleet/
 
 # Fleet M3 API Contract
 
-What the M3 parts of `crow/plugins/fleet` need from the server: a host's desktop (VNC in the browser), port
-links (`/env/<name>/port/<n>/`), and sharing a host (grants on `env://NAME`). The M1 contract above is
-unchanged. Provenance per row: **[adopted]** means the method or name exists in Rookery today (checked in
-`rookery/crates`), **[prototype]** means the prototype had it in that shape, **[new]** means this plugin
-needs it and neither had it.
+What the M3 parts of `crow/plugins/fleet` need from the server: a host's desktop (VNC in the browser, and a
+picture of it at `view`), port links (`/env/<name>/port/<n>/` and `env.portUrl`), files with their
+`SHA-256`, and sharing a host (grants on `env://NAME`). The server half is rookery#42 (`feat/connect`). The
+M1 contract above is unchanged.
 
-Where the M1 methods address a host by bare name (`hosts.get { host: "studio" }`), the M3 methods use the
-environment form the design settles on: `env.*` take `env: "env://studio"` (or `"studio"`, whichever the
-server prefers; this client sends `env://NAME`) and `access.*` take `resource: "env://studio"`. That
-mismatch is real and is question 1 below.
+Hosts are `env://NAME` in every `env.*`, `access.*` and `terminals.*` call; the server also takes the bare
+name, and always answers `env://NAME`. `hosts.*` keeps its bare `host: "studio"`, which the server reads the
+same way. Files, ports and the live desktop need `use`; the grants need `manage`.
 
 ## RPC methods
 
-| Method          | Params                                                                        | Result                                                     | Required level       | Notes                                                                                                                                                                                                                                            |
-| --------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `env.list`      | `{}`                                                                          | `{ environments: EnvInfo[] }`                              | `view`               | The hosts as environments, with each one's `supports` and the caller's `level`. The host page uses it to decide whether to show the desktop and ports. **[adopted]**                                                                             |
-| `env.get`       | `{ env: string }`                                                             | `EnvInfo`                                                  | `view` on the host   | The desktop and port views load this: `state` (online, offline, …), `supports.desktop`, `supports.connect` and `level`. **[adopted]**                                                                                                            |
-| `env.presence`  | `{ env: string }`                                                             | `{ users: PresenceUser[] }`                                | `view`               | "On it now" on the host page. Terminal counts per person, never their terminals. **[adopted]**                                                                                                                                                   |
-| `env.checkouts` | `{ env: string }`                                                             | `{ checkouts: Checkout[] }`                                | `use`                | Not needed by M3 but already in the M1 page's data (`Checkout`); read only if the host page grows a worktree list. **[adopted]**                                                                                                                 |
-| `access.grants` | `{ resource: string }`                                                        | `{ resource, owner: string \| null, grants: GrantInfo[] }` | `manage` on the host | Who holds what. `owner` is the owner's **user id** (not a principal); `GrantInfo` is `{ principal, level, createdBy, createdAt }` and `principal` is `user:<id>`, `group:<id>` or `everyone`. **[adopted]** (`rookery-facilities/src/access.rs`) |
-| `access.grant`  | `{ resource: string, principal: string, level: "view" \| "use" \| "manage" }` | `GrantInfo`                                                | `manage` on the host | Adds a grant or changes its level. The grant is the server's `AccessGrant` (`{ resource, principal, level }`); the generated `GrantSet` (`{ uri, principal, level }`) is a stale prototype type and is not used. **[adopted]**                   |
-| `access.revoke` | `{ resource: string, principal: string }`                                     | `{}`                                                       | `manage` on the host | Removes a grant. `NOT_FOUND` when there was none. **[adopted]**                                                                                                                                                                                  |
-| `access.level`  | `{ resource: string }`                                                        | `{ level: "view" \| "use" \| "manage" \| null }`           | the caller's own     | Kept for the desktop and port views' gates; the host's `level` in `EnvInfo` is what the UI reads. **[adopted]**                                                                                                                                  |
-| `admin.users`   | `{}`                                                                          | `UserList` (`{ users: UserInfo[] }`)                       | `admin`              | Names the people in the share dialog's picker and its "who has access" list. One call, not a combined users-and-groups answer. **[adopted]**                                                                                                     |
-| `admin.groups`  | `{}`                                                                          | `GroupList` (`{ groups: GroupInfo[] }`)                    | `admin`              | Names `group:<id>` grants and offers groups in the picker, beside `admin.users`. **[adopted]**                                                                                                                                                   |
-| `users.search`  | `{ query: string }` → `{ users: UserInfo[] }`                                 | —                                                          | `manage` on the host | **Pending (M2b)**: what a manager who is not an admin needs to find a person. Until it lands the dialog takes a typed `user:<id>` or `everyone`; see question 2.                                                                                 |
-| `hosts.check`   | `{ host: string, capability: string }`                                        | `{ allowed, refusal }`                                     | `view` on the host   | M1 already calls it for `apply`; M3 expects the capabilities `terminal`, `desktop` and `ports` to answer. `env.get.supports` is the field the UI actually reads. **[adopted]** for the method, **[new]** for the three capability names          |
-| `auth.me`       | `{}`                                                                          | `Me`                                                       | self                 | The person's id (for "you" in the grants list) and `admin`, which holds manage on every host. **[adopted]**                                                                                                                                      |
+| Method                     | Params                                                                        | Result                                           | Required level       | Notes                                                                                                                                                                                                            |
+| -------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------ | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `env.list`                 | `{}`                                                                          | `{ environments: EnvInfo[] }`                    | self                 | The hosts as environments, with each one's `supports` and the caller's `level`. The host page uses it to decide whether to show the desktop and ports.                                                           |
+| `env.get`                  | `{ env: string }`                                                             | `EnvInfo`                                        | `view` on the host   | The desktop and port views load this: `state` (online, offline, …), `supports.desktop`, `supports.connect` and `level`.                                                                                          |
+| `env.presence`             | `{ env: string }`                                                             | `EnvPresence` (`{ users: PresenceUser[] }`)      | `view` on the host   | "On it now" on the host page. Terminal counts per person, never their terminals.                                                                                                                                 |
+| `env.readFile`             | `FilePath` (`{ env, path }`)                                                  | `FileData` (`{ base64, size, sha256 }`)          | `use` on the host    | A file inside the host's roots, as the agent account, up to 8 MiB. `sha256` is the version a write names.                                                                                                        |
+| `env.writeFile`            | `EnvFileWrite` (`{ env, path, base64, overwrite?, ifMatch? }`)                | `FileWritten` (`{ sha256, size }`)               | `use` on the host    | Missing folders are made. `overwrite` replaces a file that is there; `ifMatch` writes only while the file is still at that SHA-256 (it implies `overwrite`). Either refused answer is `CONFLICT`.                |
+| `env.portUrl`              | `PortRef` (`{ env, port, path? }`)                                            | `PortUrl` (`{ url, origin }`)                    | `use` on the host    | An address on the ports' own origin that signs the browser in to that one port once, within a minute, and then shows `path`.                                                                                     |
+| `access.grants`            | `{ resource: string }`                                                        | `GrantList` (`{ resource, owner, grants }`)      | `manage` on the host | Who holds what. `owner` is the owner's **user id** (not a principal); `GrantInfo` is `{ principal, level, createdBy, createdAt }` and `principal` is `user:<id>`, `group:<id>` or `everyone`.                    |
+| `access.grant`             | `{ resource: string, principal: string, level: "view" \| "use" \| "manage" }` | `GrantInfo`                                      | `manage` on the host | Adds a grant or changes its level. The grant is the server's `AccessGrant` (`{ resource, principal, level }`); the generated `GrantSet` (`{ uri, principal, level }`) is a stale prototype type and is not used. |
+| `access.revoke`            | `{ resource: string, principal: string }`                                     | `{}`                                             | `manage` on the host | Removes a grant. `NOT_FOUND` when there was none.                                                                                                                                                                |
+| `access.level`             | `{ resource: string }`                                                        | `{ level: "view" \| "use" \| "manage" \| null }` | the caller's own     | Kept for the desktop and port views' gates; the host's `level` in `EnvInfo` is what the UI reads.                                                                                                                |
+| `admin.users`              | `{}`                                                                          | `UserList` (`{ users: UserInfo[] }`)             | `admin`              | Names the people in the share dialog's picker and its "who has access" list. One call, not a combined users-and-groups answer.                                                                                   |
+| `admin.groups`             | `{}`                                                                          | `GroupList` (`{ groups: GroupInfo[] }`)          | `admin`              | Names `group:<id>` grants and offers groups in the picker, beside `admin.users`.                                                                                                                                 |
+| `users.search`             | `{ query: string }` → `{ users: UserInfo[] }`                                 | —                                                | `manage` on the host | **Pending (M2b)**: what a manager who is not an admin needs to find a person. Until it lands the dialog takes a typed `user:<id>` or `everyone`.                                                                 |
+| `hosts.check`              | `{ host: string, capability: string }`                                        | `{ allowed, refusal }`                           | `view` on the host   | M1 already calls it for `apply`; M3 expects the capabilities `terminal`, `desktop` and `ports` to answer. `env.get.supports` is the field the UI actually reads.                                                 |
+| `hosts.desktop.screenshot` | `{ host: string }`                                                            | `Passed`: `{ base64, content_type }`, a PNG      | `view` on the host   | The picture a `view` holder sees of a desktop. It moved from `use` to `view` in rookery#42, as the level table says.                                                                                             |
+| `auth.me`                  | `{}`                                                                          | `Me`                                             | self                 | The person's id (for "you" in the grants list) and `admin`, which holds manage on every host.                                                                                                                    |
+
+`env.checkouts`, `env.clone` and `env.exec` are deferred on the server (M5 and later), so nothing here
+reads checkouts.
 
 ### Levels these parts expect
 
-| Level    | What the fleet views let it do                                                                                                 |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `view`   | See the host, its state, its desktop **thumbnail** and who is on it. The live desktop, ports and sharing are refused with 403. |
-| `use`    | Watch the live desktop read-only is **not** this level: `use` is the live desktop with input, and reaching ports.              |
-| `manage` | Share the host: read the grants, add, change and remove them.                                                                  |
-| `admin`  | The org role: manage on every host, and `admin.users` for picking people.                                                      |
+| Level    | What the fleet views let it do                                                                                                                      |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `view`   | See the host, its state, its desktop **picture** (`hosts.desktop.screenshot`) and who is on it. Ports and sharing are refused.                      |
+| `use`    | The live desktop with input, ports, files, and terminals. Watching a desktop read-only is not a level of its own: the WebSocket is live either way. |
+| `manage` | Share the host: read the grants, add, change and remove them. Adopt a session as a terminal.                                                        |
+| `admin`  | The org role: manage on every host, and `admin.users`/`admin.groups` for picking people.                                                            |
 
 ## HTTP routes
 
-| Route                             | For                                                                                                                            | Auth              | Notes                                                                                                                                                                                         |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/env/<name>/desktop` (WebSocket) | A host's desktop: the RFB bytes from its VNC server on the host's loopback, with the server answering the VNC password itself. | `use` on the host | The prototype's route, kept as is: noVNC connects with sub-protocol `binary`. `view` gets a 403 on the upgrade (or, if the server prefers, a screenshot route instead). **[prototype]**       |
-| `/env/<name>/port/<n>/<path>`     | HTTP and WebSocket to a port on the host's loopback.                                                                           | `use` on the host | From `plans/design.md` ("Endpoints"). The plugin builds it with `portUrl(env, port, path)`; the iframe and the links point at it directly. **[adopted]** for the route, **[new]** for nothing |
+| Route                             | For                                                                                                                                       | Auth              | Notes                                                                                                                                                                                                                                                                       |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/env/<name>/desktop` (WebSocket) | A host's desktop: the RFB bytes from its VNC server on the host's loopback, with the server answering the VNC password itself.            | `use` on the host | noVNC connects with sub-protocol `binary`, on Rookery's own origin (or with no `Origin`). The server reads the host's VNC password through the files helper and does the DES challenge itself, so the password never reaches the browser. `view` gets a 403 on the upgrade. |
+| `/env/<name>/port/<n>/<path>`     | HTTP and WebSocket to a port on the host's loopback.                                                                                      | `use` on the host | Rookery checks `use`, mints a one-use ticket (60 s, bound to person + host + port) and 303s to the port's own origin, which sets a cookie for that port alone; every request and upgrade there re-checks `use`. `portPath()` builds this link.                              |
+| `env.portUrl`                     | The same, as an address: `{ url, origin }` on the ports' own origin (`ROOKERY_PORTS_URL`, or `*.localhost:<port>` for a loopback server). | `use` on the host | What the port view's frame goes to, so an iframe need not be a redirect through Rookery. A server with no ports' origin refuses with a sentence, which the view falls back from to the route above.                                                                         |
 
-The plugin never needs a route to a host: both proxies are on the server's own origin, so the iframe and
-noVNC use relative or same-host URLs.
+The plugin never needs a route to a host: both proxies are on the server's own origin, or on the ports'
+origin for `env.portUrl`, so the iframe and noVNC use same-host URLs.
+
+WebSocket upgrades pass through the port proxy, so a dev server's HMR works.
 
 ## Event topics
 
-| Topic                 | Payload                    | Notes                                                                                                                                                                                                       |
-| --------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rookery/env.changed` | `{ environment: EnvInfo }` | Refreshes the host page's state, `supports` and level. **[prototype]**: the prototype had `env.changed`; Rookery has no `EnvChanged` wire type yet, so it is an `events.subscribe` topic with this payload. |
+| Topic                 | Payload                                          | Notes                                                                                                                                                                                                  |
+| --------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `rookery/env.changed` | `EnvChanged` (`{ env, environment?, removed? }`) | A host's state, type or access changed, or it was removed; `environment` is as `env.get` gives it to the subscriber, and absent once it is gone. Built per subscriber, with that subscriber's `level`. |
+
+It is sent with `hosts.changed` (save, rename, remove) rather than on reachability, so the host page keeps
+its 5-second poll for online and offline.
 
 ## Core types
 
 From `@rookery/client`'s generated types (already there, do not re-declare):
 
-- `EnvInfo` `{ name, uri, kind, provider?, kindTitle?, kindIcon?, state: "online" | "offline" | "starting" | "degraded", owner?, level?, os?, version?, supports: EnvSupports, error?, metadata?, connector? }`.
-- `EnvSupports` `{ terminal, process, files, connect, checkouts, desktop, privileged, persistentSessions, deploy }`. M3 reads `desktop` and `connect`.
 - `EnvPresence` `{ users: PresenceUser[] }`, `PresenceUser` `{ id, name, terminals, since }`.
-- `Grant` `"view" | "use" | "manage"`, `GrantInfo` `{ principal, level, createdBy, createdAt }`, `GrantList` `{ resource, owner, grants }`, `LevelHeld` `{ level }`, `ResourceRef` `{ resource }`.
-- `AdminUser` `{ id, name, email?, avatar?, admin, adminFromConfig, disabled, createdAt, lastSeenAt?, groups }`, `AdminUsers` `{ users, groups }`.
+- `GrantInfo` `{ principal, level, createdBy, createdAt }`, `GrantList` `{ resource, owner, grants }`,
+  `LevelHeld` `{ level }`, `ResourceRef` `{ resource }`.
+- `AdminUser` `{ id, name, email?, avatar?, admin, adminFromConfig, disabled, createdAt, lastSeenAt?, groups }`,
+  `AdminUsers` `{ users, groups }`.
 - `Me` `{ user: User | null, principal, admin, auth, version, apiVersion }`.
-- `Checkout` `{ env, path, name, branch?, head?, url?, repository?, worktreeOf?, recorded }`.
 
-Declared by the plugin: `PortLink` (`{ port, label? }`), and the local storage keys `crow.fleet.ports.v1`
-(per-host port links) and `crow.terminal.env` (the last host, shared with the terminal plugin).
+Copied into [`src/types.ts`](./src/types.ts), each marked with where it came from, because Crow pins
+Rookery at main, which still has the prototype's shapes:
+
+- `EnvInfo` and `EnvSupports` (the pinned ones carry a `provider`, `metadata` and `connector` no `env.*`
+  answer has any more), `Grant`, `EnvChanged`, `PortRef`, `PortUrl`, `FileData`, `EnvFileWrite`,
+  `FileWritten`.
+- M4's types, from rookery#33, in the same file.
+
+Declared by the plugin: `PortLink` (`{ port, label? }`), `HostsDesktopScreenshotResult` in
+[`src/api.ts`](./src/api.ts), and the local storage keys `crow.fleet.ports.v1` (per-host port links) and
+`crow.terminal.env` (the last host, shared with the terminal plugin).
 
 ## Open questions
 
-1. **`env://` or a bare name in params.** M1's `hosts.*` takes `host: "studio"`; `env.*` documents
-   `env: string` without saying which, and this client sends `env://studio`. The generated `EnvRef` says
-   `{ env }` and `EnvInfo.uri` is `env://<name>`, so the URI form looks intended. Confirm, and if the server
-   wants bare names, that is a one-line change in `plugins/fleet/src/env.ts`.
-2. **Finding a person to share with.** `access.grant` needs a `user:<id>`, and only `admin.users` (admin
-   only) lists people; `entities.search` (the prototype's way to find a user) is out of scope for the first
-   version (`plans/design.md`, decision 22). So a manager who is not an admin types a user id. A
-   `users.search` for anyone with manage on a resource would close this; until then the dialog says what it
-   wants. **Pending (M2b)**: `users.search` at `manage`, and the dialog's picker switches to it for a
-   non-admin manager.
-3. **`access.grants` needs manage.** The prototype's share dialog showed the grants to anyone who could
-   see the resource; Rookery's `access.grants` requires manage. This client follows the server: a `view`
-   holder gets 403 and a sentence. If a `view` holder should see _who_ (not what they do), that is a server
-   change.
-4. **The desktop route.** `/env/<name>/desktop` is the prototype's. `plans/design.md` names "the VNC
-   proxy" without a route, and the port proxy is `/env/<name>/port/<n>/`. An alternative is to proxy the
-   host's VNC port (`/env/<name>/port/5900/`) and let noVNC connect there, which reuses one proxy but puts
-   the VNC password in the browser's hands. The plugin is written for the prototype's route; the noVNC
-   component takes the URL from `desktopUrl()` in `plugins/fleet/src/DesktopView.tsx` if it changes.
-5. **`view` and the desktop.** A `view` holder is promised a "desktop thumbnail" in the design's level table,
-   but no method returns one (`hosts.desktop.screenshot` is proposed, not implemented). The desktop view
-   refuses with 403 and shows no picture; when the screenshot method lands, that is where it goes.
-6. **WebSocket in the port proxy.** Dev servers that use HMR open a WebSocket under the same path. The
-   UI cannot tell whether the proxy upgrades; it assumes it does, as the design's "HTTP and WebSocket" line
-   says.
+1. **`access.grants` needs manage.** The prototype's share dialog showed the grants to anyone who could
+   see the resource; Rookery's `access.grants` requires manage, and rookery#42 keeps it that way. This
+   client follows the server: a `view` holder gets 403 and a sentence. If a `view` holder should see _who_
+   (not what they do), that is a server change.
 
 # Fleet M4 API Contract
 

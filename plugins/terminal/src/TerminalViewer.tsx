@@ -14,7 +14,6 @@ import {
   TextField,
   ViewHeader,
 } from "@aiviarium/nocturne"
-import type { TerminalEvent, TermSize } from "@rookery/client"
 import type { ClientRookery } from "@rookery/sdk/client"
 import { FitAddon } from "@xterm/addon-fit"
 import { SearchAddon } from "@xterm/addon-search"
@@ -22,6 +21,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
+import type { TerminalEvent, TermSize } from "./types"
 import "@xterm/xterm/css/xterm.css"
 import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js"
 import type { TerminalConnection, TerminalsApi } from "./termApi"
