@@ -1,11 +1,31 @@
-import { defineConfig } from "vite"
+import { defineConfig, type Plugin } from "vite"
 import solid from "vite-plugin-solid"
 
 const port = Number(process.env.CROW_VITE_PORT ?? 4791)
 const backend = process.env.ROOKERY_URL ?? "http://127.0.0.1:4790"
 
+// `@aiviarium/parrot-client` imports `node:child_process` and `node:readline` from `./stdio.ts`
+// even when only `Client` + a browser `Transport` are used. Stub `stdio.ts` in browser builds
+// until `@aiviarium/parrot-client` splits its Node-only entrypoint (see plugins/agents/API.md).
+const parrotBrowserStub: Plugin = {
+  name: "crow-parrot-browser-stub",
+  enforce: "pre",
+  resolveId(source, importer) {
+    if ((source === "./stdio" || source === "./stdio.ts") && importer?.includes("parrot-client")) {
+      return "\0parrot-stdio-stub"
+    }
+    return null
+  },
+  load(id) {
+    if (id === "\0parrot-stdio-stub") {
+      return `export function stdioTransport() { throw new Error("stdioTransport is not available in the browser"); }\n`
+    }
+    return null
+  },
+}
+
 export default defineConfig({
-  plugins: [solid()],
+  plugins: [parrotBrowserStub, solid()],
   resolve: {
     dedupe: [
       "solid-js",
