@@ -1,0 +1,23 @@
+{
+  "name": "@crow/shell",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@aiviarium/nocturne": "file:../.deps/nocturne",
+    "@rookery/client": "file:../.deps/rookery/client",
+    "@rookery/sdk": "file:../.deps/rookery/sdk",
+    "solid-js": "^1.9.19"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "vite": "^7.3.8",
+    "vite-plugin-solid": "^2.11.16"
+  }
+}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Crow</title>
+    <meta name="theme-color" content="#0A0A0B" />
+    <!-- Cascade layers, declared first so Nocturne, shell, and plugin styles land in order. -->
+    <style>
+      @layer reset, tokens, components, shell, plugins, theme, user;
+    </style>
+    <script>
+      try {
+        const t = localStorage.getItem("crow.theme")
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t
+        else if (t === "system" && matchMedia("(prefers-color-scheme: light)").matches)
+          document.documentElement.dataset.theme = "light"
+      } catch {}
+    </script>
+  </head>
+  <body class="nc">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "rookery": {
+    "repo": "https://github.com/aiviarium/rookery.git",
+    "commit": "9781d9cc29f4630884b56e86a8de990b128f573a",
+    "ref": "main",
+    "sibling": "../rookery",
+    "probe": "client/package.json"
+  },
+  "nocturne": {
+    "repo": "https://github.com/aiviarium/nocturne.git",
+    "commit": "1de5ff166de9add253a9106080a828ad931369b9",
+    "ref": "main",
+    "sibling": "../nocturne",
+    "probe": "package.json"
+  }
+}
