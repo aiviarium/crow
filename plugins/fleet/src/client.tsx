@@ -2,15 +2,19 @@
 import { defineClient } from "@rookery/sdk/client"
 import { createSignal } from "solid-js"
 import type { HostChangedEvent, HostInfo } from "./api"
+import { DesktopPage } from "./DesktopPage"
 import { type FleetStore, FleetView } from "./FleetView"
 import { createFleetApi } from "./fleetApi"
 import { errorMessage, hostNeedsAttention } from "./format"
 import { HostView } from "./HostView"
 import { JobView } from "./JobView"
+import type { CurrentUser } from "./me"
+import { PortPage } from "./Ports"
 import "./fleet.css"
 
 export default defineClient(async (rookery) => {
-  const api = createFleetApi(rookery)
+  const [me, setMe] = createSignal<CurrentUser | null>(null)
+  const api = createFleetApi(rookery, me)
   const [hosts, setHosts] = createSignal<HostInfo[]>([])
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
@@ -47,6 +51,13 @@ export default defineClient(async (rookery) => {
   ))
 
   rookery.views.register("fleet.job", (props) => <JobView view={props.view} rookery={rookery} api={api} />)
+
+  rookery.views.register("fleet.desktop", (props) => (
+    <DesktopPage view={props.view} rookery={rookery} envs={api.env} admin={api.isAdmin()} />
+  ))
+  rookery.views.register("fleet.port", (props) => (
+    <PortPage view={props.view} rookery={rookery} envs={api.env} admin={api.isAdmin()} />
+  ))
 
   rookery.commands.register("fleet.hosts", {
     title: "Open Fleet",
@@ -94,4 +105,6 @@ export default defineClient(async (rookery) => {
 
   // Initial background load so the sidebar badge reflects hosts needing attention.
   void refresh()
+  // Who is signed in, for the role that holds manage on every host (sharing, the desktop gates).
+  void api.fetchMe().then(setMe)
 })

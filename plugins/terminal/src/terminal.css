@@ -1,0 +1,293 @@
+/* The terminal plugin. Nocturne tokens only. */
+
+@layer app {
+  /* The views fill their frame, so the terminal is sized by the frame and not by its own content. */
+  [data-part="view"][data-plugin="terminal"],
+  :where([data-part="view"][data-plugin="terminal"]) > * {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .term {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+    background: var(--bg-1);
+  }
+
+  .term__header {
+    gap: var(--space-2);
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .term__spacer {
+    flex: 1;
+  }
+
+  .term__search {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .term__body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    padding: var(--space-2);
+    background: var(--bg-1);
+  }
+
+  /* Centred while it fits; a terminal wider than the frame keeps its left edge in view. */
+  .term__frame {
+    display: flex;
+    justify-content: safe center;
+    align-items: flex-start;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Another viewer's size wins: the terminal sits in the middle with bars around it. */
+  .term__frame[data-letterboxed] {
+    background: var(--bg-0);
+    border-radius: var(--radius-sm);
+  }
+
+  .term__frame[data-letterboxed] .xterm {
+    outline: 1px dashed var(--line-strong);
+  }
+
+  .term__takeover {
+    position: absolute;
+    inset-inline-end: var(--space-3);
+    inset-block-end: var(--space-3);
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--bg-3);
+    color: var(--text-2);
+    cursor: pointer;
+  }
+
+  .term__keys {
+    display: flex;
+    gap: var(--space-1);
+    padding: var(--space-2);
+    overflow-x: auto;
+    border-top: 1px solid var(--line-soft);
+    background: var(--bg-2);
+  }
+
+  .term__keys > * {
+    flex: 0 0 auto;
+  }
+
+  .term__unavailable {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+  }
+
+  /* The session list */
+  .term-sessions {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .term-sessions__header {
+    gap: var(--space-3);
+  }
+
+  .term-sessions__body {
+    display: grid;
+    grid-template-columns: minmax(260px, 340px) 1fr;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    overflow: auto;
+    align-items: start;
+  }
+
+  .term-sessions__new > .nc-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .term-new {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .term-new__checkouts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    align-items: center;
+  }
+
+  .term-sessions__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .term-card > .nc-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .term-card__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .term-card__title {
+    display: block;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border: 0;
+    background: none;
+    color: var(--text-1);
+    padding: 0;
+    cursor: pointer;
+    text-align: start;
+  }
+
+  .term-card__meta {
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .term-sessions__list .nc-context-area {
+    display: contents;
+  }
+
+  .term-card__preview {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--bg-0);
+    color: var(--text-2);
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  /* The panel */
+  .term-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .term-panel__tabs {
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .term-panel__body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+
+  .term-panel__body > * {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* The dock, over the bottom of the page, until the shell draws a panel slot. */
+  .term-dock {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 40;
+    height: min(42vh, 420px);
+    background: var(--bg-1);
+    border-top: 1px solid var(--line);
+    box-shadow: var(--shadow-overlay);
+  }
+
+  /* The host's screen */
+  .term-screen {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    height: 100%;
+    min-height: 0;
+    padding-bottom: var(--space-3);
+  }
+
+  .term-screen__meta {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .term-screen__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0 var(--space-4);
+  }
+
+  .term-screen__error {
+    color: var(--danger);
+    padding: 0 var(--space-4);
+  }
+
+  .term-screen__card {
+    flex: 1;
+    min-height: 0;
+    margin: 0 var(--space-4);
+  }
+
+  .term-screen__card > .nc-card__body {
+    padding: var(--space-2);
+    overflow: auto;
+  }
+
+  .term-screen__inner {
+    position: relative;
+  }
+
+  @media (max-width: 720px) {
+    [data-part="view"][data-plugin="terminal"] {
+      height: auto;
+      min-height: 100%;
+    }
+
+    .term__body {
+      min-height: 60dvh;
+    }
+
+    .term-sessions__body {
+      grid-template-columns: 1fr;
+      padding: var(--space-3);
+    }
+
+    .term-dock {
+      height: min(60dvh, 420px);
+    }
+  }
+}

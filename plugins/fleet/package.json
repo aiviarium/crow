@@ -6,6 +6,7 @@
   "type": "module",
   "dependencies": {
     "@aiviarium/nocturne": "file:../../.deps/nocturne",
+    "@novnc/novnc": "^1.7.0",
     "@rookery/client": "file:../../.deps/rookery/client",
     "@rookery/sdk": "file:../../.deps/rookery/sdk",
     "solid-js": "^1.9.19"

@@ -5,6 +5,7 @@ import type { Connection, PluginInfo, PluginList } from "@rookery/client"
 import agentsManifest from "../../../plugins/agents/plugin.json"
 import aiManifest from "../../../plugins/ai/plugin.json"
 import fleetManifest from "../../../plugins/fleet/plugin.json"
+import terminalManifest from "../../../plugins/terminal/plugin.json"
 
 interface BuiltinPlugin {
   readonly id: string
@@ -60,6 +61,21 @@ const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = [
       manifest: agentsManifest,
     } as unknown as PluginInfo,
     load: () => import("../../../plugins/agents/src/client"),
+  },
+  {
+    id: terminalManifest.id,
+    scriptUrl: `${BUILTIN_PREFIX}${terminalManifest.id}`,
+    info: {
+      id: terminalManifest.id,
+      state: "active",
+      client: {
+        script: `${BUILTIN_PREFIX}${terminalManifest.id}`,
+        styles: null,
+        hash: `builtin-${terminalManifest.version}`,
+      },
+      manifest: terminalManifest,
+    } as unknown as PluginInfo,
+    load: () => import("../../../plugins/terminal/src/client"),
   },
 ]
 
