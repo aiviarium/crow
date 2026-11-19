@@ -1,0 +1,549 @@
+{
+  "id": "projects",
+  "name": "Projects",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "namespace": "projects",
+  "optionalDependencies": { "ai": "^0.1" },
+  "description": "Project management in the style of Linear: projects as spaces, issues with keys, states, labels, a list and a board, comments, cycles, and links to the docs, agent sessions and pull requests that reference an issue.",
+  "host": "src/host.ts",
+  "interface": "interface.ts",
+  "client": "src/client.tsx",
+  "styles": "src/client.css",
+  "activate": "startup",
+  "provides": { "services": ["projects"] },
+  "extensionPoints": [
+    {
+      "id": "projects.issueSources",
+      "description": "Another tracker whose issues are Projects issues (GitHub, Linear, Jira): a project links to its repositories, and issues and comments sync both ways. The contributing plugin brings changes in through the projects service (issues.upsertFromSource, comments.upsertFromSource); Projects calls the `push` method of its service to write a change of an issue or a comment, as the person who made it, and `repositories` for what a project can be linked to.",
+      "schema": {
+        "type": "object",
+        "required": ["id", "title", "service", "push"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The provider: what `source.provider` of its issues says (`github`)."
+          },
+          "title": { "type": "string", "description": "The tracker's name, as in “Open on GitHub”." },
+          "icon": { "type": "string", "description": "An icon of @aiviarium/nocturne for its badge." },
+          "service": { "type": "string" },
+          "push": {
+            "type": "string",
+            "description": "Gets { link, issue, fields, create?, comment? } and returns what the source now has."
+          },
+          "repositories": {
+            "type": "string",
+            "description": "Gets { space } and returns { repositories: [{ repository, name, url, repoSpace, connection, linked? }] }."
+          },
+          "linked": {
+            "type": "string",
+            "description": "Gets { link } after a project was linked from its settings."
+          },
+          "unlinked": { "type": "string", "description": "Gets { link } after a link was removed." }
+        }
+      }
+    }
+  ],
+  "contributes": {
+    "spaceKinds": [
+      {
+        "id": "projects.project",
+        "title": "Project",
+        "icon": "board",
+        "description": "A project: its issues, cycles, members and repositories"
+      }
+    ],
+    "collections": [
+      {
+        "name": "projects",
+        "scope": "space",
+        "entity": { "scheme": "project", "title": "name", "subtitle": "key" },
+        "access": { "read": "view", "write": "manage" },
+        "history": true,
+        "fields": [
+          { "name": "key", "type": "text", "required": true, "index": true },
+          { "name": "name", "type": "text", "required": true, "search": true },
+          { "name": "icon", "type": "text" },
+          { "name": "summary", "type": "text", "search": true },
+          { "name": "document", "type": "text" },
+          { "name": "lead", "type": "ref", "to": "user", "index": true },
+          { "name": "archived", "type": "boolean", "default": false },
+          { "name": "autoCloseParent", "type": "boolean", "default": false },
+          { "name": "cycleWeeks", "type": "integer", "default": 2 },
+          { "name": "cycleAuto", "type": "boolean", "default": false }
+        ]
+      },
+      {
+        "name": "registry",
+        "scope": "global",
+        "access": { "read": "view", "write": "manage" },
+        "fields": [
+          { "name": "space", "type": "text", "required": true, "unique": true },
+          { "name": "key", "type": "text", "required": true, "unique": true, "caseInsensitive": true },
+          { "name": "archived", "type": "boolean", "default": false }
+        ]
+      },
+      {
+        "name": "projectSources",
+        "scope": "global",
+        "access": { "read": "view", "write": "manage" },
+        "fields": [
+          { "name": "space", "type": "text", "required": true, "index": true },
+          { "name": "provider", "type": "text", "required": true },
+          { "name": "repository", "type": "text", "required": true, "index": true },
+          { "name": "name", "type": "text", "required": true },
+          { "name": "url", "type": "text" },
+          { "name": "repoSpace", "type": "text" },
+          { "name": "connection", "type": "text" }
+        ],
+        "unique": [["provider", "repository", "repoSpace"]]
+      },
+      {
+        "name": "states",
+        "scope": "space",
+        "access": { "read": "view", "write": "use" },
+        "fields": [
+          { "name": "name", "type": "text", "required": true },
+          {
+            "name": "category",
+            "type": "enum",
+            "values": ["backlog", "unstarted", "started", "completed", "cancelled"],
+            "required": true
+          },
+          { "name": "color", "type": "text", "default": "muted" },
+          { "name": "rank", "type": "text", "index": true },
+          { "name": "description", "type": "text" }
+        ]
+      },
+      {
+        "name": "labels",
+        "scope": "global",
+        "entity": { "scheme": "label", "title": "name", "parent": "scope" },
+        "access": { "read": "view", "write": "use" },
+        "trash": true,
+        "fields": [
+          { "name": "name", "type": "text", "required": true, "search": true },
+          { "name": "color", "type": "text", "default": "accent" },
+          { "name": "scope", "type": "ref", "index": true },
+          { "name": "description", "type": "text" }
+        ]
+      },
+      {
+        "name": "issues",
+        "scope": "space",
+        "entity": { "scheme": "issue", "title": "label", "subtitle": "stateName", "icon": "icon" },
+        "access": { "read": "view", "write": "use" },
+        "history": true,
+        "trash": true,
+        "fields": [
+          { "name": "number", "type": "sequence", "per": "space" },
+          { "name": "key", "type": "text", "index": true },
+          { "name": "keyWords", "type": "text", "search": true },
+          { "name": "title", "type": "text", "required": true, "search": true },
+          { "name": "label", "type": "text" },
+          { "name": "document", "type": "text" },
+          { "name": "state", "type": "text", "index": true },
+          { "name": "stateName", "type": "text" },
+          {
+            "name": "stateCategory",
+            "type": "enum",
+            "values": ["backlog", "unstarted", "started", "completed", "cancelled"],
+            "index": true
+          },
+          { "name": "icon", "type": "text" },
+          { "name": "priority", "type": "integer", "default": 0, "index": true },
+          { "name": "assignee", "type": "ref", "to": "user", "index": true },
+          { "name": "labels", "type": "refs", "to": "label" },
+          { "name": "estimate", "type": "number" },
+          { "name": "due", "type": "date", "index": true },
+          { "name": "parent", "type": "ref", "to": "issue", "index": true },
+          { "name": "cycle", "type": "ref", "to": "cycle", "index": true },
+          { "name": "rank", "type": "text", "index": true },
+          { "name": "followers", "type": "refs", "to": "user" },
+          { "name": "links", "type": "refs" },
+          { "name": "startedAt", "type": "datetime" },
+          { "name": "completedAt", "type": "datetime" },
+          { "name": "importedFrom", "type": "text" },
+          { "name": "source", "type": "json" },
+          { "name": "sourceKey", "type": "text" },
+          { "name": "sourceRef", "type": "text", "index": true }
+        ],
+        "indexes": [["stateCategory", "assignee"]],
+        "unique": [["sourceKey"]],
+        "display": {
+          "title": "Issues",
+          "description": "A project's issues: pick the project as the block's space.",
+          "icon": "check",
+          "primary": "title",
+          "fields": ["key", "stateCategory", "priority", "assignee", "labels", "estimate", "due", "cycle"],
+          "status": "stateCategory",
+          "view": "projects.issue",
+          "create": true
+        }
+      },
+      {
+        "name": "comments",
+        "scope": "space",
+        "entity": { "scheme": "comment", "title": "excerpt", "parent": "issue" },
+        "access": { "read": "view", "write": "use" },
+        "history": true,
+        "trash": true,
+        "fields": [
+          { "name": "issue", "type": "ref", "to": "issue", "required": true, "index": true },
+          { "name": "body", "type": "richtext", "search": true },
+          { "name": "excerpt", "type": "text" },
+          { "name": "reactions", "type": "json", "default": {} },
+          { "name": "editedAt", "type": "datetime" },
+          { "name": "author", "type": "ref", "to": "user" },
+          { "name": "origin", "type": "json" },
+          { "name": "originKey", "type": "text" }
+        ],
+        "unique": [["originKey"]]
+      },
+      {
+        "name": "relations",
+        "scope": "space",
+        "access": { "read": "view", "write": "use" },
+        "fields": [
+          { "name": "source", "type": "text", "required": true, "index": true },
+          { "name": "target", "type": "text", "required": true, "index": true },
+          { "name": "kind", "type": "enum", "values": ["blocks", "relates", "duplicate"], "required": true }
+        ]
+      },
+      {
+        "name": "cycles",
+        "scope": "space",
+        "entity": { "scheme": "cycle", "title": "name" },
+        "access": { "read": "view", "write": "use" },
+        "history": true,
+        "fields": [
+          { "name": "number", "type": "sequence", "per": "space" },
+          { "name": "name", "type": "text", "required": true, "search": true },
+          { "name": "startsOn", "type": "date", "required": true, "index": true },
+          { "name": "endsOn", "type": "date", "required": true, "index": true },
+          { "name": "closed", "type": "boolean", "default": false },
+          { "name": "summary", "type": "longtext" },
+          { "name": "rolledTo", "type": "text" }
+        ]
+      },
+      {
+        "name": "templates",
+        "scope": "space",
+        "access": { "read": "view", "write": "use" },
+        "fields": [
+          { "name": "name", "type": "text", "required": true },
+          { "name": "title", "type": "text" },
+          { "name": "priority", "type": "integer" },
+          { "name": "labels", "type": "json", "default": [] },
+          { "name": "estimate", "type": "number" },
+          { "name": "body", "type": "richtext" }
+        ]
+      },
+      {
+        "name": "views",
+        "scope": "space",
+        "entity": { "scheme": "issueview", "title": "name", "private": "personal" },
+        "access": { "read": "view", "write": "use" },
+        "trash": true,
+        "fields": [
+          { "name": "name", "type": "text", "required": true, "search": true },
+          { "name": "filter", "type": "json", "default": {} },
+          { "name": "display", "type": "json", "default": {} },
+          { "name": "personal", "type": "boolean", "default": false },
+          { "name": "mine", "type": "boolean", "default": false }
+        ]
+      }
+    ],
+    "entityTypes": [
+      {
+        "scheme": "project",
+        "title": "Project",
+        "icon": "board",
+        "view": "projects.overview",
+        "description": "A project"
+      },
+      {
+        "scheme": "issue",
+        "title": "Issue",
+        "icon": "list",
+        "view": "projects.issue",
+        "description": "An issue in a project"
+      },
+      {
+        "scheme": "cycle",
+        "title": "Cycle",
+        "icon": "clock",
+        "view": "projects.cycle",
+        "description": "A cycle of a project"
+      },
+      {
+        "scheme": "label",
+        "title": "Label",
+        "icon": "tag",
+        "view": "projects.label",
+        "description": "An issue label"
+      },
+      {
+        "scheme": "comment",
+        "title": "Comment",
+        "icon": "chat",
+        "view": "projects.comment",
+        "description": "A comment on an issue"
+      },
+      {
+        "scheme": "issueview",
+        "title": "Issue view",
+        "icon": "filter",
+        "view": "projects.issues",
+        "description": "A saved filter of issues"
+      }
+    ],
+    "commands": [
+      {
+        "id": "projects.newIssue",
+        "title": "New issue",
+        "description": "Opens the dialog for a new issue.",
+        "icon": "plus"
+      },
+      {
+        "id": "projects.newProject",
+        "title": "New project",
+        "description": "Creates a project: a space with its own issues, members and repositories.",
+        "icon": "board"
+      },
+      { "id": "projects.open", "title": "Open projects", "icon": "board" },
+      {
+        "id": "projects.myIssues",
+        "title": "My issues",
+        "description": "Issues assigned to you in every project.",
+        "icon": "user"
+      },
+      { "id": "projects.currentCycle", "title": "Go to the current cycle", "icon": "clock" },
+      { "id": "projects.shortcuts", "title": "Projects keyboard shortcuts", "icon": "command" },
+      {
+        "id": "projects.createIssue",
+        "title": "Create an issue",
+        "description": "Creates an issue in a project (its key, or the current project).",
+        "icon": "plus"
+      },
+      {
+        "id": "projects.import",
+        "title": "Import issues",
+        "description": "Imports issues from a CSV file or GitHub's issue JSON.",
+        "icon": "arrow-up-right"
+      }
+    ],
+    "keybindings": [{ "command": "projects.newIssue", "key": "mod+alt+n" }],
+    "views": [
+      { "id": "projects.home", "title": "Projects", "slot": "main", "icon": "board" },
+      { "id": "projects.issues", "title": "Issues", "slot": "main", "icon": "list" },
+      { "id": "projects.issue", "title": "Issue", "slot": "main", "icon": "list" },
+      { "id": "projects.overview", "title": "Project", "slot": "main", "icon": "board" },
+      { "id": "projects.cycles", "title": "Cycles", "slot": "main", "icon": "clock" },
+      { "id": "projects.cycle", "title": "Cycle", "slot": "main", "icon": "clock" },
+      { "id": "projects.mine", "title": "My issues", "slot": "main", "icon": "user" },
+      { "id": "projects.settings", "title": "Project settings", "slot": "main", "icon": "settings" },
+      { "id": "projects.import", "title": "Import issues", "slot": "main", "icon": "arrow-up-right" },
+      { "id": "projects.label", "title": "Label", "slot": "main", "icon": "tag" },
+      { "id": "projects.comment", "title": "Comment", "slot": "main", "icon": "chat" }
+    ],
+    "nav": [
+      {
+        "id": "projects.nav",
+        "title": "All projects",
+        "view": "projects.home",
+        "icon": "board",
+        "section": "projects.sidebar",
+        "order": 10
+      },
+      {
+        "id": "projects.navMine",
+        "title": "My issues",
+        "view": "projects.mine",
+        "icon": "user",
+        "section": "projects.sidebar",
+        "order": 11
+      }
+    ],
+    "routes": [
+      { "path": "/", "view": "projects.home" },
+      { "path": "/mine", "view": "projects.mine" },
+      { "path": "/cycle/:cycle", "view": "projects.cycle" },
+      { "path": "/label/:label", "view": "projects.label" },
+      { "path": "/comment/:comment", "view": "projects.comment" },
+      { "path": "/issues", "view": "projects.issues", "context": "rookery.space" },
+      { "path": "/issues/:tab", "view": "projects.issues", "context": "rookery.space" },
+      { "path": "/issue/:key", "view": "projects.issue", "context": "rookery.space" },
+      { "path": "/overview/*project", "view": "projects.overview", "context": "rookery.space" },
+      { "path": "/cycles", "view": "projects.cycles", "context": "rookery.space" },
+      { "path": "/settings", "view": "projects.settings", "context": "rookery.space" },
+      { "path": "/import", "view": "projects.import", "context": "rookery.space" }
+    ],
+    "jobs": [
+      {
+        "id": "projects.import",
+        "title": "Import issues",
+        "client": true,
+        "timeoutSecs": 3600,
+        "maxAttempts": 1
+      },
+      {
+        "id": "projects.rollover",
+        "title": "Roll unfinished issues over to the next cycle",
+        "timeoutSecs": 600
+      },
+      { "id": "projects.cycleSummary", "title": "Post a summary of each current cycle", "timeoutSecs": 600 },
+      {
+        "id": "projects.pushToSource",
+        "title": "Write a change of an issue to its source",
+        "description": "Writes a change made in Crow (title, description, state, labels, assignee, a comment) to the tracker the issue comes from, as the person who made it.",
+        "timeoutSecs": 120,
+        "maxAttempts": 6,
+        "backoffSecs": 5
+      }
+    ],
+    "schedules": [
+      {
+        "id": "projects.rolloverDaily",
+        "job": "projects.rollover",
+        "title": "Cycle rollover",
+        "cron": "5 0 * * *",
+        "missed": "once"
+      },
+      {
+        "id": "projects.summaryWeekly",
+        "job": "projects.cycleSummary",
+        "title": "Cycle summary",
+        "cron": "0 9 * * 1",
+        "missed": "skip"
+      }
+    ],
+    "widgets": [
+      {
+        "id": "projects.myIssues",
+        "title": "My issues",
+        "description": "Open issues assigned to you, in every project, live.",
+        "icon": "user",
+        "category": "Projects",
+        "sizes": { "default": { "w": 4, "h": 4 }, "min": { "w": 3, "h": 2 }, "max": { "w": 8, "h": 10 } },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "limit": { "type": "integer", "title": "Issues shown", "default": 8, "minimum": 1, "maximum": 30 }
+          }
+        }
+      },
+      {
+        "id": "projects.cycle",
+        "title": "Current cycle",
+        "description": "Progress of the current cycle of a project.",
+        "icon": "clock",
+        "category": "Projects",
+        "sizes": { "default": { "w": 4, "h": 2 }, "min": { "w": 3, "h": 2 }, "max": { "w": 8, "h": 6 } },
+        "settings": {
+          "type": "object",
+          "properties": { "project": { "type": "string", "title": "Project key", "default": "" } }
+        }
+      }
+    ],
+    "blocks": [
+      {
+        "id": "projects.issues",
+        "title": "Issues",
+        "description": "A live list of a project's issues, filtered.",
+        "icon": "list",
+        "keywords": ["issues", "tasks", "projects", "query"],
+        "attrs": {
+          "type": "object",
+          "properties": {
+            "project": { "type": "string", "title": "Project key", "default": "" },
+            "query": { "type": "string", "title": "Filter", "default": "" },
+            "limit": { "type": "integer", "title": "Issues shown", "default": 10 }
+          }
+        },
+        "text": "Issues of {project}: {query}",
+        "markdown": "Issues of {project}: `{query}`"
+      }
+    ],
+    "composer": [
+      {
+        "type": "mention",
+        "id": "projects.issues",
+        "title": "Issues",
+        "description": "Add an issue as context: its text, comments and linked docs.",
+        "icon": "list",
+        "schemes": ["issue"]
+      }
+    ],
+    "tools": [
+      {
+        "id": "projects.createIssue",
+        "title": "Create an issue",
+        "description": "Create an issue in a project. Returns its key and URI."
+      },
+      {
+        "id": "projects.getIssue",
+        "title": "Read an issue",
+        "description": "Read an issue by key (CROW-12) or URI: fields, description, sub-issues, relations and comments."
+      },
+      {
+        "id": "projects.updateIssue",
+        "title": "Update an issue",
+        "description": "Change an issue's title, state, priority, assignee, labels, estimate, due date, parent or cycle."
+      },
+      {
+        "id": "projects.searchIssues",
+        "title": "Search issues",
+        "description": "Find issues with a query (`state:todo assignee:me login bug`) in one project or all."
+      },
+      {
+        "id": "projects.comment",
+        "title": "Comment on an issue",
+        "description": "Add a comment (Markdown) to an issue."
+      },
+      {
+        "id": "projects.listStates",
+        "title": "List a project's states",
+        "description": "The workflow states of a project, in order, with their categories."
+      },
+      {
+        "id": "projects.listLabels",
+        "title": "List a project's labels",
+        "description": "The labels a project's issues can have."
+      },
+      {
+        "id": "projects.link",
+        "title": "Link an entity to an issue",
+        "description": "Record that an entity (a doc, a session, a pull request) belongs to an issue, or relate two issues."
+      }
+    ],
+    "extensions": {
+      "sidebar.sections": [
+        { "id": "projects.sidebar", "title": "Projects", "icon": "board", "presentation": "level" }
+      ],
+      "home.actions": [
+        {
+          "id": "projects.new",
+          "title": "New issue",
+          "icon": "plus",
+          "command": "projects.newIssue",
+          "order": 30
+        },
+        { "id": "projects.mine", "title": "My issues", "icon": "user", "view": "projects.mine", "order": 31 }
+      ],
+      "github.linkPatterns": [
+        {
+          "id": "projects.issueKeys",
+          "title": "Project issues",
+          "pattern": "(?<![A-Za-z0-9])([A-Za-z][A-Za-z0-9]{1,9}-[1-9][0-9]{0,8})(?![0-9])",
+          "flags": "",
+          "service": "projects",
+          "method": "resolveKeys",
+          "branches": true
+        }
+      ]
+    },
+    "settings": [],
+    "adminPages": []
+  }
+}

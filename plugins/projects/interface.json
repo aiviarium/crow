@@ -1,0 +1,1010 @@
+{
+  "id": "projects",
+  "version": "0.1.0",
+  "services": {
+    "projects": {
+      "methods": {
+        "createIssue": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string",
+                "description": "Project key or space id; the current project by default"
+              },
+              "description": {
+                "description": "Markdown",
+                "type": "string"
+              },
+              "link": {
+                "description": "The issue source link to create it through",
+                "type": ["string", "null"]
+              },
+              "state": {
+                "description": "State name",
+                "type": "string"
+              },
+              "priority": {
+                "description": "0 none, 1 urgent, 2 high, 3 medium, 4 low",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4
+              },
+              "assignee": {
+                "description": "user://… or \"me\"",
+                "type": ["string", "null"]
+              },
+              "labels": {
+                "description": "Label names or label:// URIs",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "estimate": {
+                "type": ["number", "null"]
+              },
+              "due": {
+                "type": ["string", "null"]
+              },
+              "parent": {
+                "description": "The parent issue's key or URI",
+                "type": ["string", "null"]
+              },
+              "cycle": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["title"],
+            "additionalProperties": {}
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "uri": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "state": {
+                "type": ["string", "null"]
+              },
+              "category": {
+                "type": ["string", "null"]
+              },
+              "priority": {
+                "type": ["number", "null"]
+              },
+              "assignee": {
+                "type": ["string", "null"]
+              },
+              "labels": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "parent": {
+                "type": ["string", "null"]
+              },
+              "cycle": {
+                "type": ["string", "null"]
+              },
+              "due": {
+                "type": ["string", "null"]
+              },
+              "estimate": {
+                "type": ["number", "null"]
+              }
+            },
+            "required": ["uri", "key", "title"],
+            "additionalProperties": {}
+          }
+        },
+        "getIssue": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "issue": {
+                "type": "string",
+                "description": "Key (CROW-12) or URI (issue://…)"
+              }
+            },
+            "required": ["issue"]
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "uri": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "state": {
+                "type": ["string", "null"]
+              },
+              "category": {
+                "type": ["string", "null"]
+              },
+              "priority": {
+                "type": ["number", "null"]
+              },
+              "assignee": {
+                "type": ["string", "null"]
+              },
+              "labels": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "parent": {
+                "type": ["string", "null"]
+              },
+              "cycle": {
+                "type": ["string", "null"]
+              },
+              "due": {
+                "type": ["string", "null"]
+              },
+              "estimate": {
+                "type": ["number", "null"]
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["uri", "key", "title", "text"],
+            "additionalProperties": {}
+          }
+        },
+        "updateIssue": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "issue": {
+                "type": "string",
+                "description": "Key (CROW-12) or URI (issue://…)"
+              },
+              "title": {
+                "type": "string"
+              },
+              "state": {
+                "description": "State name",
+                "type": "string"
+              },
+              "priority": {
+                "description": "0 none, 1 urgent, 2 high, 3 medium, 4 low",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4
+              },
+              "assignee": {
+                "description": "user://… or \"me\"",
+                "type": ["string", "null"]
+              },
+              "labels": {
+                "description": "Label names or label:// URIs",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "estimate": {
+                "type": ["number", "null"]
+              },
+              "due": {
+                "type": ["string", "null"]
+              },
+              "parent": {
+                "description": "The parent issue's key or URI",
+                "type": ["string", "null"]
+              },
+              "cycle": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["issue"],
+            "additionalProperties": {}
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "uri": {
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "state": {
+                "type": ["string", "null"]
+              },
+              "category": {
+                "type": ["string", "null"]
+              },
+              "priority": {
+                "type": ["number", "null"]
+              },
+              "assignee": {
+                "type": ["string", "null"]
+              },
+              "labels": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "parent": {
+                "type": ["string", "null"]
+              },
+              "cycle": {
+                "type": ["string", "null"]
+              },
+              "due": {
+                "type": ["string", "null"]
+              },
+              "estimate": {
+                "type": ["number", "null"]
+              }
+            },
+            "required": ["uri", "key", "title"],
+            "additionalProperties": {}
+          }
+        },
+        "searchIssues": {
+          "description": "Issues matching a query in the filter language, newest first.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string",
+                "description": "Project key or space id; the current project by default"
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "issues": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "uri": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": ["string", "null"]
+                    },
+                    "category": {
+                      "type": ["string", "null"]
+                    },
+                    "priority": {
+                      "type": ["number", "null"]
+                    },
+                    "assignee": {
+                      "type": ["string", "null"]
+                    },
+                    "labels": {
+                      "anyOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "parent": {
+                      "type": ["string", "null"]
+                    },
+                    "cycle": {
+                      "type": ["string", "null"]
+                    },
+                    "due": {
+                      "type": ["string", "null"]
+                    },
+                    "estimate": {
+                      "type": ["number", "null"]
+                    }
+                  },
+                  "required": ["uri", "key", "title"],
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": ["issues"]
+          }
+        },
+        "comment": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "issue": {
+                "type": "string",
+                "description": "Key (CROW-12) or URI (issue://…)"
+              },
+              "body": {
+                "type": "string",
+                "description": "Markdown"
+              }
+            },
+            "required": ["issue", "body"]
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "comment": {
+                "type": "string"
+              },
+              "issue": {
+                "type": "string"
+              }
+            },
+            "required": ["comment", "issue"]
+          }
+        },
+        "listStates": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "project": {
+                "type": "string",
+                "description": "Project key or space id; the current project by default"
+              }
+            }
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "states": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "category": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["name", "category"]
+                }
+              }
+            },
+            "required": ["states"]
+          }
+        },
+        "listLabels": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "project": {
+                "type": "string",
+                "description": "Project key or space id; the current project by default"
+              }
+            }
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "workspace": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["name", "workspace"]
+                }
+              }
+            },
+            "required": ["labels"]
+          }
+        },
+        "link": {
+          "description": "Links an issue to another issue (a relation) or to any entity (a reference).",
+          "params": {
+            "type": "object",
+            "properties": {
+              "issue": {
+                "type": "string",
+                "description": "Key (CROW-12) or URI (issue://…)"
+              },
+              "entity": {
+                "type": "string",
+                "description": "An issue key, or any entity's URI"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["blocks", "relates", "duplicate"]
+              }
+            },
+            "required": ["issue", "entity"]
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "linked": {
+                "type": "boolean"
+              }
+            },
+            "required": ["linked"]
+          }
+        },
+        "resolveKeys": {
+          "description": "For GitHub's link patterns: issue keys to issue URIs, null for keys that are not issues.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "keys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "space": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": {}
+          },
+          "result": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": ["string", "null"]
+            }
+          }
+        },
+        "issueText": {
+          "description": "The text of an issue for an agent or a model; null when there is no such issue.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "issue": {
+                "type": "string",
+                "description": "Key (CROW-12) or URI (issue://…)"
+              }
+            },
+            "required": ["issue"]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": ["title", "text"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "startAgent": {
+          "description": "Starts an agent session on an issue, in a checkout on a branch of its own.",
+          "params": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {}
+          },
+          "result": {}
+        },
+        "issues.upsertFromSource": {
+          "description": "Issues the source has, created or updated here.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "description": "The source's id in projects.issueSources"
+              },
+              "repository": {
+                "type": "string"
+              },
+              "repoSpace": {
+                "type": ["string", "null"]
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "external": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["external"],
+                  "additionalProperties": {}
+                }
+              },
+              "quiet": {
+                "type": "boolean"
+              }
+            },
+            "required": ["provider", "repository", "items"],
+            "additionalProperties": {}
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "linked": {
+                "type": "boolean"
+              },
+              "space": {
+                "type": "string"
+              },
+              "issues": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "external": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "changed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["external", "id", "key", "created", "changed"]
+                }
+              }
+            },
+            "required": ["linked", "issues"],
+            "additionalProperties": {}
+          }
+        },
+        "comments.upsertFromSource": {
+          "description": "One issue's comments, by the issue's id at the source or its number.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "description": "The source's id in projects.issueSources"
+              },
+              "repository": {
+                "type": "string"
+              },
+              "repoSpace": {
+                "type": ["string", "null"]
+              },
+              "issue": {
+                "type": "string"
+              },
+              "number": {
+                "type": "number"
+              },
+              "comments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "external": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["external"],
+                  "additionalProperties": {}
+                }
+              },
+              "complete": {
+                "description": "Every comment the source has: synced ones not listed go",
+                "type": "boolean"
+              },
+              "quiet": {
+                "type": "boolean"
+              }
+            },
+            "required": ["provider", "repository", "comments"],
+            "additionalProperties": {}
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "linked": {
+                "type": "boolean"
+              }
+            },
+            "required": ["linked"],
+            "additionalProperties": {}
+          }
+        },
+        "issues.listFromSource": {
+          "description": "The issues synced through a repository.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "description": "The source's id in projects.issueSources"
+              },
+              "repository": {
+                "type": "string"
+              },
+              "repoSpace": {
+                "type": ["string", "null"]
+              },
+              "externals": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "comments": {
+                "type": "boolean"
+              }
+            },
+            "required": ["provider", "repository"],
+            "additionalProperties": {}
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": {}
+            }
+          }
+        },
+        "issues.removedAtSource": {
+          "description": "The source no longer has the issue.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "description": "The source's id in projects.issueSources"
+              },
+              "repository": {
+                "type": "string"
+              },
+              "repoSpace": {
+                "type": ["string", "null"]
+              },
+              "external": {
+                "type": "string"
+              },
+              "removed": {
+                "type": "string",
+                "enum": ["deleted", "transferred"]
+              }
+            },
+            "required": ["provider", "repository", "external", "removed"],
+            "additionalProperties": {}
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "linked": {
+                "type": "boolean"
+              }
+            },
+            "required": ["linked"],
+            "additionalProperties": {}
+          }
+        },
+        "sources.link": {
+          "description": "Links a repository to a project, creating the project (as the caller) when none is named.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "description": "The source's id in projects.issueSources"
+              },
+              "repository": {
+                "type": "string"
+              },
+              "repoSpace": {
+                "type": ["string", "null"]
+              },
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": ["string", "null"]
+              },
+              "connection": {
+                "type": ["string", "null"]
+              },
+              "project": {
+                "type": ["string", "null"]
+              },
+              "projectName": {
+                "type": ["string", "null"]
+              },
+              "key": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["provider", "repository", "name"],
+            "additionalProperties": {}
+          },
+          "result": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {}
+          }
+        },
+        "sources.unlink": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "link": {
+                "type": "string"
+              }
+            },
+            "required": ["link"]
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "removed": {
+                "type": "boolean"
+              }
+            },
+            "required": ["removed"],
+            "additionalProperties": {}
+          }
+        },
+        "sources.projects": {
+          "description": "The links of a source's repositories to projects, with each project's key.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "repository": {
+                "type": "string"
+              },
+              "repoSpace": {
+                "type": "string"
+              }
+            },
+            "required": ["provider"],
+            "additionalProperties": {}
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "space": {
+                  "type": "string",
+                  "description": "The project's space"
+                },
+                "provider": {
+                  "type": "string"
+                },
+                "repository": {
+                  "type": "string"
+                },
+                "name": {
+                  "description": "The repository's name at the source",
+                  "type": ["string", "null"]
+                },
+                "repoSpace": {
+                  "type": ["string", "null"]
+                },
+                "key": {
+                  "description": "The project's key",
+                  "type": ["string", "null"]
+                }
+              },
+              "required": ["id", "space", "provider", "repository", "key"],
+              "additionalProperties": {}
+            }
+          }
+        },
+        "sources.find": {
+          "description": "The Crow issue of a source's issue, by number or id at the source; null when none.",
+          "params": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "description": "The source's id in projects.issueSources"
+              },
+              "repository": {
+                "type": "string"
+              },
+              "repoSpace": {
+                "type": ["string", "null"]
+              },
+              "number": {
+                "type": "number"
+              },
+              "external": {
+                "type": "string"
+              }
+            },
+            "required": ["provider", "repository"],
+            "additionalProperties": {}
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "events": {},
+  "extensionPoints": [
+    {
+      "id": "projects.issueSources",
+      "description": "Another tracker whose issues are Projects issues (GitHub, Linear, Jira): a project links to its repositories, and issues and comments sync both ways. The contributing plugin brings changes in through the projects service (issues.upsertFromSource, comments.upsertFromSource); Projects calls the `push` method of its service to write a change of an issue or a comment, as the person who made it, and `repositories` for what a project can be linked to.",
+      "schema": {
+        "type": "object",
+        "required": ["id", "title", "service", "push"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The provider: what `source.provider` of its issues says (`github`)."
+          },
+          "title": {
+            "type": "string",
+            "description": "The tracker's name, as in “Open on GitHub”."
+          },
+          "icon": {
+            "type": "string",
+            "description": "An icon of @crow/ui for its badge."
+          },
+          "service": {
+            "type": "string"
+          },
+          "push": {
+            "type": "string",
+            "description": "Gets { link, issue, fields, create?, comment? } and returns what the source now has."
+          },
+          "repositories": {
+            "type": "string",
+            "description": "Gets { space } and returns { repositories: [{ repository, name, url, repoSpace, connection, linked? }] }."
+          },
+          "linked": {
+            "type": "string",
+            "description": "Gets { link } after a project was linked from its settings."
+          },
+          "unlinked": {
+            "type": "string",
+            "description": "Gets { link } after a link was removed."
+          }
+        }
+      }
+    }
+  ],
+  "entityTypes": [
+    {
+      "scheme": "project",
+      "title": "Project",
+      "icon": "board",
+      "view": "projects.overview",
+      "description": "A project"
+    },
+    {
+      "scheme": "issue",
+      "title": "Issue",
+      "icon": "list",
+      "view": "projects.issue",
+      "description": "An issue in a project"
+    },
+    {
+      "scheme": "cycle",
+      "title": "Cycle",
+      "icon": "clock",
+      "view": "projects.cycle",
+      "description": "A cycle of a project"
+    },
+    {
+      "scheme": "label",
+      "title": "Label",
+      "icon": "tag",
+      "view": "projects.label",
+      "description": "An issue label"
+    },
+    {
+      "scheme": "comment",
+      "title": "Comment",
+      "icon": "chat",
+      "view": "projects.comment",
+      "description": "A comment on an issue"
+    },
+    {
+      "scheme": "issueview",
+      "title": "Issue view",
+      "icon": "filter",
+      "view": "projects.issues",
+      "description": "A saved filter of issues"
+    }
+  ]
+}

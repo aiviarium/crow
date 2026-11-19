@@ -1,0 +1,1 @@
+{ "steps": [{ "op": "renameField", "collection": "issues", "from": "source", "to": "importedFrom" }] }
