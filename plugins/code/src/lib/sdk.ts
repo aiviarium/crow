@@ -1,14 +1,14 @@
 // Typed adapters from the prototype's host API (`@crow/sdk`) onto `@rookery/sdk`'s `Rookery` and `Ctx`.
 //
-// Rookery's extension host arrives in M2 and its datastore, spaces and groups in M2b. The handles below use
+// Rookery's extension host arrived in M2 and its datastore, spaces and groups in M2b. The handles below use
 // what `@rookery/sdk` types today and reach, through a cast, for the few facilities the pinned SDK does not
-// declare yet (`entities`, `connections.test`, `settings.getFor`, `access.levelOf`, `schedules.create`,
-// `env.repositories`, `agents.tool`, `services.find`). Each is marked in `API.md`; every fallback keeps the
+// declare yet (`entities`, `settings.getFor`, `access.levelOf`, `schedules.create`,
+// `env.repositories`, `agents.tool`). Each is marked in `API.md`; every fallback keeps the
 // plugin working (or failing cleanly) where the facility is absent.
 import type { Ctx, Disposable, JobHandle, Rookery, SpaceInfo } from "@rookery/sdk"
 import { ghSpace, type RepoRow } from "./rows"
 
-/** The host handle with the facilities that arrive with M2/M2b. */
+/** The host handle with the facilities that arrive with M2b and M5b. */
 export interface RookeryExtras {
   entities?: {
     lookup(ctx: Ctx | null, uri: string): Promise<EntityInfo | null>
@@ -23,15 +23,6 @@ export interface RookeryExtras {
       handler: (ctx: Ctx, ref: { id: string }) => Promise<{ title: string; text: string } | null>,
     ): Disposable
     alias?(ctx: Ctx | null, from: string, to: string): Promise<void>
-  }
-  connections: Rookery["connections"] & {
-    test?(
-      type: string,
-      fn: (
-        ctx: Ctx,
-        connection: ConnectionView,
-      ) => Promise<{ ok: boolean; message: string; details?: unknown }>,
-    ): Disposable
   }
   settings: Rookery["settings"] & {
     /** Another person's user-scoped setting (the prototype's `settings.getFor`). */
@@ -54,10 +45,6 @@ export interface RookeryExtras {
       id: string,
       def: { params: unknown; run: (ctx: Ctx, params: any) => unknown; confirm?: boolean },
     ): Disposable
-  }
-  services: Rookery["services"] & {
-    find?(name: string): Record<string, (ctx: Ctx, params: any) => Promise<any>> | null
-    contributed?(name: string): Record<string, (ctx: Ctx, params: any) => Promise<any>>
   }
 }
 
@@ -180,7 +167,7 @@ export async function visibleSpaces(rookery: Rookery, ctx: Ctx | null): Promise<
 
 // ── services ─────────────────────────────────────────────────────────────────────────────────────────
 
-/** A method of another plugin's service, called the way the prototype's `services.get` did. */
+/** A method of another plugin's service, called with the caller's context as the server records it. */
 export async function callService<T = unknown>(
   rookery: Rookery,
   ctx: Ctx | null,
@@ -189,9 +176,7 @@ export async function callService<T = unknown>(
   method: string,
   params: Record<string, unknown>,
 ): Promise<T> {
-  const services = extrasOf(rookery).services
-  const local = services.find?.(service)?.[method] ?? services.contributed?.(service)?.[method]
-  if (typeof local === "function") return (await local(ctx as Ctx, params)) as T
+  void ctx
   return rookery.services.call<T>(plugin, service, method, params)
 }
 

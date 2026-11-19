@@ -2,7 +2,7 @@
 // through env.readFile/writeFile/deleteFile/listDir and env.exec. Commands that may take longer than a
 // host handler (search, push, pull, fetch) run with env.exec from here, not through the host half.
 
-import type { DirListing, ExecResult, FileData } from "@rookery/client"
+import type { DirListing, FileData } from "@rookery/client"
 import type { ClientRookery } from "@rookery/sdk/client"
 import type { ChangedFile } from "./git/files"
 import type { Blame, Commit, CommitDetail, Ref, Stash } from "./git/log"
@@ -106,12 +106,11 @@ export interface CommandResult {
   stderr: string
   /** The link to the host dropped while it ran. */
   lost: boolean
+  /** The host carried less of what it wrote than the command did: `stdout` and `stderr` are partial. */
+  truncated: boolean
 }
 
-/**
- * Runs a command on the host and waits for it. `env.exec` takes the environment as `env`; its stdin and its
- * deadline are in the wire's `ExecParams` but not in the SDK's type at this pin, so they are passed through.
- */
+/** Runs a command on the host and waits for it. `env.exec` takes the environment as `env`. */
 export async function runCommand(
   rookery: ClientRookery,
   o: {
@@ -123,17 +122,18 @@ export async function runCommand(
     timeoutMs?: number
   },
 ): Promise<CommandResult> {
-  const r = (await rookery.env.exec(o.env, o.command, {
+  const r = await rookery.env.exec(o.env, o.command, {
     ...(o.cwd ? { cwd: o.cwd } : {}),
     ...(o.vars ? { env: o.vars } : {}),
     ...(o.stdin !== undefined ? { stdin: o.stdin } : {}),
     ...(o.timeoutMs ? { timeoutMs: o.timeoutMs } : {}),
-  } as never)) as ExecResult
+  })
   return {
     exitCode: r.exitCode ?? null,
     stdout: r.stdout,
     stderr: r.stderr,
     lost: !!r.lost,
+    truncated: !!r.truncated,
   }
 }
 
@@ -343,9 +343,9 @@ export function createApi(rookery: ClientRookery) {
       env: string,
       root: string,
       command: string[],
-    ): Promise<{ exitCode: number | null; stdout: string; stderr: string }> => {
+    ): Promise<{ exitCode: number | null; stdout: string; stderr: string; truncated: boolean }> => {
       const r = await runCommand(rookery, { env, command, cwd: root, timeoutMs: 120_000 })
-      return { exitCode: r.exitCode, stdout: r.stdout, stderr: r.stderr }
+      return { exitCode: r.exitCode, stdout: r.stdout, stderr: r.stderr, truncated: r.truncated }
     },
   }
 

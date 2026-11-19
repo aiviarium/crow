@@ -6,6 +6,7 @@
 // summary jobs, agent tools where the server has them, and a watcher that repairs issues written past the
 // plugin.
 import { type ChangeEvent, type Ctx, definePlugin, type RichText, RookeryError, z } from "@rookery/sdk"
+import api from "../rookery/interface"
 import { type Filter, matches, parseQuery, type Resolver } from "./lib/filter"
 import { formatIssueKey, keyWords } from "./lib/keys"
 import { CATEGORY_ICON, defaultState, firstOf, type IssueRow, issueLabel, type StateRow } from "./lib/model"
@@ -620,7 +621,7 @@ export default definePlugin((rookery) => {
     "sources.projects": (_ctx: Ctx, p: any) => sources.projectsOf(p),
     "sources.find": (ctx: Ctx, p: any) => sources.findBySource(ctx, p),
   }
-  rookery.services.provide("projects", service)
+  rookery.services.provide(api.services.projects, service)
 
   rookery.commands.register("projects.createIssue", {
     params: z.object({

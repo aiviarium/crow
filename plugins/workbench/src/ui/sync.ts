@@ -82,9 +82,15 @@ export async function syncAction(
           l &&
           !/^(remote: )?(Counting|Compressing|Writing|Receiving|Resolving|Enumerating|Total|Delta)/.test(l),
       )
+    const tail = lines.slice(-6).join("\n") || `exited ${r.exitCode ?? "without a status"}`
+    // The host keeps the start of what a command wrote and drops the rest, so git's own error may be the part
+    // that is missing.
+    const body = r.truncated
+      ? `${tail}\n(git wrote more than the host returned; its last words are lost.)`
+      : tail
     rookery.workbench.toast({
       title: op === "push" ? "The push was refused" : `git ${op} failed`,
-      body: lines.slice(-6).join("\n") || `exited ${r.exitCode ?? "without a status"}`,
+      body,
       kind: "danger",
     })
     w.setLastError(`git ${op}: ${lines.slice(-6).join(" · ")}`)

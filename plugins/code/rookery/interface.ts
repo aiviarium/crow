@@ -96,8 +96,24 @@ export default defineInterface({
           external: z.string().nullish(),
           number: z.number().nullish(),
           fields: z.array(z.enum(["title", "body", "state", "labels", "assignee"])),
-          issue: z.looseObject({ id: z.string(), key: z.string(), title: z.string() }),
-          comment: z.looseObject({ op: z.enum(["create", "edit", "delete"]), id: z.string() }).optional(),
+          issue: z.looseObject({
+            id: z.string(),
+            key: z.string(),
+            title: z.string(),
+            body: z.string(),
+            state: z.enum(["open", "closed:completed", "closed:not_planned"]),
+            labels: z.array(z.object({ name: z.string(), color: z.string().optional() })),
+            assignee: z.string().nullable(),
+            people: z.array(z.object({ login: z.string() })),
+          }),
+          comment: z
+            .looseObject({
+              op: z.enum(["create", "edit", "delete"]),
+              id: z.string(),
+              external: z.string().nullish(),
+              body: z.string().optional(),
+            })
+            .optional(),
         }),
         result: z.looseObject({}),
       },

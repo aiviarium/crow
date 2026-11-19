@@ -1,11 +1,12 @@
 // The model-anthropic plugin's host half: serves the `anthropic` service the Models plugin calls for the
 // `model-anthropic.messages` provider (its contribution to `ai.providers`), so an admin can map the text and fast
-// tasks to Anthropic's Messages API, and tests a connection by listing its models.
+// tasks to Anthropic's Messages API. `generate` streams: its interface declares it, and callers read it with
+// `services.stream`.
 //
 // Connection credentials are fetched via `rookery.connections.resolve(id)` so API keys stay sealed in Rookery's
 // credential store (`secrets` / `connections`) and never appear in settings, logs, or argv.
 import { type Ctx, definePlugin } from "@rookery/sdk"
-import type { ProviderCallParams } from "../rookery/interface"
+import api, { type ProviderCallParams } from "../rookery/interface"
 import { generate, models, type ProviderCall } from "./provider"
 
 export async function testConnection(
@@ -36,7 +37,7 @@ export default definePlugin((rookery) => {
     return { apiKey: resolved.credential ?? "", rejectRedirects: true }
   }
 
-  rookery.services.provide("anthropic", {
+  rookery.services.provide(api.services.anthropic, {
     async *generate(ctx: Ctx, p: ProviderCallParams) {
       const values = await valuesOf(p.connection)
       const queue: string[] = []
@@ -78,14 +79,4 @@ export default definePlugin((rookery) => {
       models: await models(await valuesOf(p.connection), ctx.signal),
     }),
   })
-
-  // `@rookery/sdk` host `Connections` does not expose `connections.test(type, fn)` yet (arrives in M2).
-  // Register when present; testConnection stays exported for direct verification and `API.md` tracks the gap.
-  const connections = rookery.connections as unknown as {
-    test?: (
-      type: string,
-      handler: (ctx: Ctx, conn: { values: Record<string, unknown> }) => Promise<unknown>,
-    ) => unknown
-  }
-  connections.test?.("model-anthropic.api", (ctx, conn) => testConnection(conn.values, ctx.signal))
 })

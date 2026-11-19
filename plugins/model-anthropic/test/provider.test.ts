@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { type Ctx, disposable, type Rookery } from "@rookery/sdk"
+import { activate, createHost, type HostTransport } from "@rookery/sdk/runtime/host"
+import api from "../rookery/interface"
+import manifest from "../rookery/plugin.json"
 import plugin, { testConnection } from "../src/host"
 import { generate, models } from "../src/provider"
 import { startMockMessages } from "./mock"
@@ -132,11 +135,12 @@ describe("the Anthropic provider against a mock Messages API", () => {
         },
       },
       services: {
-        provide(service: string, methods: Record<string, (ctx: Ctx, params: any) => any>) {
-          expect(service).toBe("anthropic")
+        provide(service: string | { name: string }, methods: Record<string, (ctx: Ctx, params: any) => any>) {
+          expect(typeof service === "string" ? service : service.name).toBe("anthropic")
           provided = methods
           return disposable(() => {})
         },
+        stream: async function* () {},
       },
     } as unknown as Rookery
 
@@ -176,5 +180,24 @@ describe("the Anthropic provider against a mock Messages API", () => {
       text: "Hello from Claude",
       model: "claude-opus-5-5",
     })
+  })
+})
+
+describe("the Anthropic host half on the extension host", () => {
+  test("activates: generate is a streamed method of its interface, models a call", async () => {
+    const transport: HostTransport = {
+      call: async () => ({}),
+      registered: () => {},
+      unregistered: () => {},
+      log: () => {},
+    }
+    const { runtime, rookery } = createHost("model-anthropic", manifest as never, transport)
+    runtime.interface = api
+    const registered = await activate(runtime, rookery, plugin)
+    const service = registered.find((r) => r.kind === "service" && r.key === "anthropic")
+    expect(Object.keys(service?.methods ?? {}).sort()).toEqual(["generate", "models"])
+    // The interface says generate answers with chunks, so the host registers it as a stream.
+    expect(service?.methods?.generate?.stream).toBe(true)
+    expect(service?.methods?.models?.stream).toBe(false)
   })
 })

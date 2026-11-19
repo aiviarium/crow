@@ -6,6 +6,7 @@
 // models, and the `docs` service that agent tools call. Everything acts as the caller, so their access applies;
 // only the documents are created and removed as the plugin (it attaches them to its own pages).
 import { type Ctx, definePlugin, mentions, type Query, type RichText, RookeryError, z } from "@rookery/sdk"
+import api from "../rookery/interface"
 import { stringifyFrontMatter } from "./lib/frontmatter"
 import { type ExportPage, exportTree, type PlannedPage } from "./lib/mdio"
 import {
@@ -1086,7 +1087,7 @@ export default definePlugin((baseRookery) => {
   })
 
   // The service other plugins (and the agents plugin's tools) call with their ctx.
-  rookery.services.provide("docs", {
+  rookery.services.provide(api.services.docs, {
     read: (ctx, p) => read(ctx, p.page, p.space),
     search: (ctx, p) => search(ctx, p.text, p),
     list: (ctx, p) => list(ctx, p),
