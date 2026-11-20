@@ -28,6 +28,8 @@ import { type Accessor, createMemo, createSignal } from "solid-js"
 import { createInboxStore, type InboxStore } from "../inbox/state"
 import { createJobsStore, type JobsStore } from "../jobs/state"
 import { withBuiltinImporter, withBuiltinPlugins } from "./builtins"
+import { createEntityStore, type EntityStore } from "./entities"
+import { createShellWidgetArea } from "./widgets"
 
 export const HOME_VIEW = "crow.home"
 export const JOBS_VIEW = "crow.jobs"
@@ -81,6 +83,9 @@ export interface ShellApp {
   readonly signInOptions: Accessor<SignInOptions>
   readonly aboutOpen: Accessor<boolean>
   readonly setAboutOpen: (open: boolean) => void
+  readonly shareUri: Accessor<string | null>
+  readonly setShareUri: (uri: string | null) => void
+  readonly entities: EntityStore
   readonly currentUrl: Accessor<{ pathname: string; search: string }>
   readonly routeTable: Accessor<RouteEntry[]>
   readonly routeMatch: Accessor<RouteMatch | null>
@@ -126,6 +131,7 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
   const [authPhase, setAuthPhase] = createSignal<AuthPhase>("checking")
   const [signInOptions, setSignInOptions] = createSignal<SignInOptions>(DEFAULT_SIGN_IN)
   const [aboutOpen, setAboutOpen] = createSignal(false)
+  const [shareUri, setShareUri] = createSignal<string | null>(null)
   const [viewTitle, setViewTitle] = createSignal<string | null>(null)
   const [spaces, setSpaces] = createSignal<SpaceInfo[]>([])
   const [currentSpace, setCurrentSpace] = createSignal<SpaceInfo | null>(null)
@@ -223,13 +229,24 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
   const loaderConn = useBuiltins ? withBuiltinPlugins(conn) : conn
   const importModule = useBuiltins ? withBuiltinImporter(opts.importModule) : opts.importModule
 
+  let appRef!: ShellApp
+  const entities = createEntityStore(() => appRef, conn)
+  const WidgetArea = createShellWidgetArea(() => appRef)
+
   const loader = createPluginLoader(loaderConn, {
     eventBus: bus,
     baseUrl,
     importModule,
     runtime: {
       openView: (id, openOpts) => openView(id, openOpts),
+      openEntity: (uri) => entities.open(uri),
+      share: (uri) => setShareUri(uri),
       href: (id, linkOpts) => href(id, linkOpts),
+      components: {
+        EntityChip: entities.EntityChip,
+        MentionPicker: entities.MentionPicker,
+        WidgetArea,
+      },
       toast: (t) => {
         toast({
           title: t.title,
@@ -344,7 +361,7 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
     conn.stop()
   }
 
-  return {
+  appRef = {
     baseUrl,
     conn,
     bus,
@@ -364,6 +381,9 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
     signInOptions,
     aboutOpen,
     setAboutOpen,
+    shareUri,
+    setShareUri,
+    entities,
     currentUrl,
     routeTable,
     routeMatch,
@@ -377,4 +397,5 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
     signOut,
     dispose,
   }
+  return appRef
 }

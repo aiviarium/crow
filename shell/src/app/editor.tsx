@@ -1,85 +1,18 @@
-// The editor services the shell gives every `RichTextEditor`: the block types plugins contribute under
-// `contributes.blocks`, drawn by the components their client halves register.
-//
-// A plugin's client half registers through the shared `crow.blocks.registry` symbol because
-// `@rookery/sdk/client` has no `rookery.blocks` yet, the same bridge the dashboards' widgets use. A block
-// whose plugin is missing or turned off keeps its data and shows the editor's placeholder, because its
-// type is listed with `available: false` rather than dropped.
+// The shell's editor services (`EditorServices` from `@aiviarium/nocturne`):
+// the block types plugins declare in `contributes.blocks` with the components registered through
+// `rookery.blocks.register` (`app.loader.blocks()`), plus `@` entity mentions and blob uploads.
 import {
-  type BlockWidth,
   type EditorBlockType,
   type EditorServices,
   EditorServicesProvider,
+  Icon,
+  type MentionItem,
+  type UploadedFile,
 } from "@aiviarium/nocturne"
-import type { PluginInfo } from "@rookery/client"
-import type { Disposable } from "@rookery/sdk/client"
-import { type Accessor, createMemo, createSignal, type JSX, onCleanup, type ParentProps } from "solid-js"
+import type { BlobInfo, BlockEntry, EntityList, PluginInfo } from "@rookery/client"
+import { type Accessor, createMemo, createResource, type JSX, type ParentProps, Show } from "solid-js"
+import { iconFor, splitUri, typeTitle } from "./entities"
 import type { ShellApp } from "./state"
-
-export const BLOCK_REGISTRY_SYMBOL = Symbol.for("crow.blocks.registry")
-
-/** What a block's component is handed: its attributes, live, and the way to change them. */
-export interface BlockViewProps {
-  attrs: Record<string, unknown>
-  setAttrs(next: Record<string, unknown>): void
-  get readOnly(): boolean
-}
-
-export interface BlockOptions {
-  forceWidth?: (attrs: Record<string, unknown>) => BlockWidth | null | undefined
-}
-
-interface Registration {
-  plugin: string
-  component: (props: BlockViewProps) => JSX.Element
-  options?: BlockOptions
-}
-
-export interface SharedBlockStore {
-  readonly components: Map<string, Registration>
-  readonly listeners: Set<() => void>
-  notify(): void
-  register(
-    plugin: string,
-    id: string,
-    component: Registration["component"],
-    options?: BlockOptions,
-  ): Disposable
-}
-
-/**
- * The block registry all plugins share. A plugin bundle carries its own copy of this file's user (its
- * `registerBlock` helper), so the store itself lives on the global object.
- */
-export function sharedBlockStore(): SharedBlockStore {
-  const g = globalThis as Record<PropertyKey, unknown>
-  const existing = g[BLOCK_REGISTRY_SYMBOL] as SharedBlockStore | undefined
-  if (existing) return existing
-  const components = new Map<string, Registration>()
-  const listeners = new Set<() => void>()
-  const store: SharedBlockStore = {
-    components,
-    listeners,
-    notify() {
-      for (const fn of listeners) fn()
-    },
-    register(plugin, id, component, options) {
-      const entry: Registration = { plugin, component, ...(options ? { options } : {}) }
-      components.set(id, entry)
-      store.notify()
-      return {
-        dispose() {
-          if (components.get(id) === entry) {
-            components.delete(id)
-            store.notify()
-          }
-        },
-      }
-    },
-  }
-  g[BLOCK_REGISTRY_SYMBOL] = store
-  return store
-}
 
 /** A new block's attributes: the defaults of the manifest's JSON Schema. */
 export function defaultsOf(schema: unknown): Record<string, unknown> {
@@ -93,11 +26,14 @@ export function defaultsOf(schema: unknown): Record<string, unknown> {
 }
 
 /** Every block type the active plugins declare, with the component of each that registered one. */
-export function blockTypes(plugins: Readonly<Record<string, PluginInfo>>): EditorBlockType[] {
+export function blockTypes(
+  plugins: Readonly<Record<string, PluginInfo>>,
+  blocks: Readonly<Record<string, BlockEntry>> = {},
+): EditorBlockType[] {
   const out: EditorBlockType[] = []
   for (const p of Object.values(plugins)) {
     for (const b of p.manifest?.contributes?.blocks ?? []) {
-      const entry = sharedBlockStore().components.get(b.id)
+      const entry = blocks[b.id]
       out.push({
         id: b.id,
         title: b.title,
@@ -118,21 +54,105 @@ export function blockTypes(plugins: Readonly<Record<string, PluginInfo>>): Edito
 
 /** An accessor over the block types, kept current as plugins load and register their components. */
 export function blockTypeSource(app: ShellApp): Accessor<EditorBlockType[]> {
-  const store = sharedBlockStore()
-  const [version, setVersion] = createSignal(0)
-  const listener = () => setVersion((v) => v + 1)
-  store.listeners.add(listener)
-  onCleanup(() => store.listeners.delete(listener))
   return createMemo(() => {
-    version()
-    // Reading the loader's plugins here is what makes a plugin's activation show its blocks.
-    return blockTypes(app.loader.plugins)
+    const blocks = app.loader.blocks?.() ?? {}
+    return blockTypes(app.loader.plugins, blocks)
   })
 }
 
-/** Wraps the shell's views so every editor under them can show the plugins' blocks. */
+function base64(bytes: ArrayBuffer): string {
+  let binary = ""
+  const all = new Uint8Array(bytes)
+  for (let i = 0; i < all.length; i += 0x8000) {
+    binary += String.fromCharCode(...all.subarray(i, i + 0x8000))
+  }
+  return btoa(binary)
+}
+
+/** Wraps the shell's views so every editor under them can show the plugins' blocks, mentions, and uploads. */
 export function CrowEditorServices(props: ParentProps<{ app: ShellApp }>): JSX.Element {
   const types = blockTypeSource(props.app)
-  const services: EditorServices = { blocks: types }
+
+  const searchMentions = async (query: string): Promise<MentionItem[]> => {
+    const text = query.trim()
+    if (!text) return []
+    const res = await props.app.conn
+      .call<EntityList>("entities.search", { text, limit: 8 })
+      .catch(() => ({ entities: [] }))
+    const plugins = props.app.loader.plugins
+    return (res.entities ?? [])
+      .filter((e) => !e.deletedAt && e.scheme !== "document")
+      .map((e) => ({
+        uri: e.uri,
+        title: e.title,
+        subtitle: e.subtitle ?? typeTitle(plugins, e.scheme),
+        icon: iconFor(plugins, e.scheme),
+      }))
+  }
+
+  const MentionChip = (p: { uri: string; label: string }): JSX.Element => {
+    const Chip = props.app.entities?.EntityChip
+    if (!Chip) return <span class="nc-chip">{p.label || p.uri}</span>
+    return <Chip uri={p.uri} label={p.label} />
+  }
+
+  const MentionPreview = (p: { uri: string; label: string }): JSX.Element => {
+    const [entity] = createResource(
+      () => p.uri,
+      (uri) => props.app.entities?.resolve(uri) ?? Promise.resolve(null),
+    )
+    const scheme = () => splitUri(p.uri).scheme
+    const plugins = () => props.app.loader.plugins
+    return (
+      <div class="crow-mention-card" data-entity={p.uri}>
+        <div class="crow-mention-card__head">
+          <span class="crow-mention-card__icon">
+            <Icon name={iconFor(plugins(), scheme())} size="sm" />
+          </span>
+          <span class="crow-mention-card__title label">{entity()?.title ?? p.label}</span>
+        </div>
+        <Show
+          when={entity.loading || entity()}
+          fallback={<span class="nc-meta">Not available: deleted, or not shared with you.</span>}
+        >
+          <span class="nc-meta">
+            {typeTitle(plugins(), scheme())}
+            {entity()?.subtitle ? ` · ${entity()!.subtitle}` : ""}
+          </span>
+          <button
+            type="button"
+            class="nc-btn nc-btn--secondary nc-btn--sm"
+            onClick={() => props.app.entities?.open(p.uri)}
+          >
+            Open
+          </button>
+        </Show>
+      </div>
+    )
+  }
+
+  const upload = async (file: File): Promise<UploadedFile> => {
+    const blob = await props.app.conn.call<BlobInfo>("blobs.put", {
+      data: base64(await file.arrayBuffer()),
+      contentType: file.type || "application/octet-stream",
+      ...(file.name ? { name: file.name } : {}),
+    })
+    return {
+      src: `/blobs/${encodeURIComponent(blob.id)}`,
+      name: blob.name ?? file.name,
+      size: blob.size,
+      mime: blob.contentType ?? file.type,
+      blob: `blob://${blob.id}`,
+    }
+  }
+
+  const services: EditorServices = {
+    blocks: types,
+    searchMentions,
+    MentionChip,
+    MentionPreview,
+    openMention: (uri) => props.app.entities?.open(uri),
+    upload,
+  }
   return <EditorServicesProvider value={services}>{props.children}</EditorServicesProvider>
 }

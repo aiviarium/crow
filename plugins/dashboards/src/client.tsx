@@ -8,6 +8,7 @@ import { type ClientRookery, defineClient, type Live } from "@rookery/sdk/client
 import { type Component, createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
 import {
   registerManifestWidgets,
+  setShellWidgetSource,
   WidgetArea,
   type WidgetAreaProps,
   type WidgetInstance,
@@ -50,7 +51,19 @@ async function syncManifestWidgets(rookery: ClientRookery): Promise<void> {
 
 export default defineClient((rookery) => {
   const rk = rookery as RookeryWithOptionalExtensions
-  const Area: Component<WidgetAreaProps> = rk.widgets?.Area ?? WidgetArea
+  if (typeof rk.widgets?.types === "function") {
+    setShellWidgetSource({
+      types: () => rk.widgets!.types(),
+    })
+  }
+  const Area: Component<WidgetAreaProps> = (props) => {
+    const Custom = rk.widgets?.Area
+    if (Custom) {
+      const rendered = Custom(props)
+      if (rendered !== null && rendered !== undefined) return rendered
+    }
+    return <WidgetArea {...props} />
+  }
   void syncManifestWidgets(rookery)
 
   const open = (id: string, editing = false) =>
@@ -213,15 +226,7 @@ export default defineClient((rookery) => {
     const shareSpace = () => {
       const s = space()
       if (!s) return
-      if (rk.workbench.share) {
-        rk.workbench.share(`space://${s.id}`)
-      } else {
-        rookery.workbench.toast({
-          title: "Space sharing is not available yet",
-          body: "Sharing dialogs arrive with Rookery spaces (M2b).",
-          kind: "info",
-        })
-      }
+      rookery.workbench.share?.(`space://${s.id}`)
     }
     return (
       <div class="dashboards" data-part="dashboard" data-editing={editing() ? "" : undefined}>
