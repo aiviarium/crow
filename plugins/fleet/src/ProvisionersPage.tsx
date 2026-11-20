@@ -60,6 +60,8 @@ export function ProvisionersPage(props: {
   const [running, setRunning] = createSignal<{ provisioner: ProvisionerInfo; action: Action } | null>(null)
   const [busy, setBusy] = createSignal(false)
   const [notice, setNotice] = createSignal<string | null>(null)
+  // What a refused removal says still holds the provisioner, kept for the dialog.
+  const [held, setHeld] = createSignal<Resource[]>([])
 
   const registered = () => loaded()?.registered ?? []
   const types = () => loaded()?.types ?? []
@@ -77,20 +79,23 @@ export function ProvisionersPage(props: {
     if (!one || busy()) return
     setBusy(true)
     setNotice(null)
+    setHeld([])
     try {
       await props.api.provisioners.remove(one.name || one.id)
       setRemoving(null)
       setNotice(`Removed ${one.name || one.id}`)
       reload()
     } catch (error) {
-      const held = heldResources(error)
-      props.rookery.workbench.toast({
-        kind: "danger",
-        title: `Could not remove ${one.name || one.id}`,
-        body: held.length
-          ? `${errorMessage(error)} Remove first: ${held.map((resource) => resource.name).join(", ")}.`
-          : errorMessage(error),
-      })
+      // What it holds is named in the dialog that asked, which stays open.
+      const resources = heldResources(error)
+      if (resources.length > 0) setHeld(resources)
+      else {
+        props.rookery.workbench.toast({
+          kind: "danger",
+          title: `Could not remove ${one.name || one.id}`,
+          body: errorMessage(error),
+        })
+      }
     } finally {
       setBusy(false)
     }
@@ -204,7 +209,10 @@ export function ProvisionersPage(props: {
                           size="sm"
                           variant="ghost"
                           data-part="remove-provisioner"
-                          onClick={() => setRemoving(provisioner)}
+                          onClick={() => {
+                            setHeld([])
+                            setRemoving(provisioner)
+                          }}
                         >
                           Remove
                         </Button>
@@ -334,6 +342,18 @@ export function ProvisionersPage(props: {
             Remove <span class="mono">{removing()?.name || removing()?.id}</span> from Rookery. Its plugin
             stays installed.
           </Callout>
+          <Show when={held().length > 0}>
+            <Callout tone="danger" data-part="remove-provisioner-refused">
+              Rookery keeps <span class="mono">{removing()?.name || removing()?.id}</span> while it holds{" "}
+              {held().length === 1 ? "a resource" : `${held().length} resources`}:{" "}
+              <span class="mono">
+                {held()
+                  .map((resource) => resource.name)
+                  .join(", ")}
+              </span>
+              . Remove {held().length === 1 ? "it" : "them"} first.
+            </Callout>
+          </Show>
         </Dialog>
       </div>
     </ViewLayout>
