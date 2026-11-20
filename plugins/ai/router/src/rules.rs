@@ -107,7 +107,9 @@ pub fn target(scope: Scope, caller: &Caller, conn: Option<&ConnFacts>) -> Result
     match scope {
         Scope::Global => {
             if !caller.admin {
-                return Err(Error::forbidden("only admins map tasks for the whole deployment"));
+                return Err(Error::forbidden(
+                    "only admins map tasks for the whole deployment",
+                ));
             }
             if conn.is_some_and(|c| c.scope != Scope::Global) {
                 return Err(Error::invalid(
@@ -147,7 +149,12 @@ mod tests {
 
     use super::*;
 
-    fn row(task: MappingTask, scope: MappingScope, space: Option<&str>, user: Option<&str>) -> Mapping {
+    fn row(
+        task: MappingTask,
+        scope: MappingScope,
+        space: Option<&str>,
+        user: Option<&str>,
+    ) -> Mapping {
         Mapping {
             id: String::new(),
             updated_at: datetime!(2026-11-14 12:00 UTC),
@@ -186,7 +193,11 @@ mod tests {
             .collect();
         assert_eq!(
             got,
-            [MappingScope::User, MappingScope::Space, MappingScope::Global]
+            [
+                MappingScope::User,
+                MappingScope::Space,
+                MappingScope::Global
+            ]
         );
     }
 
@@ -205,7 +216,10 @@ mod tests {
         assert!(!usable(&ann(), MappingScope::Global, false));
         assert!(usable(&ann(), MappingScope::Global, true));
         assert!(usable(
-            &Caller { admin: true, ..ann() },
+            &Caller {
+                admin: true,
+                ..ann()
+            },
             MappingScope::User,
             false
         ));
@@ -242,7 +256,10 @@ mod tests {
         };
         let e = target(Scope::Global, &ann(), Some(&global)).unwrap_err();
         assert_eq!(e.code(), "FORBIDDEN");
-        let admin = Caller { admin: true, ..ann() };
+        let admin = Caller {
+            admin: true,
+            ..ann()
+        };
         let t = target(Scope::Global, &admin, Some(&global)).unwrap();
         assert_eq!((t.space, t.user, t.manage_space), (None, None, None));
         let mine = ConnFacts {
@@ -251,7 +268,9 @@ mod tests {
             user: Some("ann"),
         };
         assert_eq!(
-            target(Scope::Global, &admin, Some(&mine)).unwrap_err().code(),
+            target(Scope::Global, &admin, Some(&mine))
+                .unwrap_err()
+                .code(),
             "INVALID"
         );
     }
@@ -271,12 +290,19 @@ mod tests {
             ..conn
         };
         assert_eq!(
-            target(Scope::Space, &ann(), Some(&elsewhere)).unwrap_err().code(),
+            target(Scope::Space, &ann(), Some(&elsewhere))
+                .unwrap_err()
+                .code(),
             "INVALID"
         );
-        let nowhere = Caller { space: None, ..ann() };
+        let nowhere = Caller {
+            space: None,
+            ..ann()
+        };
         assert_eq!(
-            target(Scope::Space, &nowhere, Some(&conn)).unwrap_err().code(),
+            target(Scope::Space, &nowhere, Some(&conn))
+                .unwrap_err()
+                .code(),
             "INVALID"
         );
     }
@@ -300,7 +326,9 @@ mod tests {
         );
         let nobody = Caller::default();
         assert_eq!(
-            target(Scope::User, &nobody, Some(&mine)).unwrap_err().code(),
+            target(Scope::User, &nobody, Some(&mine))
+                .unwrap_err()
+                .code(),
             "FORBIDDEN"
         );
     }

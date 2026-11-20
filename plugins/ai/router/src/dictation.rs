@@ -10,8 +10,8 @@ use serde_json::{Value, json};
 use tokio::sync::{Mutex as AsyncMutex, mpsc};
 
 use crate::models::{
-    self, CancellationToken, LIVE_EVERY, LIVE_MIN_BYTES, MAX_AUDIO, MAX_RECORDING, TRANSCRIBE_TIMEOUT,
-    TranscribeIn,
+    self, CancellationToken, LIVE_EVERY, LIVE_MIN_BYTES, MAX_AUDIO, MAX_RECORDING,
+    TRANSCRIBE_TIMEOUT, TranscribeIn,
 };
 use crate::provider;
 use crate::router::{Router, request_id};
@@ -67,7 +67,13 @@ pub fn owner_of(ctx: &Ctx) -> String {
 }
 
 /// `dictateAudio`.
-pub fn add_audio(router: &Router, ctx: &Ctx, request: &str, data: Option<&str>, end: bool) -> Result<()> {
+pub fn add_audio(
+    router: &Router,
+    ctx: &Ctx,
+    request: &str,
+    data: Option<&str>,
+    end: bool,
+) -> Result<()> {
     let d = router.dictation(request, &owner_of(ctx))?;
     if let Some(data) = data.filter(|d| !d.is_empty()) {
         let bytes = base64::engine::general_purpose::STANDARD
@@ -106,7 +112,12 @@ async fn run(
     out: &Chunks<Value>,
 ) -> Result<()> {
     let prep = router
-        .prepare(ctx, Task::Transcription, p.space.as_deref(), p.plugin.as_deref())
+        .prepare(
+            ctx,
+            Task::Transcription,
+            p.space.as_deref(),
+            p.plugin.as_deref(),
+        )
         .await?;
     let live = prep.resolved.info().live;
     let mut rx = session

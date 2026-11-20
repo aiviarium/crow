@@ -14,11 +14,11 @@ use crate::router::{Router, caller_of, fmt_time, request_id, require_admin};
 use crate::rules::{self, Caller};
 use crate::sdk::{Chunks, Ctx, Error, Level, Query, Result, Rookery, field};
 use crate::types::{
-    DictateAudioParams, DictateAudioResult, DictateParams, GenerateParams, Generated, Limit, Limits,
-    LimitsInfo, LimitsInfoUsersItem, Mapping, MappingInfo, MappingsParams, MappingsResult, ModelsParams,
-    ModelsResult, ProvidersResult, RemoveMappingParams, RemoveMappingResult, Scope, SetLimitsParams,
-    SetMappingParams, Task, TaskInfo, TasksParams, TasksResult, TestParams, TestResult, TranscribeParams,
-    Transcribed, UsageParams, UsageParamsBy, UsageResult,
+    DictateAudioParams, DictateAudioResult, DictateParams, GenerateParams, Generated, Limit,
+    Limits, LimitsInfo, LimitsInfoUsersItem, Mapping, MappingInfo, MappingsParams, MappingsResult,
+    ModelsParams, ModelsResult, ProvidersResult, RemoveMappingParams, RemoveMappingResult, Scope,
+    SetLimitsParams, SetMappingParams, Task, TaskInfo, TasksParams, TasksResult, TestParams,
+    TestResult, TranscribeParams, Transcribed, UsageParams, UsageParamsBy, UsageResult,
 };
 
 /// Registers every method and returns the router, for the provider watcher.
@@ -65,7 +65,13 @@ pub fn register(rk: &Rookery) -> Arc<Router> {
     rk.method("dictateAudio", move |ctx: Ctx, p: DictateAudioParams| {
         let r = r.clone();
         async move {
-            crate::dictation::add_audio(&r, &ctx, &p.request, p.data.as_deref(), p.end.unwrap_or(false))?;
+            crate::dictation::add_audio(
+                &r,
+                &ctx,
+                &p.request,
+                p.data.as_deref(),
+                p.end.unwrap_or(false),
+            )?;
             Ok(DictateAudioResult::new())
         }
     });
@@ -149,7 +155,11 @@ pub fn register(rk: &Rookery) -> Arc<Router> {
                 values.insert("apiKey".into(), Value::String(cred.to_string()));
             }
             let (ok, message, details) = provider::test_builtin(&r.builtin, &values).await;
-            Ok(TestResult { ok, message, details })
+            Ok(TestResult {
+                ok,
+                message,
+                details,
+            })
         }
     });
 
@@ -179,7 +189,12 @@ async fn tasks(r: &Router, ctx: &Ctx, p: TasksParams) -> Result<TasksResult> {
     Ok(TasksResult { tasks })
 }
 
-async fn generate_stream(r: &Router, ctx: &Ctx, p: GenerateParams, out: Chunks<Value>) -> Result<()> {
+async fn generate_stream(
+    r: &Router,
+    ctx: &Ctx,
+    p: GenerateParams,
+    out: Chunks<Value>,
+) -> Result<()> {
     let cancel: CancellationToken = ctx.cancellation().child_token();
     let _stop = cancel.clone().drop_guard();
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
@@ -202,7 +217,8 @@ async fn generate_stream(r: &Router, ctx: &Ctx, p: GenerateParams, out: Chunks<V
     while let Ok(text) = rx.try_recv() {
         out.send(&json!({ "type": "delta", "text": text })).await?;
     }
-    out.send(&json!({ "type": "done", "generated": done })).await
+    out.send(&json!({ "type": "done", "generated": done }))
+        .await
 }
 
 async fn transcribe(r: &Router, ctx: &Ctx, p: TranscribeParams) -> Result<Transcribed> {
@@ -217,7 +233,12 @@ async fn transcribe(r: &Router, ctx: &Ctx, p: TranscribeParams) -> Result<Transc
         )));
     }
     let prep = r
-        .prepare(ctx, Task::Transcription, p.space.as_deref(), p.plugin.as_deref())
+        .prepare(
+            ctx,
+            Task::Transcription,
+            p.space.as_deref(),
+            p.plugin.as_deref(),
+        )
         .await?;
     r.transcribe_clip(
         ctx,
@@ -237,7 +258,9 @@ async fn transcribe(r: &Router, ctx: &Ctx, p: TranscribeParams) -> Result<Transc
 async fn mappings(r: &Router, ctx: &Ctx, p: MappingsParams) -> Result<MappingsResult> {
     let caller = caller_of(ctx, p.space.as_deref());
     let can_view_space = match caller.space {
-        Some(space) if !caller.admin => ctx.access().require_space(space, Level::View).await.is_ok(),
+        Some(space) if !caller.admin => {
+            ctx.access().require_space(space, Level::View).await.is_ok()
+        }
         _ => caller.admin,
     };
     let mut q = Query::new().limit(500);
@@ -247,7 +270,10 @@ async fn mappings(r: &Router, ctx: &Ctx, p: MappingsParams) -> Result<MappingsRe
     let rows = r.svc.data::<Mapping>().find(q).await?.rows;
     let providers = r.providers().await?;
     let mut out = Vec::new();
-    for m in rows.iter().filter(|m| rules::visible(m, &caller, can_view_space)) {
+    for m in rows
+        .iter()
+        .filter(|m| rules::visible(m, &caller, can_view_space))
+    {
         if let Some(w) = r.wire(ctx, &providers, m).await? {
             out.push(w);
         }
@@ -304,7 +330,12 @@ async fn set_mapping(r: &Router, ctx: &Ctx, p: SetMappingParams) -> Result<Mappi
         )));
     }
     let target = writable(ctx, p.scope, p.space.as_deref(), Some(&conn)).await?;
-    let key = rules::key(p.task, p.scope, target.space.as_deref(), target.user.as_deref());
+    let key = rules::key(
+        p.task,
+        p.scope,
+        target.space.as_deref(),
+        target.user.as_deref(),
+    );
     let mut row = json!({
         "key": key,
         "task": p.task,
@@ -336,9 +367,18 @@ async fn set_mapping(r: &Router, ctx: &Ctx, p: SetMappingParams) -> Result<Mappi
         .ok_or_else(|| Error::not_found("the connection is gone"))
 }
 
-async fn remove_mapping(r: &Router, ctx: &Ctx, p: RemoveMappingParams) -> Result<RemoveMappingResult> {
+async fn remove_mapping(
+    r: &Router,
+    ctx: &Ctx,
+    p: RemoveMappingParams,
+) -> Result<RemoveMappingResult> {
     let target = writable(ctx, p.scope, p.space.as_deref(), None).await?;
-    let key = rules::key(p.task, p.scope, target.space.as_deref(), target.user.as_deref());
+    let key = rules::key(
+        p.task,
+        p.scope,
+        target.space.as_deref(),
+        target.user.as_deref(),
+    );
     let data = r.svc.data::<Mapping>();
     let rows = data
         .find(Query::new().filter(field("key").eq(key.as_str())).limit(1))
@@ -372,7 +412,12 @@ fn wire_limits(l: Budget) -> Limits {
 }
 
 async fn limits_info(r: &Router, ctx: &Ctx) -> Result<LimitsInfo> {
-    let rows = r.svc.data::<Limit>().find(Query::new().limit(1000)).await?.rows;
+    let rows = r
+        .svc
+        .data::<Limit>()
+        .find(Query::new().limit(1000))
+        .await?
+        .rows;
     let mut default = Limits::default();
     let mut users = Vec::new();
     for row in &rows {
@@ -399,9 +444,15 @@ async fn set_limits(r: &Router, ctx: &Ctx, p: SetLimitsParams) -> Result<LimitsI
         return Err(Error::invalid("a user id of 1 to 200 characters"));
     }
     let data = r.svc.data::<Limit>();
-    let empty = p.limits.requests.is_none() && p.limits.tokens.is_none() && p.limits.audio_seconds.is_none();
+    let empty = p.limits.requests.is_none()
+        && p.limits.tokens.is_none()
+        && p.limits.audio_seconds.is_none();
     let existing = data
-        .find(Query::new().filter(field("user").eq(user.as_str())).limit(1))
+        .find(
+            Query::new()
+                .filter(field("user").eq(user.as_str()))
+                .limit(1),
+        )
         .await?
         .rows;
     if empty {

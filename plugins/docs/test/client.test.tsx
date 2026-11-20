@@ -3,7 +3,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { render } from "solid-js/web"
 import { App } from "../../../shell/src/app/App"
-import { sharedBlockStore } from "../../../shell/src/app/editor"
 import { createShellApp } from "../../../shell/src/app/state"
 import { startFakeRookery } from "../../../shell/test/fakeRookery"
 
@@ -64,16 +63,12 @@ describe("docs plugin in shell", () => {
   })
 
   test("registers its blocks and widgets where the shell and dashboards find them", async () => {
-    await mountDocsShell("/docs")
+    const { app } = await mountDocsShell("/docs")
 
-    const blocks = sharedBlockStore().components
-    expect([...blocks.keys()]).toEqual(
+    expect(Object.keys(app.loader.blocks())).toEqual(
       expect.arrayContaining(["docs.database", "docs.page", "docs.item", "docs.toc", "docs.synced"]),
     )
-    const widgets = (globalThis as Record<PropertyKey, unknown>)[Symbol.for("crow.widgets.registry")] as {
-      components: Map<string, unknown>
-    }
-    expect([...widgets.components.keys()]).toEqual(expect.arrayContaining(["docs.recent", "docs.embed"]))
+    expect(Object.keys(app.loader.widgets())).toEqual(expect.arrayContaining(["docs.recent", "docs.embed"]))
   })
 
   test("renders docs.page and gracefully handles missing M2b spaces/documents", async () => {
