@@ -4,6 +4,7 @@ import { createEffect, createSignal, type JSX, Show } from "solid-js"
 import { AboutDialog } from "../auth/AccountMenu"
 import { Sidebar } from "./Sidebar"
 import { StatusBar } from "./StatusBar"
+import { ShareDialogHost } from "./share"
 import type { ShellApp } from "./state"
 import { ViewHost } from "./ViewHost"
 
@@ -58,6 +59,7 @@ export function Shell(props: { app: ShellApp }): JSX.Element {
       </AppShell>
       <ToastRegion />
       <AboutDialog app={props.app} />
+      <ShareDialogHost app={props.app} />
     </LinkProvider>
   )
 }

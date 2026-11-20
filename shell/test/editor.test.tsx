@@ -1,18 +1,17 @@
 // The editor services the shell provides: the block types of the active plugins' manifests, and the
-// components their client halves register for them.
+// components their client halves register for them via `rookery.blocks.register` (`app.loader.blocks()`).
 import { afterEach, describe, expect, test } from "bun:test"
 import { useEditorServices } from "@aiviarium/nocturne"
-import type { PluginInfo } from "@rookery/client"
-import { For, type JSX } from "solid-js"
+import type { BlockEntry, PluginInfo } from "@rookery/client"
+import { createSignal, For, type JSX } from "solid-js"
 import { render } from "solid-js/web"
-import { blockTypes, CrowEditorServices, defaultsOf, sharedBlockStore } from "../src/app/editor"
+import { blockTypes, CrowEditorServices, defaultsOf } from "../src/app/editor"
 import type { ShellApp } from "../src/app/state"
 
 const cleanup: Array<() => void> = []
 afterEach(() => {
   while (cleanup.length) cleanup.pop()!()
   document.body.innerHTML = ""
-  sharedBlockStore().components.clear()
 })
 
 const manifest = {
@@ -39,12 +38,6 @@ const manifest = {
   },
 } as unknown as NonNullable<PluginInfo["manifest"]>
 
-function fakeApp(): ShellApp {
-  return {
-    loader: { plugins: { docs: { id: "docs", manifest } } },
-  } as unknown as ShellApp
-}
-
 function Probe(): JSX.Element {
   const services = useEditorServices()
   return (
@@ -66,12 +59,20 @@ describe("the shell's editor services", () => {
   })
 
   test("a declared block is listed before its component registers, and available after", async () => {
+    const [blocks, setBlocks] = createSignal<Record<string, BlockEntry>>({})
+    const app = {
+      loader: {
+        plugins: { docs: { id: "docs", manifest } },
+        blocks,
+      },
+    } as unknown as ShellApp
+
     const root = document.createElement("div")
     document.body.appendChild(root)
     cleanup.push(
       render(
         () => (
-          <CrowEditorServices app={fakeApp()}>
+          <CrowEditorServices app={app}>
             <Probe />
           </CrowEditorServices>
         ),
@@ -83,14 +84,21 @@ describe("the shell's editor services", () => {
     expect(first()?.textContent).toBe("Link to page")
     expect(first()?.getAttribute("data-available")).toBe("no")
 
-    const registered = sharedBlockStore().register("docs", "docs.page", () => <span>card</span>)
-    cleanup.push(() => registered.dispose())
+    setBlocks({
+      "docs.page": {
+        plugin: "docs",
+        id: "docs.page",
+        component: () => <span>card</span>,
+        options: {},
+        version: 1,
+      },
+    })
 
     const deadline = Date.now() + 5000
     while (first()?.getAttribute("data-available") !== "yes" && Date.now() < deadline) await Bun.sleep(10)
     expect(first()?.getAttribute("data-available")).toBe("yes")
 
-    registered.dispose()
+    setBlocks({})
     while (first()?.getAttribute("data-available") !== "no" && Date.now() < deadline) await Bun.sleep(10)
     expect(first()?.getAttribute("data-available")).toBe("no")
   })
