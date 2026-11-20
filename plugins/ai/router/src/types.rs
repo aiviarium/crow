@@ -133,7 +133,11 @@ pub struct GenerateParams {
     pub context: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schema: Option<BTreeMap<String, Value>>,
-    #[serde(rename = "schemaName", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "schemaName",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub schema_name: Option<String>,
     #[serde(rename = "maxTokens", default, skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u64>,
@@ -151,11 +155,23 @@ fn default_text_task() -> Task {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TokenUsage {
-    #[serde(rename = "inputTokens", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "inputTokens",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub input_tokens: Option<u64>,
-    #[serde(rename = "outputTokens", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "outputTokens",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub output_tokens: Option<u64>,
-    #[serde(rename = "audioSeconds", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "audioSeconds",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub audio_seconds: Option<f64>,
 }
 
@@ -199,7 +215,11 @@ pub struct Limits {
     pub requests: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<u64>,
-    #[serde(rename = "audioSeconds", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "audioSeconds",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub audio_seconds: Option<u64>,
 }
 

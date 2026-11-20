@@ -204,6 +204,7 @@ function createFakeRookery(mock: MockGitHub, token: string) {
         (opts?.type && opts.type !== "code.github-token" ? [] : [connection]) as never,
       get: async () => connection as never,
       resolve: async () => ({ connection, credential: token }) as never,
+      test: () => ({ dispose() {} }),
     },
     blobs: {} as never,
     audit: { record: async () => {}, list: async () => [] },

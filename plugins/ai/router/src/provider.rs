@@ -12,8 +12,8 @@ use serde_json::{Map, Value, json};
 
 use crate::conn::Conn;
 use crate::models::{
-    self, BUILTIN, CANCEL_GRACE, CancellationToken, Endpoint, GenerateIn, GenerateOut, MODELS_TIMEOUT,
-    ModelError, OpenAi, TranscribeIn, TranscribeOut,
+    self, BUILTIN, CANCEL_GRACE, CancellationToken, Endpoint, GenerateIn, GenerateOut,
+    MODELS_TIMEOUT, ModelError, OpenAi, TranscribeIn, TranscribeOut,
 };
 use crate::sdk::{Contribution, Ctx, Error, Result};
 use crate::transport::SharedTransport;
@@ -316,7 +316,10 @@ pub async fn generate(
                     }
                 }
                 answer.ok_or_else(|| {
-                    ModelError::internal(format!("provider {} ended its answer without a result", def.id))
+                    ModelError::internal(format!(
+                        "provider {} ended its answer without a result",
+                        def.id
+                    ))
                 })
             };
             let (text, object, usage, model) = until_grace(work, timeout, cancel).await?;
@@ -463,7 +466,9 @@ pub async fn models_for(
                 }
                 Ok(Err(_)) | Err(_) if !def.models.is_empty() => Ok(def.models.clone()),
                 Ok(Err(e)) => Err(e),
-                Err(_) => Err(Error::timeout("the provider did not list its models in time")),
+                Err(_) => Err(Error::timeout(
+                    "the provider did not list its models in time",
+                )),
             }
         }
     }
@@ -473,7 +478,9 @@ fn from_model_info(m: models::ModelInfo) -> ModelInfo {
     ModelInfo {
         id: m.id,
         title: m.title,
-        tasks: m.tasks.map(|ts| ts.into_iter().map(from_model_task).collect()),
+        tasks: m
+            .tasks
+            .map(|ts| ts.into_iter().map(from_model_task).collect()),
     }
 }
 

@@ -4,7 +4,8 @@ use ai_router::sdk::Rookery;
 async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_env("ROOKERY_LOG").unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_env("ROOKERY_LOG")
+                .unwrap_or_else(|_| "info".into()),
         )
         .with_writer(std::io::stderr)
         .init();

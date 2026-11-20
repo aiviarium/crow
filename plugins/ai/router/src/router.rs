@@ -14,8 +14,8 @@ use time::OffsetDateTime;
 use crate::budget::{self, Limits, Used};
 use crate::conn::Conn;
 use crate::models::{
-    self, CancellationToken, ContextItem, GENERATE_TIMEOUT, GenerateIn, Message, Role, TRANSCRIBE_TIMEOUT,
-    TranscribeIn,
+    self, CancellationToken, ContextItem, GENERATE_TIMEOUT, GenerateIn, Message, Role,
+    TRANSCRIBE_TIMEOUT, TranscribeIn,
 };
 use crate::provider::{self, BUILTIN_TYPE, Builtin, Def, POINT, Provider};
 use crate::rules::{self, Caller};
@@ -185,7 +185,9 @@ impl Router {
                             }
                         }
                     }
-                    Err(e) => tracing::debug!(error = %e, "subscribing to the provider contributions failed"),
+                    Err(e) => {
+                        tracing::debug!(error = %e, "subscribing to the provider contributions failed")
+                    }
                 }
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
@@ -242,15 +244,24 @@ impl Router {
 
     pub async fn connection(&self, ctx: &Ctx, id: &str) -> Result<Option<Conn>> {
         match ctx.connections().get(id).await {
-            Ok(Some(c)) => Ok(Some(Conn::from_resolved(c, ctx.user().map(|u| u.id.as_str())))),
+            Ok(Some(c)) => Ok(Some(Conn::from_resolved(
+                c,
+                ctx.user().map(|u| u.id.as_str()),
+            ))),
             Ok(None) => Ok(None),
             Err(e) if e.is_not_found() || e.is_forbidden() => Ok(None),
             Err(e) => Err(e),
         }
     }
 
-    pub async fn resolve(&self, ctx: &Ctx, caller: &Caller<'_>, task: Task) -> Result<Option<Resolved>> {
-        let (providers, rows) = tokio::try_join!(self.providers(), self.mapping_rows(task, caller))?;
+    pub async fn resolve(
+        &self,
+        ctx: &Ctx,
+        caller: &Caller<'_>,
+        task: Task,
+    ) -> Result<Option<Resolved>> {
+        let (providers, rows) =
+            tokio::try_join!(self.providers(), self.mapping_rows(task, caller))?;
         for m in rules::candidates(rows, caller, task) {
             let free = caller.admin || (caller.user.is_none() && m.scope == MappingScope::Global);
             let uri = format!("connection://{}", m.connection);
@@ -323,7 +334,11 @@ impl Router {
         let rows = self
             .svc
             .data::<Limit>()
-            .find(Query::new().filter(field("user").is_in([user, "default"])).limit(2))
+            .find(
+                Query::new()
+                    .filter(field("user").is_in([user, "default"]))
+                    .limit(2),
+            )
             .await?
             .rows;
         let own = rows.iter().find(|r| r.user == user);
@@ -464,7 +479,8 @@ impl Router {
                     output_tokens: o.usage.output_tokens,
                     audio_seconds: o.usage.audio_seconds,
                 };
-                self.record(&prep.who, r, &o.model, &usage, started, None).await;
+                self.record(&prep.who, r, &o.model, &usage, started, None)
+                    .await;
                 Ok(Generated {
                     request,
                     text: o.text,
@@ -534,7 +550,8 @@ impl Router {
                 Some(e),
             ),
         };
-        self.record(&prep.who, r, &model, &usage, started, error).await;
+        self.record(&prep.who, r, &model, &usage, started, error)
+            .await;
         let o = out?;
         Ok(Transcribed {
             request: request.into(),
@@ -546,7 +563,12 @@ impl Router {
         })
     }
 
-    pub async fn wire(&self, ctx: &Ctx, providers: &[Provider], m: &Mapping) -> Result<Option<MappingInfo>> {
+    pub async fn wire(
+        &self,
+        ctx: &Ctx,
+        providers: &[Provider],
+        m: &Mapping,
+    ) -> Result<Option<MappingInfo>> {
         let Some(conn) = self.connection(ctx, &m.connection).await? else {
             return Ok(None);
         };
@@ -577,7 +599,12 @@ impl Router {
             .connection(ctx, &p.connection)
             .await?
             .ok_or_else(|| Error::not_found("no such connection"))?;
-        if ctx.access().filter(&[&conn.uri], Level::Use).await?.is_empty() {
+        if ctx
+            .access()
+            .filter(&[&conn.uri], Level::Use)
+            .await?
+            .is_empty()
+        {
             return Err(Error::forbidden("you may not use this connection"));
         }
         let providers = self.providers().await?;
@@ -730,7 +757,11 @@ mod tests {
     }
 
     impl RookeryBackend for FakeBackend {
-        fn find<'a>(&'a self, collection: &'a str, _query: Query) -> BoxFuture<'a, Result<Vec<Value>>> {
+        fn find<'a>(
+            &'a self,
+            collection: &'a str,
+            _query: Query,
+        ) -> BoxFuture<'a, Result<Vec<Value>>> {
             Box::pin(async move {
                 match collection {
                     "mappings" => Ok(self.mappings.lock().unwrap().clone()),
@@ -761,7 +792,11 @@ mod tests {
             Box::pin(async move { Ok(()) })
         }
 
-        fn aggregate<'a>(&'a self, _collection: &'a str, _spec: Value) -> BoxFuture<'a, Result<Vec<Value>>> {
+        fn aggregate<'a>(
+            &'a self,
+            _collection: &'a str,
+            _spec: Value,
+        ) -> BoxFuture<'a, Result<Vec<Value>>> {
             Box::pin(async move { Ok(Vec::new()) })
         }
 
@@ -799,11 +834,17 @@ mod tests {
             Box::pin(async move { Ok(()) })
         }
 
-        fn extensions_list<'a>(&'a self, _point: &'a str) -> BoxFuture<'a, Result<Vec<Contribution<Value>>>> {
+        fn extensions_list<'a>(
+            &'a self,
+            _point: &'a str,
+        ) -> BoxFuture<'a, Result<Vec<Contribution<Value>>>> {
             Box::pin(async move { Ok(Vec::new()) })
         }
 
-        fn extensions_changed<'a>(&'a self, _point: &'a str) -> BoxFuture<'a, Result<BoxStream<Result<()>>>> {
+        fn extensions_changed<'a>(
+            &'a self,
+            _point: &'a str,
+        ) -> BoxFuture<'a, Result<BoxStream<Result<()>>>> {
             Box::pin(async move { Ok(Box::pin(futures::stream::empty()) as BoxStream<Result<()>>) })
         }
 
@@ -857,7 +898,12 @@ mod tests {
             &'a self,
             request: TransportRequest,
         ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = std::result::Result<TransportResponse, TransportError>> + Send + 'a>,
+            Box<
+                dyn std::future::Future<
+                        Output = std::result::Result<TransportResponse, TransportError>,
+                    > + Send
+                    + 'a,
+            >,
         > {
             Box::pin(async move {
                 assert!(
@@ -926,5 +972,178 @@ mod tests {
         assert_eq!(usage.len(), 1);
         assert_eq!(usage[0]["plugin"], "notes");
         assert_eq!(usage[0]["ok"], true);
+    }
+
+    #[tokio::test]
+    async fn serves_http_rpc_and_executes_authenticated_callbacks() {
+        use axum::extract::State;
+        use axum::http::{HeaderMap, StatusCode, header};
+        use axum::response::{IntoResponse, Response};
+        use axum::routing::post;
+        use tokio::net::TcpListener;
+
+        type RecordedCall = (String, Value, Option<String>);
+
+        #[derive(Clone, Default)]
+        struct FakeCallbackState {
+            calls: Arc<Mutex<Vec<RecordedCall>>>,
+            usage_rows: Arc<Mutex<Vec<Value>>>,
+        }
+
+        async fn fake_callback(
+            State(state): State<FakeCallbackState>,
+            headers: HeaderMap,
+            body: axum::body::Bytes,
+        ) -> Response {
+            let auth = headers
+                .get(header::AUTHORIZATION)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default();
+            if auth != "Bearer cb-secret-123" {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    axum::Json(json!({
+                        "jsonrpc": "2.0",
+                        "id": null,
+                        "error": { "code": "UNAUTHENTICATED", "message": "bad callback token" }
+                    })),
+                )
+                    .into_response();
+            }
+            let req: Value = serde_json::from_slice(&body).unwrap();
+            let id = req.get("id").cloned().unwrap_or(Value::Null);
+            let method = req["method"].as_str().unwrap().to_owned();
+            let params = req.get("params").cloned().unwrap_or_else(|| json!({}));
+            let call_id = req.get("callId").and_then(Value::as_str).map(str::to_owned);
+            state
+                .calls
+                .lock()
+                .unwrap()
+                .push((method.clone(), params.clone(), call_id));
+
+            let result = match method.as_str() {
+                "extensions.list" => json!({ "contributions": [] }),
+                "data.find" => match params.get("collection").and_then(Value::as_str) {
+                    Some("mappings") => json!({
+                        "rows": [{
+                            "id": "m1",
+                            "updatedAt": "2026-11-14T12:00:00Z",
+                            "key": "text|global||",
+                            "task": "text",
+                            "scope": "global",
+                            "connection": "c-openai",
+                            "model": "gpt-4o-mini",
+                            "live": false,
+                        }]
+                    }),
+                    Some("limits") => json!({ "rows": [] }),
+                    _ => json!({ "rows": [] }),
+                },
+                "data.insert" => {
+                    if params.get("collection").and_then(Value::as_str) == Some("usage") {
+                        let row = params.get("values").cloned().unwrap_or(Value::Null);
+                        state.usage_rows.lock().unwrap().push(row.clone());
+                        json!({ "row": row })
+                    } else {
+                        json!({ "row": {} })
+                    }
+                }
+                "connections.resolve" => json!({
+                    "connection": {
+                        "id": "c-openai",
+                        "type": "ai.openai-compatible",
+                        "name": "Local Ollama",
+                        "scope": "global",
+                        "config": { "baseUrl": "http://127.0.0.1:11434/v1" },
+                        "hasCredential": true,
+                        "spaceId": null,
+                        "updatedAt": "2026-11-14T12:00:00Z"
+                    },
+                    "credential": "sk-fake-secret"
+                }),
+                "access.filter" => {
+                    let res = params
+                        .get("resources")
+                        .cloned()
+                        .unwrap_or_else(|| json!([]));
+                    json!({ "resources": res })
+                }
+                _ => json!({}),
+            };
+            (
+                StatusCode::OK,
+                axum::Json(json!({ "jsonrpc": "2.0", "id": id, "result": result })),
+            )
+                .into_response()
+        }
+
+        let state = FakeCallbackState::default();
+        let cb_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let cb_url = format!("http://{}", cb_listener.local_addr().unwrap());
+        let cb_app = axum::Router::new()
+            .route("/services/rpc", post(fake_callback))
+            .with_state(state.clone());
+        tokio::spawn(async move {
+            axum::serve(cb_listener, cb_app).await.unwrap();
+        });
+
+        let rk = crate::sdk::Rookery::new(crate::sdk::Config {
+            rookery_url: cb_url,
+            listen: "127.0.0.1:0".into(),
+            plugin_id: "ai".into(),
+            service_id: "ai/router".into(),
+            inbound_secret: "in-secret-456".into(),
+            callback_secret: "cb-secret-123".into(),
+        })
+        .unwrap();
+        let router = Router::with_transport((*rk).clone(), SharedTransport(Arc::new(FakeHttp)));
+        let r = router.clone();
+        rk.method("complete", move |ctx: Ctx, p: GenerateParams| {
+            let r = r.clone();
+            async move { r.generate(&ctx, p, &ctx.cancellation(), |_| {}).await }
+        });
+
+        let svc_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let svc_url = format!("http://{}/rpc", svc_listener.local_addr().unwrap());
+        let rk_clone = rk.clone();
+        tokio::spawn(async move {
+            rk_clone
+                .serve_on(svc_listener, std::future::pending::<()>())
+                .await
+                .unwrap();
+        });
+
+        let http = reqwest::Client::new();
+        let resp: Value = http
+            .post(&svc_url)
+            .header("authorization", "Bearer in-secret-456")
+            .json(&json!({
+                "jsonrpc": "2.0",
+                "id": 42,
+                "method": "complete",
+                "params": {
+                    "task": "text",
+                    "prompt": "hi over callback",
+                    "plugin": "docs"
+                },
+                "ctx": {
+                    "callId": "call-abc-99",
+                    "user": { "id": "u1", "name": "Ada", "admin": false },
+                    "principal": { "kind": "user", "id": "u1" }
+                }
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        assert_eq!(resp["result"]["text"], "Hello Crow");
+        assert_eq!(state.usage_rows.lock().unwrap().len(), 1);
+        let recorded_calls = state.calls.lock().unwrap();
+        assert!(recorded_calls.iter().any(|(m, _, cid)| {
+            m == "connections.resolve" && cid.as_deref() == Some("call-abc-99")
+        }));
     }
 }

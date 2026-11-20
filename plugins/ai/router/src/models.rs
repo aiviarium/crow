@@ -50,7 +50,9 @@ pub const CANCEL_GRACE: Duration = Duration::from_secs(2);
 // ── shared protocol types ────────────────────────────────────────────────────────────────────────────
 
 /// What a model request is for.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum Task {
     /// Inline AI and drafts.
@@ -408,7 +410,10 @@ impl Endpoint {
 /// Where requests to a connection go, and whether that is this machine or a private network.
 /// `fallback_title` is used when the connection has no `baseUrl` (`None` for the built-in OpenAI-compatible
 /// provider, `Some(provider_title)` for a plugin provider).
-pub fn destination_for_config(config: &Map<String, Value>, fallback_title: Option<&str>) -> (String, bool) {
+pub fn destination_for_config(
+    config: &Map<String, Value>,
+    fallback_title: Option<&str>,
+) -> (String, bool) {
     let base = config
         .get("baseUrl")
         .and_then(|v| v.as_str())
@@ -607,9 +612,15 @@ impl<T: Transport> OpenAi<T> {
         mut delta: impl FnMut(&str) + Send,
     ) -> Result<ChatOut, ModelError> {
         let with_options = !self.no_stream_options.lock().unwrap().contains(&ep.base);
-        match self.chat_stream_once(ep, chat, with_options, &mut delta).await {
+        match self
+            .chat_stream_once(ep, chat, with_options, &mut delta)
+            .await
+        {
             Err(e) if with_options && refuses(&e, &["stream_options", "include_usage"]) => {
-                self.no_stream_options.lock().unwrap().insert(ep.base.clone());
+                self.no_stream_options
+                    .lock()
+                    .unwrap()
+                    .insert(ep.base.clone());
                 self.chat_stream_once(ep, chat, false, &mut delta).await
             }
             r => r,
@@ -647,7 +658,11 @@ impl<T: Transport> OpenAi<T> {
             ],
             serde_json::to_vec(&body).expect("serializes"),
         );
-        let resp = self.transport.send(req).await.map_err(|e| send_error(e, &url))?;
+        let resp = self
+            .transport
+            .send(req)
+            .await
+            .map_err(|e| send_error(e, &url))?;
         let status = resp.status;
         if !resp.is_success() {
             let text = resp.text_lossy().await;
@@ -655,12 +670,13 @@ impl<T: Transport> OpenAi<T> {
         }
         if !resp.is_event_stream() {
             // A server that ignores `stream` answers with one JSON document.
-            let text_body = resp
-                .text()
-                .await
-                .map_err(|e| ModelError::unavailable(format!("the stream from {url} broke off: {e}")))?;
+            let text_body = resp.text().await.map_err(|e| {
+                ModelError::unavailable(format!("the stream from {url} broke off: {e}"))
+            })?;
             let v: Value = serde_json::from_str(&text_body).map_err(|e| {
-                ModelError::unavailable(format!("{url} answered with something other than JSON: {e}"))
+                ModelError::unavailable(format!(
+                    "{url} answered with something other than JSON: {e}"
+                ))
             })?;
             let text = v
                 .pointer("/choices/0/message/content")
@@ -680,8 +696,9 @@ impl<T: Transport> OpenAi<T> {
         let mut buf: Vec<u8> = Vec::new();
         let mut bytes = resp.body;
         while let Some(chunk) = bytes.next().await {
-            let chunk = chunk
-                .map_err(|e| ModelError::unavailable(format!("the stream from {url} broke off: {e}")))?;
+            let chunk = chunk.map_err(|e| {
+                ModelError::unavailable(format!("the stream from {url} broke off: {e}"))
+            })?;
             buf.extend_from_slice(&chunk);
             while let Some(nl) = buf.iter().position(|b| *b == b'\n') {
                 let line: Vec<u8> = buf.drain(..=nl).collect();
@@ -712,7 +729,9 @@ impl<T: Transport> OpenAi<T> {
                 if let Some(u) = v.get("usage").filter(|u| u.is_object()) {
                     out.usage = usage_of(u);
                 }
-                if let Some(t) = v.pointer("/choices/0/delta/content").and_then(|c| c.as_str())
+                if let Some(t) = v
+                    .pointer("/choices/0/delta/content")
+                    .and_then(|c| c.as_str())
                     && !t.is_empty()
                 {
                     out.text.push_str(t);
@@ -731,18 +750,23 @@ impl<T: Transport> OpenAi<T> {
             vec![("content-type".into(), "application/json".into())],
             serde_json::to_vec(&body).expect("serializes"),
         );
-        let resp = self.transport.send(req).await.map_err(|e| send_error(e, &url))?;
+        let resp = self
+            .transport
+            .send(req)
+            .await
+            .map_err(|e| send_error(e, &url))?;
         let status = resp.status;
         if !resp.is_success() {
             let text = resp.text_lossy().await;
             return Err(upstream_error(status, &text, "model"));
         }
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| ModelError::unavailable(format!("the stream from {url} broke off: {e}")))?;
+        let text = resp.text().await.map_err(|e| {
+            ModelError::unavailable(format!("the stream from {url} broke off: {e}"))
+        })?;
         let v: Value = serde_json::from_str(&text).map_err(|e| {
-            ModelError::unavailable(format!("{url} answered with something other than JSON: {e}"))
+            ModelError::unavailable(format!(
+                "{url} answered with something other than JSON: {e}"
+            ))
         })?;
         Ok(ChatOut {
             text: v
@@ -769,7 +793,11 @@ impl<T: Transport> OpenAi<T> {
         let mut used = Usage::default();
         for format in [Format::JsonSchema, Format::JsonObject, Format::PromptOnly] {
             if format != Format::PromptOnly
-                && self.refused.lock().unwrap().contains(&(ep.base.clone(), format))
+                && self
+                    .refused
+                    .lock()
+                    .unwrap()
+                    .contains(&(ep.base.clone(), format))
             {
                 continue;
             }
@@ -808,9 +836,15 @@ impl<T: Transport> OpenAi<T> {
                 Ok(o) => o,
                 Err(e)
                     if format != Format::PromptOnly
-                        && refuses(&e, &["response_format", "json_schema", "json_object", "schema"]) =>
+                        && refuses(
+                            &e,
+                            &["response_format", "json_schema", "json_object", "schema"],
+                        ) =>
                 {
-                    self.refused.lock().unwrap().insert((ep.base.clone(), format));
+                    self.refused
+                        .lock()
+                        .unwrap()
+                        .insert((ep.base.clone(), format));
                     last = Some(e);
                     continue;
                 }
@@ -823,12 +857,19 @@ impl<T: Transport> OpenAi<T> {
                 }
                 parsed => {
                     let problems: Vec<String> = match &parsed {
-                        Some(v) => validator.iter_errors(v).map(|e| e.to_string()).take(5).collect(),
+                        Some(v) => validator
+                            .iter_errors(v)
+                            .map(|e| e.to_string())
+                            .take(5)
+                            .collect(),
                         None => vec!["the answer is not JSON".into()],
                     };
                     // A server that takes `json_schema` but ignores it: try the next format, and remember.
                     if format != Format::PromptOnly {
-                        self.refused.lock().unwrap().insert((ep.base.clone(), format));
+                        self.refused
+                            .lock()
+                            .unwrap()
+                            .insert((ep.base.clone(), format));
                     }
                     last = Some(
                         ModelError::unavailable(format!(
@@ -840,7 +881,8 @@ impl<T: Transport> OpenAi<T> {
                 }
             }
         }
-        Err(last.unwrap_or_else(|| ModelError::unavailable("the provider gave no structured answer")))
+        Err(last
+            .unwrap_or_else(|| ModelError::unavailable("the provider gave no structured answer")))
     }
 
     /// Transcribes a whole clip.
@@ -884,7 +926,10 @@ impl<T: Transport> OpenAi<T> {
             );
         };
         field("model", model);
-        field("response_format", if verbose { "verbose_json" } else { "json" });
+        field(
+            "response_format",
+            if verbose { "verbose_json" } else { "json" },
+        );
         if let Some(l) = language {
             field("language", l);
         }
@@ -909,16 +954,19 @@ impl<T: Transport> OpenAi<T> {
             )],
             body,
         );
-        let resp = self.transport.send(req).await.map_err(|e| send_error(e, &url))?;
+        let resp = self
+            .transport
+            .send(req)
+            .await
+            .map_err(|e| send_error(e, &url))?;
         let status = resp.status;
         if !resp.is_success() {
             let text = resp.text_lossy().await;
             return Err(upstream_error(status, &text, "model"));
         }
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| ModelError::unavailable(format!("the stream from {url} broke off: {e}")))?;
+        let text = resp.text().await.map_err(|e| {
+            ModelError::unavailable(format!("the stream from {url} broke off: {e}"))
+        })?;
         let v: Value = match serde_json::from_str(&text) {
             Ok(v) => v,
             // `text` response formats from servers that ignore ours.
@@ -931,7 +979,10 @@ impl<T: Transport> OpenAi<T> {
                 .unwrap_or_default()
                 .trim()
                 .to_string(),
-            language: v.get("language").and_then(|l| l.as_str()).map(str::to_string),
+            language: v
+                .get("language")
+                .and_then(|l| l.as_str())
+                .map(str::to_string),
             seconds: v.get("duration").and_then(|d| d.as_f64()),
         })
     }
@@ -954,10 +1005,9 @@ impl<T: Transport> OpenAi<T> {
             let text = resp.text_lossy().await;
             return Err(upstream_error(status, &text, "endpoint"));
         }
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| ModelError::unavailable(format!("the stream from {url} broke off: {e}")))?;
+        let text = resp.text().await.map_err(|e| {
+            ModelError::unavailable(format!("the stream from {url} broke off: {e}"))
+        })?;
         let v: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
         let list = v
             .get("data")
@@ -995,9 +1045,17 @@ fn add_usage(total: &mut Usage, u: &Usage) {
 /// Speech models are told apart by name, which is all `/models` gives.
 pub fn guess_tasks(id: &str) -> Option<Vec<Task>> {
     let l = id.to_lowercase();
-    if l.contains("whisper") || l.contains("transcribe") || l.contains("parakeet") || l.contains("stt") {
+    if l.contains("whisper")
+        || l.contains("transcribe")
+        || l.contains("parakeet")
+        || l.contains("stt")
+    {
         Some(vec![Task::Transcription])
-    } else if l.contains("embed") || l.contains("tts") || l.contains("dall-e") || l.contains("image") {
+    } else if l.contains("embed")
+        || l.contains("tts")
+        || l.contains("dall-e")
+        || l.contains("image")
+    {
         Some(vec![])
     } else {
         None
@@ -1152,7 +1210,13 @@ pub async fn transcribe_openai<T: Transport>(
 ) -> Result<TranscribeOut, ModelError> {
     let work = async {
         let t = openai
-            .transcribe(ep, &input.model, audio, &input.mime, input.language.as_deref())
+            .transcribe(
+                ep,
+                &input.model,
+                audio,
+                &input.mime,
+                input.language.as_deref(),
+            )
             .await?;
         Ok(TranscribeOut {
             text: t.text,
@@ -1168,7 +1232,11 @@ pub async fn transcribe_openai<T: Transport>(
 pub fn check_schema(schema: &Value, v: &Value, text: &str) -> Result<(), ModelError> {
     let validator = jsonschema::validator_for(schema)
         .map_err(|e| ModelError::invalid(format!("schema is not a valid JSON Schema: {e}")))?;
-    let problems: Vec<String> = validator.iter_errors(v).map(|e| e.to_string()).take(5).collect();
+    let problems: Vec<String> = validator
+        .iter_errors(v)
+        .map(|e| e.to_string())
+        .take(5)
+        .collect();
     if problems.is_empty() {
         Ok(())
     } else {
@@ -1190,7 +1258,8 @@ pub fn validate_provider_object(
         return Ok(object);
     };
     let v = object.or_else(|| parse_json(text)).ok_or_else(|| {
-        ModelError::unavailable("the provider's answer is not JSON").with_details(json!({ "text": text }))
+        ModelError::unavailable("the provider's answer is not JSON")
+            .with_details(json!({ "text": text }))
     })?;
     check_schema(schema, &v, text)?;
     Ok(Some(v))
@@ -1302,7 +1371,10 @@ mod tests {
         assert_eq!(e.code, ErrorCode::Unavailable);
         assert!(e.message.contains("bad key"), "{}", e.message);
         assert_eq!(upstream_error(404, "{}", "model").code, ErrorCode::NotFound);
-        assert_eq!(upstream_error(400, "nope", "model").code, ErrorCode::Invalid);
+        assert_eq!(
+            upstream_error(400, "nope", "model").code,
+            ErrorCode::Invalid
+        );
         assert_eq!(upstream_error(504, "", "model").code, ErrorCode::Timeout);
         let refused = upstream_error(
             400,
@@ -1358,8 +1430,8 @@ mod tests {
         )
         .unwrap();
         assert!(sys.starts_with("Be brief.\n\nContext the user has given"));
-        assert!(
-            sys.contains("<context uri=\"note://1\" title=\"Plan 'Q4'\">\nShip crow-models.\n</context>")
-        );
+        assert!(sys.contains(
+            "<context uri=\"note://1\" title=\"Plan 'Q4'\">\nShip crow-models.\n</context>"
+        ));
     }
 }
