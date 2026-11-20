@@ -4,6 +4,7 @@ import { activate, createHost, type HostTransport } from "@rookery/sdk/runtime/h
 import api from "../rookery/interface"
 import manifest from "../rookery/plugin.json"
 import hostPlugin from "../src/host"
+import { spaceGrants } from "../src/server/sdk"
 
 interface StoredRow {
   id: string
@@ -470,5 +471,45 @@ describe("the Projects host half on the extension host", () => {
     expect(Object.keys(service?.methods ?? {}).sort()).toEqual(
       Object.keys(api.services.projects.methods).sort(),
     )
+  })
+})
+
+describe("a space's members", () => {
+  test("the caller's level is found however the grant names them, and people have names", async () => {
+    const ctx = {
+      user: { id: "u-ada", name: "Ada", email: "ada@example.test" },
+      access: {
+        grants: async () => ({
+          resource: "space://widgets",
+          owner: "u-grace",
+          grants: [{ principal: "user:u-ada", level: "use" }],
+        }),
+      },
+    } as unknown as Ctx
+    const rookery = {
+      users: {
+        search: async () => [
+          { id: "u-ada", name: "Ada", email: "ada@example.test" },
+          { id: "u-grace", name: "Grace", email: null },
+        ],
+      },
+    } as unknown as Rookery
+
+    const grants = await spaceGrants(ctx, "widgets", rookery)
+    expect(grants.level).toBe("use")
+    expect(grants.owner).toEqual({ principal: "user:u-grace", name: "Grace", email: undefined })
+    expect(grants.grants).toEqual([
+      { principal: "user:u-ada", level: "use", name: "Ada", email: "ada@example.test" },
+    ])
+  })
+
+  test("without a users handle the grants still resolve, without names", async () => {
+    const ctx = {
+      user: { id: "u-ada", name: "Ada" },
+      access: {
+        grants: async () => ({ resource: "space://widgets", owner: null, grants: [] }),
+      },
+    } as unknown as Ctx
+    expect((await spaceGrants(ctx, "widgets")).level).toBeNull()
   })
 })

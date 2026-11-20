@@ -136,7 +136,7 @@ export default definePlugin((rookery) => {
     return { id: doc.id }
   })
   rpc("members", z.object({ space: z.string() }), async (ctx, { space }) => {
-    const s = await spaceGrants(ctx, space)
+    const s = await spaceGrants(ctx, space, rookery)
     const people = [
       ...(s.owner ? [{ ...s.owner, level: "manage" as const, owner: true }] : []),
       ...s.grants.map((g) => ({ ...g, owner: false })),

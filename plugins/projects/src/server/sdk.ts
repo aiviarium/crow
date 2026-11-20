@@ -111,18 +111,28 @@ export async function accessLevel(ctx: Ctx, resource: string): Promise<GrantLeve
   return normalizeGrant(await ctx.access.level(resource))
 }
 
-export async function spaceGrants(ctx: Ctx, space: string): Promise<SpaceGrants> {
+export async function spaceGrants(ctx: Ctx, space: string, rookery?: Rookery): Promise<SpaceGrants> {
   const resource = `space://${space}`
-  const access = ctx.access as Ctx["access"] & {
-    grants?: (resource: string) => Promise<SpaceGrants>
-  }
-  const list = await access.grants(resource)
+  const list = await ctx.access.grants(resource)
+  const me = ctx.user?.id
+  // A grant names its subject as `user:ID` or `group:ID`; the owner is a bare user id.
+  const mine = list.grants.find((g) => me && (g.principal === `user:${me}` || g.principal === me))
+  const people = rookery ? await rookery.users.search(ctx, resource, "", 100).catch(() => []) : []
+  const nameOf = new Map(people.map((p) => [p.id, p]))
+  const owner = list.owner ? nameOf.get(list.owner) : undefined
   return {
-    level:
-      normalizeGrant(list.grants.find((g) => ctx.user && g.principal === ctx.user.id)?.level) ??
-      normalizeGrant(list.owner === ctx.user?.id ? "manage" : null),
-    owner: list.owner ? { principal: list.owner } : null,
-    grants: list.grants.map((g) => ({ principal: g.principal, level: normalizeGrant(g.level)! })),
+    level: normalizeGrant(mine?.level) ?? normalizeGrant(list.owner === me ? "manage" : null),
+    owner: list.owner
+      ? { principal: `user:${list.owner}`, name: owner?.name, email: owner?.email ?? undefined }
+      : null,
+    grants: list.grants.map((g) => {
+      const user = g.principal.startsWith("user:") ? nameOf.get(g.principal.slice(5)) : undefined
+      return {
+        principal: g.principal,
+        level: normalizeGrant(g.level)!,
+        ...(user ? { name: user.name, ...(user.email ? { email: user.email } : {}) } : {}),
+      }
+    }),
   }
 }
 
