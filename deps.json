@@ -1,7 +1,7 @@
 {
   "rookery": {
     "repo": "https://github.com/aiviarium/rookery.git",
-    "commit": "e0ce9055ef48eb136799053613c992ffc8c466a2",
+    "commit": "461eba654c95acce6e85ba3779e51db398c49ba9",
     "ref": "main",
     "sibling": "../rookery",
     "probe": "client/package.json"

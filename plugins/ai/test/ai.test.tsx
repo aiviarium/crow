@@ -188,7 +188,8 @@ function startFakeAiServer() {
           case "data.scan":
             sendReply(ws, msg.id, { rows: [], next: null })
             return
-          case "plugins.rpc": {
+          case "plugins.rpc":
+          case "plugins.rpc.stream": {
             const rpcMethod = String(p.method ?? "")
             const rpcParams = (p.params ?? {}) as Record<string, unknown>
             rpcCalls.push({ method: rpcMethod, params: rpcParams })

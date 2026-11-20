@@ -491,7 +491,7 @@ export default definePlugin((baseRookery) => {
       for (const m of p.markdown.matchAll(/\]\(\/blobs\/([0-9a-zA-Z-]+)\)/g)) {
         const blob = m[1]!
         if (names.has(blob)) continue
-        const info = await rookery.blobs.get(blob).catch(() => null)
+        const info = await rookery.blobs.get(ctx, blob).catch(() => null)
         names.set(blob, info?.name ? `${blob.slice(0, 8)}-${info.name}` : blob)
       }
     return exportTree(list, (b) => names.get(b) ?? b)

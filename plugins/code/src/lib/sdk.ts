@@ -227,14 +227,9 @@ export interface ScheduleInput {
 export const scheduleName = (repoId: string) => `code:sync:${repoId}`
 
 /** Creates or replaces the per-repository poll schedule. */
-export async function putSchedule(
-  rookery: Rookery,
-  ctx: Ctx | null,
-  schedule: ScheduleInput,
-): Promise<boolean> {
-  void ctx
+export async function putSchedule(rookery: Rookery, ctx: Ctx, schedule: ScheduleInput): Promise<boolean> {
   try {
-    await rookery.schedules.create(schedule)
+    await rookery.schedules.create(ctx, schedule)
     return true
   } catch (e) {
     // A server whose extension host does not serve schedules yet: the repository still syncs on demand.
@@ -243,12 +238,11 @@ export async function putSchedule(
   }
 }
 
-export async function removeScheduleFor(rookery: Rookery, ctx: Ctx | null, repoId: string) {
-  void ctx
-  const found = await rookery.schedules.list().catch(() => [])
+export async function removeScheduleFor(rookery: Rookery, ctx: Ctx, repoId: string) {
+  const found = await rookery.schedules.list(ctx).catch(() => [])
   for (const s of found) {
     if (s.name !== scheduleName(repoId)) continue
-    await rookery.schedules.remove(s.id).catch(() => {})
+    await rookery.schedules.remove(ctx, s.id).catch(() => {})
   }
 }
 
