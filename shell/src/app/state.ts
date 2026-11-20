@@ -3,6 +3,7 @@
 import { toast } from "@aiviarium/nocturne"
 import {
   buildRouteTable,
+  type ComposerContribution,
   Connection,
   type ConnectionPhase,
   type ConnectionPhaseTimings,
@@ -86,6 +87,7 @@ export interface ShellApp {
   readonly shareUri: Accessor<string | null>
   readonly setShareUri: (uri: string | null) => void
   readonly entities: EntityStore
+  readonly composerContributions: Accessor<readonly ComposerContribution[]>
   readonly currentUrl: Accessor<{ pathname: string; search: string }>
   readonly routeTable: Accessor<RouteEntry[]>
   readonly routeMatch: Accessor<RouteMatch | null>
@@ -287,6 +289,17 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
     return match ? { ...match } : null
   })
 
+  const composerContributions = createMemo<readonly ComposerContribution[]>(() => {
+    const out: ComposerContribution[] = []
+    for (const p of Object.values(loader.plugins)) {
+      if (!p.manifest || (p.state as string) === "invalid" || (p.state as string) === "disabled") continue
+      for (const c of p.manifest.contributes?.composer ?? []) {
+        out.push(c)
+      }
+    }
+    return out
+  })
+
   const href = (id: string, linkOpts?: { path?: string; params?: Record<string, string> }): string | null => {
     if (id === HOME_VIEW) return "/"
     return viewUrl(routeTable(), id, linkOpts)
@@ -384,6 +397,7 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
     shareUri,
     setShareUri,
     entities,
+    composerContributions,
     currentUrl,
     routeTable,
     routeMatch,

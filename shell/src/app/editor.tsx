@@ -73,11 +73,24 @@ function base64(bytes: ArrayBuffer): string {
 export function CrowEditorServices(props: ParentProps<{ app: ShellApp }>): JSX.Element {
   const types = blockTypeSource(props.app)
 
+  const mentionSchemes = createMemo(() => [
+    ...new Set(
+      (props.app.composerContributions?.() ?? [])
+        .filter((c) => c.type === "mention")
+        .flatMap((c) => c.schemes ?? []),
+    ),
+  ])
+
   const searchMentions = async (query: string): Promise<MentionItem[]> => {
     const text = query.trim()
-    if (!text) return []
+    const schemes = mentionSchemes()
+    if (!text && !schemes.length) return []
     const res = await props.app.conn
-      .call<EntityList>("entities.search", { text, limit: 8 })
+      .call<EntityList>("entities.search", {
+        text: text || "a",
+        limit: 8,
+        ...(!text && schemes.length ? { schemes } : {}),
+      })
       .catch(() => ({ entities: [] }))
     const plugins = props.app.loader.plugins
     return (res.entities ?? [])

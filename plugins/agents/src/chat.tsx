@@ -37,6 +37,8 @@ import {
   ViewHeader,
   ViewLayout,
 } from "@aiviarium/nocturne"
+import type { ContextEntry } from "@aiviarium/parrot-client"
+import type { ComposerContribution } from "@rookery/client"
 import type { ClientRookery } from "@rookery/sdk/client"
 import {
   batch,
@@ -474,8 +476,11 @@ export function PhoneSessionList(props: {
 
 const effortLevels: EffortLevel[] = ["low", "medium", "high", "max"]
 
-/** The composer wired to Parrot `ConfigOption`s (model/mode/effort) and `Action`s (commands/skills). */
+/** The composer wired to Parrot `ConfigOption`s (model/mode/effort), `Action`s, and `contributes.composer`. */
 export function SessionComposer(props: {
+  rookery?: ClientRookery
+  contributions?: readonly ComposerContribution[]
+  sessionId?: string
   options?: readonly ConfigOption[]
   actions?: readonly Action[]
   onSend: (input: PromptInput, submit: ComposerSubmit) => void | Promise<void>
@@ -495,8 +500,10 @@ export function SessionComposer(props: {
   dictation?: DictationState
 }) {
   const [value, setValue] = createSignal<ComposerValue>([])
+  const [mentions, setMentions] = createSignal<ComposerItem[]>([])
   const phone = useMedia(PHONE)
 
+  const contribs = () => props.contributions ?? []
   const opts = () => props.options ?? []
   const modelOpt = createMemo(() => findOptionByRole(opts(), "model"))
   const modeOpt = createMemo(() => findOptionByRole(opts(), "mode"))
@@ -506,8 +513,17 @@ export function SessionComposer(props: {
   const modeChoices = createMemo(() => extractOptionChoices(modeOpt(), opts()))
   const effortChoices = createMemo(() => extractOptionChoices(effortOpt(), opts()))
 
-  const commands = createMemo<ComposerItem[]>(() =>
-    (props.actions ?? [])
+  const commands = createMemo<ComposerItem[]>(() => [
+    ...contribs()
+      .filter((c) => c.type === "command")
+      .map((c) => ({
+        id: `crow:${c.id}`,
+        label: c.title.replace(/^\//, ""),
+        description: c.description ?? undefined,
+        ...(c.icon ? { icon: c.icon as IconName } : {}),
+        group: "Crow",
+      })),
+    ...(props.actions ?? [])
       .filter((a) => a.source !== "skill")
       .map((a) => ({
         id: `action:${a.id}`,
@@ -515,10 +531,18 @@ export function SessionComposer(props: {
         description: a.description ?? undefined,
         group: a.source,
       })),
-  )
+  ])
 
-  const skills = createMemo<ComposerItem[]>(() =>
-    (props.actions ?? [])
+  const skills = createMemo<ComposerItem[]>(() => [
+    ...contribs()
+      .filter((c) => c.type === "skill")
+      .map((c) => ({
+        id: `crow:${c.id}`,
+        label: c.title.replace(/^\$/, ""),
+        description: c.description ?? undefined,
+        group: "Crow",
+      })),
+    ...(props.actions ?? [])
       .filter((a) => a.source === "skill")
       .map((a) => ({
         id: `action:${a.id}`,
@@ -526,6 +550,52 @@ export function SessionComposer(props: {
         description: a.description ?? undefined,
         group: "Skills",
       })),
+  ])
+
+  const schemes = createMemo(() => [
+    ...new Set(
+      contribs()
+        .filter((c) => c.type === "mention")
+        .flatMap((c) => c.schemes ?? []),
+    ),
+  ])
+
+  let seq = 0
+  const lookup = async (q: { trigger: string; query: string } | null) => {
+    if (q?.trigger !== "@" || !props.rookery?.entities?.search) return
+    const n = ++seq
+    const sc = schemes()
+    const found = await props.rookery.entities
+      .search(q.query || "a", {
+        limit: 12,
+        ...(sc.length && !q.query ? { schemes: sc } : {}),
+      })
+      .catch(() => [])
+    if (n !== seq) return
+    setMentions(
+      found.map((e) => ({
+        id: e.uri,
+        label: e.title || e.uri,
+        description: e.subtitle ?? e.uri,
+        icon: (e.icon as IconName | undefined) ?? "file",
+        kind:
+          e.scheme === "user"
+            ? ("person" as const)
+            : e.scheme === "note" || e.scheme === "doc"
+              ? ("doc" as const)
+              : undefined,
+        group: e.scheme,
+      })),
+    )
+  }
+
+  createEffect(
+    on(
+      () => schemes().join(","),
+      () => {
+        if (props.rookery?.entities?.search) void lookup({ trigger: "@", query: "" })
+      },
+    ),
   )
 
   const send = async (s: ComposerSubmit) => {
@@ -544,7 +614,52 @@ export function SessionComposer(props: {
       }
     }
 
-    await props.onSend({ text: s.text }, s)
+    let text = s.text
+    for (const c of chips) {
+      if (!c.id.startsWith("crow:")) continue
+      const contrib = contribs().find((x) => `crow:${x.id}` === c.id)
+      if (contrib?.prompt) {
+        const rest = text.replace(`${c.trigger}${c.label}`, "").trim()
+        text = contrib.prompt.includes("{input}")
+          ? contrib.prompt.replace("{input}", rest)
+          : text.replace(`${c.trigger}${c.label}`, contrib.prompt)
+      }
+    }
+
+    for (const c of chips) {
+      const contrib = c.id.startsWith("crow:") ? contribs().find((x) => `crow:${x.id}` === c.id) : undefined
+      if (!contrib?.command || contrib.prompt || !props.rookery) continue
+      const rest = text.replace(`${c.trigger}${c.label}`, "").trim()
+      const r = await props.rookery.commands.run<unknown>(contrib.command, {
+        ...(props.sessionId ? { session: props.sessionId } : {}),
+        text: rest,
+      })
+      const prompt = typeof r === "string" ? r : (r as { prompt?: unknown } | null)?.prompt
+      text = typeof prompt === "string" ? prompt : ""
+      if (!text.trim() && !chips.some((ch) => ch.trigger === "@")) {
+        setValue([])
+        return
+      }
+    }
+
+    const mentionChips = chips.filter((c) => c.trigger === "@")
+    for (const c of mentionChips) {
+      text = text.replace(`@${c.label}`, `@[${c.label}](${c.id})`)
+    }
+    let context: ContextEntry[] | undefined
+    if (mentionChips.length && props.rookery?.entities?.text) {
+      const uris = mentionChips.map((c) => c.id)
+      const resolved = await props.rookery.entities.text(uris).catch(() => null)
+      if (resolved?.texts?.length) {
+        context = resolved.texts.map((t) => ({
+          uri: t.uri,
+          title: t.title ?? null,
+          text: t.text,
+        }))
+      }
+    }
+
+    await props.onSend({ text, ...(context?.length ? { context } : {}) }, s)
     setValue([])
   }
 
@@ -573,7 +688,9 @@ export function SessionComposer(props: {
               : "Ask anything…")
         }
         commands={commands()}
+        mentions={mentions()}
         skills={skills()}
+        onQuery={lookup}
         models={modelChoices().length ? modelChoices() : undefined}
         model={props.model ?? optionStringValue(modelOpt())}
         onModelChange={(id) => props.onModel?.(id)}
@@ -894,6 +1011,9 @@ export function Conversation(props: {
   const composer = () => (
     <div class="ag-thread-pad">
       <SessionComposer
+        rookery={props.rookery}
+        contributions={props.store.composerContributions()}
+        sessionId={props.id}
         options={f.options()}
         actions={f.actions()}
         onSend={send}

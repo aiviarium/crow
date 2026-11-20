@@ -74,6 +74,8 @@ export function AssistantView(rookery: ClientRookery, store: AgentsStore) {
                 description={path() || host() || "Select a host first"}
               />
               <SessionComposer
+                rookery={rookery}
+                contributions={store.composerContributions()}
                 options={runtime()?.agents()[0]?.options ?? []}
                 actions={runtime()?.agents()[0]?.actions ?? []}
                 onSend={start}

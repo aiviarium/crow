@@ -540,19 +540,14 @@ export function PageView(props: {
         rookery.workbench.toast({ title: "Not saved", body: String(e?.message ?? e), kind: "danger" }),
       )
   const uploadCover = () => {
-    if (!rookery.blobs.upload) {
-      rookery.workbench.toast({ title: "Image upload requires Rookery blobs (M2b)", kind: "warning" })
-      return
-    }
-    const upload = rookery.blobs.upload
     const input = document.createElement("input")
     input.type = "file"
     input.accept = "image/*"
     input.onchange = async () => {
       const f = input.files?.[0]
       if (!f) return
-      const b = await upload(f, { space: props.space.id, pin: true, name: f.name })
-      await update({ cover: `/blobs/${b.id}` })
+      const b = await rookery.blobs.upload(f, { name: f.name })
+      await update({ cover: rookery.blobs.url(b.id) })
       setCoverOpen(false)
     }
     input.click()
