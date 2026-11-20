@@ -3,6 +3,7 @@
 // all, after a preview of every change.
 import { Button, Dialog, DiffView, Icon, IconButton, TextField } from "@aiviarium/nocturne"
 import { createSignal, For, Show } from "solid-js"
+import { type RunningProcess, runProcess } from "../api"
 import type { FileMatches, SearchQuery } from "../git/search"
 import { GitGrepParser, gitGrepCommand, matcher, RgParser, rgCommand } from "../git/search"
 import type { Workspace } from "../workspace"
@@ -31,6 +32,7 @@ export function SearchPanel(props: { w: Workspace }) {
     after?: string
     error?: string
   }> | null>(null)
+  let proc: RunningProcess | null = null
   let timer: ReturnType<typeof setTimeout> | undefined
 
   const q = (): SearchQuery => ({
@@ -49,6 +51,8 @@ export function SearchPanel(props: { w: Workspace }) {
   })
 
   async function search() {
+    proc?.kill()
+    proc = null
     const sq = q()
     if (!sq.query) {
       setResults([])
@@ -68,28 +72,47 @@ export function SearchPanel(props: { w: Workspace }) {
     setSummary(null)
     const t0 = performance.now()
     const rg = !!w.info.tools.rg
+    const collected: FileMatches[] = []
+    let count = 0
+    let truncated = false
+    const flush = (files: FileMatches[]) => {
+      if (!files.length) return
+      for (const f of files) {
+        count += f.matches.length
+        collected.push(f)
+      }
+      setResults([...collected])
+      if (count >= MAX && proc) {
+        truncated = true
+        proc.kill()
+      }
+    }
     try {
-      const r = await w.api.search.run(w.env, w.root, rg ? rgCommand(sq) : gitGrepCommand(sq))
       const rgp = new RgParser()
       const ggp = new GitGrepParser(matcher(sq))
-      const collected: FileMatches[] = rg ? rgp.push(`${r.stdout}\n`) : [...ggp.push(r.stdout), ...ggp.end()]
-      let count = 0
-      for (const f of collected) count += f.matches.length
-      const shown = collected.slice(0, MAX)
-      setResults(shown)
+      const mine = await runProcess(w.rookery, {
+        env: w.env,
+        cwd: w.root,
+        command: rg ? rgCommand(sq) : gitGrepCommand(sq),
+        onStdout: (t) => flush(rg ? rgp.push(t) : ggp.push(t)),
+      })
+      proc = mine
+      const r = await mine.done
+      if (proc !== mine) return
+      if (!rg) flush(ggp.end())
+      setRunning(false)
+      proc = null
       const ms = Math.round(performance.now() - t0)
-      const truncated = count > MAX
-      const display = r.truncated ? " · the host kept only the start of its output" : ""
       if (r.exitCode !== null && r.exitCode > 1 && !collected.length)
-        setSummary(`${(r.stderr || `exited ${r.exitCode}`).trim().split("\n")[0]!}${display}`)
+        setSummary((r.stderr || `exited ${r.exitCode}`).trim().split("\n")[0]!)
       else
         setSummary(
-          `${count} result${count === 1 ? "" : "s"} in ${collected.length} file${collected.length === 1 ? "" : "s"}${truncated ? ` (stopped at ${MAX})` : ""} · ${rg ? "ripgrep" : "git grep"} · ${ms} ms${display}`,
+          `${count} result${count === 1 ? "" : "s"} in ${collected.length} file${collected.length === 1 ? "" : "s"}${truncated ? ` (stopped at ${MAX})` : ""} · ${rg ? "ripgrep" : "git grep"} · ${ms} ms`,
         )
     } catch (e) {
-      setSummary((e as Error).message)
-    } finally {
       setRunning(false)
+      proc = null
+      setSummary((e as Error).message)
     }
   }
 

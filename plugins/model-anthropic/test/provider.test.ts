@@ -116,6 +116,7 @@ describe("the Anthropic provider against a mock Messages API", () => {
     let provided: Record<string, (ctx: Ctx, params: any) => any> = {}
     const fakeRookery = {
       connections: {
+        test: () => disposable(() => {}),
         async resolve(id: string) {
           expect(id).toBe("conn-ant")
           return {

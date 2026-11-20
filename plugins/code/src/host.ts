@@ -6,7 +6,7 @@ import { type Ctx, definePlugin, RookeryError, z } from "@rookery/sdk"
 import api from "../rookery/interface"
 import { Accounts } from "./lib/accounts"
 import { createPullRequest, read, write } from "./lib/actions"
-import { appComplete, appManifest } from "./lib/connect"
+import { appComplete, appManifest, testConnection } from "./lib/connect"
 import { PROVIDER, projects } from "./lib/issues"
 import { Linker } from "./lib/linker"
 import { Notifier } from "./lib/notifier"
@@ -34,6 +34,8 @@ export default definePlugin((rookery) => {
   }
 
   // ── Connections ──────────────────────────────────────────────────────────────────────────────────
+
+  for (const type of [APP, TOKEN]) rookery.connections.test(type, (ctx, c) => testConnection(sv, ctx, c))
 
   rookery.rpc.handle("me", {
     level: "own",
