@@ -30,6 +30,7 @@ import type {
   Workspace,
   WorkspaceRequest,
 } from "@aiviarium/parrot-client"
+import type { ComposerContribution, PluginInfo } from "@rookery/client"
 import type { ClientRookery } from "@rookery/sdk/client"
 import { type Accessor, batch, createSignal } from "solid-js"
 import { type AgentHost, errorMessage, hostNameFromEnv, listAgentHosts } from "./api"
@@ -93,6 +94,8 @@ export interface PromptInput {
 }
 
 export interface AgentsStore {
+  readonly rookery: ClientRookery
+  readonly composerContributions: Accessor<readonly ComposerContribution[]>
   readonly hosts: Accessor<AgentHost[]>
   readonly hostsLoading: Accessor<boolean>
   readonly hostsError: Accessor<string | null>
@@ -165,6 +168,21 @@ export function createAgentsStore(rookery: ClientRookery): AgentsStore {
   const [hostsLoading, setHostsLoading] = createSignal(false)
   const [hostsError, setHostsError] = createSignal<string | null>(null)
   const [selectedHost, setSelectedHostSignal] = createSignal<string | null>(null)
+  const [composerContributions, setComposerContributions] = createSignal<readonly ComposerContribution[]>([])
+
+  void rookery.rpc
+    .call<{ plugins?: PluginInfo[] }>("plugins.list", {})
+    .then((res) => {
+      const out: ComposerContribution[] = []
+      for (const p of res.plugins ?? []) {
+        if (!p.manifest || (p.state as string) === "invalid" || (p.state as string) === "disabled") continue
+        for (const c of p.manifest.contributes?.composer ?? []) {
+          out.push(c)
+        }
+      }
+      setComposerContributions(out)
+    })
+    .catch(() => {})
 
   const runtimes = new Map<string, HostRuntime>()
   const [runtimeTick, setRuntimeTick] = createSignal(0)
@@ -745,6 +763,8 @@ export function createAgentsStore(rookery: ClientRookery): AgentsStore {
   }
 
   return {
+    rookery,
+    composerContributions,
     hosts,
     hostsLoading,
     hostsError,

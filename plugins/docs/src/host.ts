@@ -1080,6 +1080,19 @@ export default definePlugin((baseRookery) => {
     run: (ctx, p) => setProperties(ctx, p.page, p.properties, p.space),
   })
 
+  if (typeof rookery.entities?.text === "function") {
+    rookery.entities.text("doc", async (ctx, { id }) => {
+      const found = await rookery.entities.lookup(ctx, uriOf(id))
+      const page = await pages(ctx, found?.spaceId ?? null).get(id)
+      return page ? { title: page.title, text: await pageMarkdown(ctx, page) } : null
+    })
+    rookery.entities.text("doc-comment", async (ctx, { id }) => {
+      const found = await rookery.entities.lookup(ctx, `doc-comment://${id}`)
+      const c = await comments(ctx, found?.spaceId ?? null).get(id)
+      return c ? { title: "Comment", text: String((c as unknown as { text: string }).text) } : null
+    })
+  }
+
   // The service other plugins (and the agents plugin's tools) call with their ctx.
   rookery.services.provide(api.services.docs, {
     read: (ctx, p) => read(ctx, p.page, p.space),

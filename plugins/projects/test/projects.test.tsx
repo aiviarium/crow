@@ -6,8 +6,6 @@ import manifest from "../rookery/plugin.json"
 import projectsClient from "../src/client"
 import { disposeAll } from "../src/ui/store"
 
-const WIDGET_REGISTRY_SYMBOL = Symbol.for("crow.widgets.registry")
-
 const cleanups: Array<() => void> = []
 afterEach(() => {
   while (cleanups.length) cleanups.pop()!()
@@ -32,6 +30,8 @@ function createFakeClient() {
   const commands = new Map<string, { title?: string; run: (params: Record<string, unknown>) => unknown }>()
   const navSections = new Map<string, unknown>()
   const statusItems = new Map<string, unknown>()
+  const registeredWidgets = new Map<string, unknown>()
+  const registeredBlocks = new Map<string, unknown>()
   const openedViews: Array<{ id: string; opts?: Record<string, unknown> }> = []
   const toasts: Array<{ title: string; body?: string; kind?: string }> = []
 
@@ -147,12 +147,35 @@ function createFakeClient() {
     plugins: {
       call: async () => ({ tasks: [] }),
     },
+    widgets: {
+      register(id: string, component: unknown) {
+        registeredWidgets.set(id, component)
+        return { dispose: () => registeredWidgets.delete(id) }
+      },
+    },
+    blocks: {
+      register(id: string, component: unknown) {
+        registeredBlocks.set(id, component)
+        return { dispose: () => registeredBlocks.delete(id) }
+      },
+    },
     env: {
       list: async () => [],
     },
   } as unknown as ClientRookery
 
-  return { rookery, views, commands, navSections, statusItems, openedViews, toasts, projectSpace }
+  return {
+    rookery,
+    views,
+    commands,
+    navSections,
+    statusItems,
+    registeredWidgets,
+    registeredBlocks,
+    openedViews,
+    toasts,
+    projectSpace,
+  }
 }
 
 describe("projects client half", () => {
@@ -199,18 +222,9 @@ describe("projects client half", () => {
     await f.commands.get("projects.myIssues")!.run({})
     expect(f.openedViews.map((v) => v.id)).toEqual(["projects.home", "projects.mine"])
 
-    // Dashboard widgets are registered into the shared Crow widget registry
-    const store = (globalThis as Record<PropertyKey, unknown>)[WIDGET_REGISTRY_SYMBOL] as {
-      components: Map<string, { plugin: string }>
-      manifestTypes: Map<string, Array<{ id: string }>>
-    }
-    expect(store).toBeDefined()
-    expect(store.components.get("projects.myIssues")?.plugin).toBe("projects")
-    expect(store.components.get("projects.cycle")?.plugin).toBe("projects")
-    expect(store.manifestTypes.get("projects")?.map((w) => w.id)).toEqual([
-      "projects.myIssues",
-      "projects.cycle",
-    ])
+    // Dashboard widgets and editor blocks are registered via rookery.widgets / rookery.blocks
+    expect([...f.registeredWidgets.keys()]).toEqual(["projects.myIssues", "projects.cycle"])
+    expect([...f.registeredBlocks.keys()]).toEqual(["projects.issues"])
   })
 
   test("renders projects.home and opens a project overview on click", async () => {

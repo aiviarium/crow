@@ -282,15 +282,17 @@ function createFakeHost() {
             updatedAt: r.updatedAt,
           }))
       },
-      async text(_ctx: Ctx, uris: string[]) {
-        return {
-          texts: uris.map((uri) => {
+      text(ctxOrScheme: Ctx | string, uris: string[] | unknown) {
+        if (typeof ctxOrScheme === "string") return { dispose() {} }
+        const list = Array.isArray(uris) ? uris : []
+        return Promise.resolve({
+          texts: list.map((uri) => {
             const id = uri.replace(/^doc:\/\//, "")
             const row = pageRows.get(id)
             const text = row?.document ? (docBodies.get(String(row.document)) ?? "") : ""
             return { uri, title: (row?.title as string) ?? uri, text }
           }),
-        }
+        })
       },
     },
     agents: {

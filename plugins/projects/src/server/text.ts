@@ -3,7 +3,7 @@
 import { type Ctx, plainText, type RichText, type Rookery } from "@rookery/sdk"
 import { type CommentRow, type IssueRow, type ProjectRow, priorityName } from "../lib/model"
 import type { Core } from "./core"
-import { issueUri } from "./core"
+import { idOf, issueUri } from "./core"
 import { documentText, entitiesOf } from "./sdk"
 
 export function createText(rookery: Rookery, core: Core) {
@@ -98,6 +98,27 @@ export function createText(rookery: Rookery, core: Core) {
     const done = await d.issues.count({ where: { stateCategory: "completed" } })
     lines.push(`Issues: ${open} open, ${done} completed`)
     return lines.join("\n")
+  }
+
+  if (typeof rookery.entities?.text === "function") {
+    rookery.entities.text("issue", async (ctx, { id }) => {
+      const issue = await core.findIssue(ctx, id)
+      return issue ? { title: `${issue.key} ${issue.title}`, text: await issueText(ctx, issue) } : null
+    })
+    rookery.entities.text("project", async (ctx, { id }) => {
+      const e = await entitiesOf(rookery).lookup(ctx, `project://${id}`)
+      if (!e?.spaceId) return null
+      const p = await core.project(ctx, e.spaceId).catch(() => null)
+      return p ? { title: p.name, text: await projectText(ctx, p) } : null
+    })
+    rookery.entities.text("comment", async (ctx, { id }) => {
+      const e = await entitiesOf(rookery).lookup(ctx, `comment://${id}`)
+      if (!e?.spaceId) return null
+      const c = (await core.data(ctx, e.spaceId).comments.get(id)) as unknown as CommentRow | null
+      if (!c) return null
+      const issue = await core.findIssue(ctx, c.issue, e.spaceId)
+      return { title: `Comment on ${issue?.key ?? idOf(c.issue)}`, text: plainText(c.body as RichText) }
+    })
   }
 
   return { issueText, projectText, nameOf }

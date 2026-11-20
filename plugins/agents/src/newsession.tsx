@@ -245,6 +245,8 @@ export function NewSession(props: {
         </Show>
 
         <SessionComposer
+          rookery={props.store.rookery}
+          contributions={props.store.composerContributions()}
           options={agentOptions()}
           actions={selectedAgent()?.actions ?? []}
           onSend={start}

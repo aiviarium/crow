@@ -99,13 +99,10 @@ export async function importFiles(
   )
   const used = (p: string) => md.some((m) => m.text.includes(p.split("/").pop()!))
   const usedOthers = others.filter((f) => used(f.path))
-  if (usedOthers.length && !rookery.blobs.upload) {
-    throw new Error("Uploading imported images requires Rookery blobs (M2b).")
-  }
   for (const f of usedOthers) {
     const name = f.path.split("/").pop()!
-    const b = await rookery.blobs.upload!(new Blob([f.data as BlobPart]), { name, space: target.space })
-    assets.set(f.path.replace(/\\/g, "/"), `/blobs/${b.id}`)
+    const b = await rookery.blobs.upload(new Blob([f.data as BlobPart]), { name })
+    assets.set(f.path.replace(/\\/g, "/"), rookery.blobs.url(b.id))
   }
   const asset = (p: string) => assets.get(p) ?? [...assets].find(([k]) => k.endsWith(`/${p}`) || k === p)?.[1]
   const total = plan.length

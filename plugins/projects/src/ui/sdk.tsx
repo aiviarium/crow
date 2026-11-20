@@ -1,8 +1,6 @@
-// Typed client-side adapters for Rookery M2 / M2b facilities (`entities`, `documents`, `drafts`,
-// `widgets`, `blocks`, `workbench.me`, `workbench.share`, `env.checkouts`, `agents`) that are not
-// yet part of `@rookery/sdk/client`'s pinned `ClientRookery` surface. When the shell provides any of
-// these natively on `rookery`, the adapter delegates straight through; otherwise it provides a clean
-// fallback so views and tests work today.
+// Typed client-side adapters for Rookery facilities (`entities`, `documents`, `drafts`,
+// `widgets`, `blocks`, `workbench.me`, `workbench.share`, `env.checkouts`, `agents`), delegating
+// to `@rookery/sdk/client`'s `ClientRookery` surface with fallbacks for lightweight unit-test mocks.
 
 import type { EditorBlockType } from "@aiviarium/nocturne"
 import type { ClientRookery, Disposable, EntityInfo } from "@rookery/sdk/client"
@@ -71,8 +69,15 @@ function openKnownUri(rookery: ClientRookery, uri: string): boolean {
   }
 }
 
+const noop = (): Disposable => ({ dispose() {} })
+
 export function entitiesOf(rookery: ClientRookery): ClientEntities {
+  const native = rookery.entities as Partial<ClientEntities> | undefined
   const open = (uri: string): void => {
+    if (typeof native?.open === "function") {
+      native.open(uri)
+      return
+    }
     if (openKnownUri(rookery, uri)) return
     if (/^https?:\/\//.test(uri)) {
       window.open(uri, "_blank", "noopener,noreferrer")
@@ -81,9 +86,11 @@ export function entitiesOf(rookery: ClientRookery): ClientEntities {
     rookery.workbench.toast({ title: "Cannot open link yet", body: uri, kind: "info" })
   }
 
-  const noop = (): Disposable => ({ dispose() {} })
-
   const Chip = (props: { uri: string; label?: string }): JSX.Element => {
+    if (typeof native?.Chip === "function") {
+      const NativeChip = native.Chip
+      return <NativeChip uri={props.uri} label={props.label} />
+    }
     const [resolved] = createResource(
       () => (props.label ? null : props.uri),
       (uri) => rookery.entities.resolve(uri).catch(() => null as EntityInfo | null),
@@ -99,8 +106,10 @@ export function entitiesOf(rookery: ClientRookery): ClientEntities {
   return {
     ...rookery.entities,
     open,
-    card: () => noop(),
-    row: () => noop(),
+    card: (scheme, renderer) =>
+      typeof native?.card === "function" ? native.card(scheme, renderer as never) : noop(),
+    row: (scheme, renderer) =>
+      typeof native?.row === "function" ? native.row(scheme, renderer as never) : noop(),
     Chip,
   }
 }
@@ -151,130 +160,16 @@ export interface WidgetProps {
 
 export type WidgetComponent = (props: WidgetProps) => JSX.Element
 
-const WIDGET_REGISTRY_SYMBOL = Symbol.for("crow.widgets.registry")
-
-interface SharedWidgetStore {
-  readonly components: Map<string, { plugin: string; component: WidgetComponent }>
-  readonly manifestTypes: Map<string, unknown[]>
-  readonly builtinTypes: Map<string, unknown>
-  readonly listeners: Set<() => void>
-  notify(): void
-  register(plugin: string, id: string, component: WidgetComponent): Disposable
-  setPluginTypes(plugin: string, widgets: readonly Record<string, unknown>[]): Disposable
-}
-
-function getSharedWidgetStore(): SharedWidgetStore {
-  const g = globalThis as Record<PropertyKey, unknown>
-  const existing = g[WIDGET_REGISTRY_SYMBOL] as SharedWidgetStore | undefined
-  if (existing) return existing
-  const components = new Map<string, { plugin: string; component: WidgetComponent }>()
-  const manifestTypes = new Map<string, unknown[]>()
-  const builtinTypes = new Map<string, unknown>()
-  const listeners = new Set<() => void>()
-  const notify = () => {
-    for (const fn of listeners) fn()
-  }
-  const store: SharedWidgetStore = {
-    components,
-    manifestTypes,
-    builtinTypes,
-    listeners,
-    notify,
-    register(plugin, id, component) {
-      const entry = { plugin, component }
-      components.set(id, entry)
-      notify()
-      return {
-        dispose() {
-          if (components.get(id) === entry) {
-            components.delete(id)
-            notify()
-          }
-        },
-      }
-    },
-    setPluginTypes(plugin, widgets) {
-      const list = widgets.map((w) => ({ ...w, plugin }))
-      manifestTypes.set(plugin, list)
-      notify()
-      return {
-        dispose() {
-          if (manifestTypes.get(plugin) === list) {
-            manifestTypes.delete(plugin)
-            notify()
-          }
-        },
-      }
-    },
-  }
-  g[WIDGET_REGISTRY_SYMBOL] = store
-  return store
-}
-
 export function registerWidget(rookery: ClientRookery, id: string, component: WidgetComponent): Disposable {
-  const disposables: Disposable[] = []
-  const native = (
-    rookery as unknown as { widgets?: { register(id: string, component: WidgetComponent): Disposable } }
-  ).widgets
-  if (native) disposables.push(native.register(id, component))
-  disposables.push(getSharedWidgetStore().register(rookery.id, id, component))
-  return {
-    dispose() {
-      for (const d of disposables) d.dispose()
-    },
-  }
+  return rookery.widgets?.register(id, component as never) ?? noop()
 }
 
-export function registerManifestWidgets(rookery: ClientRookery): Disposable {
-  const widgets = (rookery.manifest.contributes as unknown as { widgets?: Record<string, unknown>[] }).widgets
-  if (!widgets?.length) return { dispose() {} }
-  return getSharedWidgetStore().setPluginTypes(rookery.id, widgets)
+export function registerManifestWidgets(_rookery: ClientRookery): Disposable {
+  return noop()
 }
 
 /** What a block's component is handed, as the shared editor defines it. */
 export type BlockRendererProps = Parameters<NonNullable<EditorBlockType["component"]>>[0]
-
-const BLOCK_REGISTRY_SYMBOL = Symbol.for("crow.blocks.registry")
-
-interface SharedBlockStore {
-  register(
-    plugin: string,
-    id: string,
-    component: (props: BlockRendererProps) => JSX.Element,
-    options?: {
-      forceWidth?: (attrs: Record<string, unknown>) => "reading" | "wide" | "full" | null | undefined
-    },
-  ): Disposable
-}
-
-function blockStore(): SharedBlockStore {
-  const g = globalThis as Record<PropertyKey, unknown>
-  const existing = g[BLOCK_REGISTRY_SYMBOL] as SharedBlockStore | undefined
-  if (existing) return existing
-  const components = new Map<
-    string,
-    {
-      plugin: string
-      component: (props: BlockRendererProps) => JSX.Element
-      options?: {
-        forceWidth?: (attrs: Record<string, unknown>) => "reading" | "wide" | "full" | null | undefined
-      }
-    }
-  >()
-  const created: SharedBlockStore = {
-    register(plugin, id, component, options) {
-      const entry = { plugin, component, ...(options ? { options } : {}) }
-      components.set(id, entry)
-      return {
-        dispose() {
-          if (components.get(id) === entry) components.delete(id)
-        },
-      }
-    },
-  }
-  g[BLOCK_REGISTRY_SYMBOL] = created
-  return created
-}
 
 export function registerBlock(
   rookery: ClientRookery,
@@ -284,21 +179,7 @@ export function registerBlock(
     forceWidth?: (attrs: Record<string, unknown>) => "reading" | "wide" | "full" | null | undefined
   },
 ): Disposable {
-  const native = (
-    rookery as unknown as {
-      blocks?: {
-        register(
-          id: string,
-          component: (props: BlockRendererProps) => JSX.Element,
-          options?: {
-            forceWidth?: (attrs: Record<string, unknown>) => "reading" | "wide" | "full" | null | undefined
-          },
-        ): Disposable
-      }
-    }
-  ).blocks
-  if (native) return native.register(id, component, options)
-  return blockStore().register(rookery.id, id, component, options)
+  return rookery.blocks?.register(id, component as never, options) ?? noop()
 }
 
 // ── workbench, env & agents ──────────────────────────────────────────────────────────────────────────
@@ -314,9 +195,8 @@ export function workbenchMe(rookery: ClientRookery): Promise<MeInfo> {
 }
 
 export function workbenchShare(rookery: ClientRookery, uri: string): void {
-  const wb = rookery.workbench as unknown as { share?: (uri: string) => void }
-  if (typeof wb.share === "function") {
-    wb.share(uri)
+  if (typeof rookery.workbench.share === "function") {
+    rookery.workbench.share(uri)
     return
   }
   rookery.workbench.toast({
