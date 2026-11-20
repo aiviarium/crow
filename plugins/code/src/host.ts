@@ -154,8 +154,8 @@ export default definePlugin((rookery) => {
   rookery.rpc.handle("schedule", {
     level: "own",
     params: z.object({ repo: z.string() }),
-    async run(_ctx, { repo }) {
-      const s = (await rookery.schedules.list()).find((x) => x.name === scheduleName(repo))
+    async run(ctx, { repo }) {
+      const s = (await rookery.schedules.list(ctx)).find((x) => x.name === scheduleName(repo))
       return s
         ? {
             nextRunAt: s.nextRunAt ?? null,

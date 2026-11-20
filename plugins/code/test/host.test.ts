@@ -225,7 +225,7 @@ function createFakeRookery(mock: MockGitHub, token: string) {
       list: async () => schedules,
       setEnabled: async () => {},
       fire: async () => ({ id: "job-1" }) as never,
-      create: async (s: Row) => {
+      create: async (_ctx: Ctx, s: Row) => {
         schedules.push({ id: id("schedule"), ...s })
         return { id: "schedule-1" }
       },
