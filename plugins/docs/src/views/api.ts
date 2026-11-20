@@ -15,6 +15,10 @@ export interface Template {
 }
 
 export function openEntity(rookery: ClientRookeryWithDocs, uri: string) {
+  if (uri.startsWith("doc://")) {
+    // Home's "Opened lately" is this list; the server drops a page the person may not view.
+    void rookery.recents.touch("entity", uri).catch(() => {})
+  }
   if (rookery.entities?.open) {
     rookery.entities.open(uri)
     return
