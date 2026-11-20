@@ -346,6 +346,18 @@ async function buildClient(source: Package): Promise<void> {
  * what the host half needs of the SDK is structural, so the extension host activates it all the same.
  */
 async function buildHost(source: Package): Promise<void> {
+  const iface = join(root, source.dir, "rookery", "interface.ts")
+  if (existsSync(iface)) {
+    await Bun.build({
+      target: "bun",
+      format: "esm",
+      sourcemap: "none",
+      entrypoints: [iface],
+      outdir: join(stage, source.dir, "rookery"),
+      naming: { entry: "interface.ts" },
+      throw: true,
+    })
+  }
   const entry = join(root, source.dir, "src", "host.ts")
   if (!existsSync(entry)) return
   const outdir = join(stage, source.dir, "rookery", "host")
