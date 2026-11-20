@@ -30,6 +30,12 @@ export async function testConnection(
 }
 
 export default definePlugin((rookery) => {
+  rookery.connections.test("model-anthropic.api", (ctx, c) =>
+    testConnection(
+      { apiKey: c.credential ?? String(c.values.apiKey ?? ""), rejectRedirects: true },
+      ctx.signal,
+    ),
+  )
   const valuesOf = async (id: string): Promise<Record<string, unknown>> => {
     const resolved = await rookery.connections.resolve(id)
     // The connection's config holds no address, so the API key only ever goes to Anthropic. A

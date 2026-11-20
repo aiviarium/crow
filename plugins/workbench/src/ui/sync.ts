@@ -1,6 +1,7 @@
-// Push, pull and fetch: git run on the host with env.exec, from the client half, because they can take
-// longer than a host handler may. Credentials are the host's business; a refused push shows git's own words.
-import { runCommand } from "../api"
+// Push, pull and fetch: git run on the host with its output streamed to the browser via env.process
+// (they can take longer than a host handler may). Credentials are the host's business; a refused push
+// shows git's own words.
+import { runProcess } from "../api"
 import type { Workspace } from "../workspace"
 
 export type SyncOp = "push" | "pull" | "fetch"
@@ -62,13 +63,13 @@ export async function syncAction(
   const args = syncArgs(op, { branch: b?.head, upstream: b?.upstream, remote, ...o })
   w.setSyncing(op)
   try {
-    const r = await runCommand(rookery, {
+    const p = await runProcess(rookery, {
       env: w.env,
       cwd: w.root,
       command: ["git", "-c", "color.ui=false", ...args],
       vars: { GIT_TERMINAL_PROMPT: "0", GIT_SSH_COMMAND: "ssh -o BatchMode=yes", LC_ALL: "C" },
-      timeoutMs: 120_000,
     })
+    const r = await p.done
     if (r.exitCode === 0) {
       const what = op === "push" ? `Pushed ${b?.head}` : op === "pull" ? "Pulled" : "Fetched"
       rookery.workbench.toast({ title: what, kind: "success" })
@@ -82,15 +83,9 @@ export async function syncAction(
           l &&
           !/^(remote: )?(Counting|Compressing|Writing|Receiving|Resolving|Enumerating|Total|Delta)/.test(l),
       )
-    const tail = lines.slice(-6).join("\n") || `exited ${r.exitCode ?? "without a status"}`
-    // The host keeps the start of what a command wrote and drops the rest, so git's own error may be the part
-    // that is missing.
-    const body = r.truncated
-      ? `${tail}\n(git wrote more than the host returned; its last words are lost.)`
-      : tail
     rookery.workbench.toast({
       title: op === "push" ? "The push was refused" : `git ${op} failed`,
-      body,
+      body: lines.slice(-6).join("\n") || `exited ${r.exitCode ?? "without a status"}`,
       kind: "danger",
     })
     w.setLastError(`git ${op}: ${lines.slice(-6).join(" · ")}`)

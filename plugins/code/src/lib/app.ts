@@ -69,7 +69,7 @@ export function openEntity(uri: string): void {
     window.open(uri, "_blank", "noopener,noreferrer")
     return
   }
-  c.workbench.toast({ title: "Cannot open this link yet", body: uri, kind: "info" })
+  c.entities.open(uri)
 }
 
 /** Opens the Crow issue a GitHub issue became: its project's issues, at that issue. */

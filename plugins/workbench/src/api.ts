@@ -137,6 +137,77 @@ export async function runCommand(
   }
 }
 
+export interface RunningProcess {
+  /** Ends with the exit code (null when lost or killed). */
+  done: Promise<{ exitCode: number | null; stdout: string; stderr: string; lost: boolean }>
+  kill(): void
+}
+
+/**
+ * Runs a process on the host with its output streamed to the browser (`env.process`), calling
+ * `onStdout`/`onStderr` as text arrives.
+ */
+export async function runProcess(
+  rookery: ClientRookery,
+  o: {
+    env: string
+    command: string[]
+    cwd?: string
+    vars?: Record<string, string>
+    onStdout?: (text: string) => void
+    onStderr?: (text: string) => void
+  },
+): Promise<RunningProcess> {
+  const proc = await rookery.env.process(o.env, o.command, {
+    ...(o.cwd ? { cwd: o.cwd } : {}),
+    ...(o.vars ? { env: o.vars } : {}),
+  })
+  const out = new TextDecoder()
+  const err = new TextDecoder()
+  let stdout = ""
+  let stderr = ""
+  let exitCode: number | null = null
+  let lost = false
+  const done = new Promise<{ exitCode: number | null; stdout: string; stderr: string; lost: boolean }>(
+    (resolve) => {
+      proc.onStdout = (chunk) => {
+        const t = out.decode(chunk, { stream: true })
+        stdout += t
+        o.onStdout?.(t)
+      }
+      proc.onStderr = (chunk) => {
+        const t = err.decode(chunk, { stream: true })
+        stderr += t
+        o.onStderr?.(t)
+      }
+      proc.onExit = (exit) => {
+        exitCode = exit.exitCode ?? null
+        lost = !!exit.lost
+      }
+      proc.onEnd = () => {
+        const tailOut = out.decode()
+        if (tailOut) {
+          stdout += tailOut
+          o.onStdout?.(tailOut)
+        }
+        const tailErr = err.decode()
+        if (tailErr) {
+          stderr += tailErr
+          o.onStderr?.(tailErr)
+        }
+        resolve({ exitCode, stdout, stderr, lost })
+      }
+    },
+  )
+  return {
+    done,
+    kill: () => {
+      void proc.signal("TERM").catch(() => {})
+      proc.close()
+    },
+  }
+}
+
 export function createApi(rookery: ClientRookery) {
   const call = <R>(m: string, p: Record<string, unknown> = {}) => rookery.host.call<R>(m, p)
 

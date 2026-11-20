@@ -1,6 +1,6 @@
 import { Avatar, Badge, Callout, LabelChip, parseMarkdown, RichTextEditor, State } from "@aiviarium/nocturne"
-import { createResource, For, type JSX, Show } from "solid-js"
-import { describe, openEntity, rookery } from "../lib/app"
+import { For, type JSX, Show } from "solid-js"
+import { describe, rookery } from "../lib/app"
 import { CHECKS, hueOf, REVIEWS, STATE_TONE, SYNC } from "../lib/format"
 
 export function StateBadge(props: { state: string; draft?: boolean }): JSX.Element {
@@ -97,17 +97,8 @@ export function Markdown(props: { text?: string | null; label: string }): JSX.El
   )
 }
 
-/** A Crow entity a pull request links to, by its title when the server can resolve it (M2b entities). */
+/** A Crow entity a pull request links to, rendered with `rookery.entities.Chip`. */
 export function EntityChip(props: { uri: string }): JSX.Element {
-  const c = rookery()
-  const [resolved] = createResource(
-    () => props.uri,
-    (uri) => c.rpc.call<{ title?: string } | null>("entities.resolve", { uri }).catch(() => null),
-  )
-  const text = () => resolved()?.title || props.uri.replace(/^[a-z]+:\/\//, "")
-  return (
-    <button type="button" class="nc-chip gh-chip-btn" onClick={() => openEntity(props.uri)}>
-      {text()}
-    </button>
-  )
+  const Chip = rookery().entities.Chip
+  return <Chip uri={props.uri} />
 }
