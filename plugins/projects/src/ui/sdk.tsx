@@ -3,6 +3,8 @@
 // yet part of `@rookery/sdk/client`'s pinned `ClientRookery` surface. When the shell provides any of
 // these natively on `rookery`, the adapter delegates straight through; otherwise it provides a clean
 // fallback so views and tests work today.
+
+import type { EditorBlockType } from "@aiviarium/nocturne"
 import type { ClientRookery, Disposable, EntityInfo } from "@rookery/sdk/client"
 import { RookeryError } from "@rookery/sdk/client"
 import { createResource, type JSX } from "solid-js"
@@ -229,23 +231,74 @@ export function registerManifestWidgets(rookery: ClientRookery): Disposable {
   return getSharedWidgetStore().setPluginTypes(rookery.id, widgets)
 }
 
-export interface BlockRendererProps {
-  attrs: Record<string, unknown>
-  setAttrs(next: Record<string, unknown>): void
-  readOnly: boolean
+/** What a block's component is handed, as the shared editor defines it. */
+export type BlockRendererProps = Parameters<NonNullable<EditorBlockType["component"]>>[0]
+
+const BLOCK_REGISTRY_SYMBOL = Symbol.for("crow.blocks.registry")
+
+interface SharedBlockStore {
+  register(
+    plugin: string,
+    id: string,
+    component: (props: BlockRendererProps) => JSX.Element,
+    options?: {
+      forceWidth?: (attrs: Record<string, unknown>) => "reading" | "wide" | "full" | null | undefined
+    },
+  ): Disposable
+}
+
+function blockStore(): SharedBlockStore {
+  const g = globalThis as Record<PropertyKey, unknown>
+  const existing = g[BLOCK_REGISTRY_SYMBOL] as SharedBlockStore | undefined
+  if (existing) return existing
+  const components = new Map<
+    string,
+    {
+      plugin: string
+      component: (props: BlockRendererProps) => JSX.Element
+      options?: {
+        forceWidth?: (attrs: Record<string, unknown>) => "reading" | "wide" | "full" | null | undefined
+      }
+    }
+  >()
+  const created: SharedBlockStore = {
+    register(plugin, id, component, options) {
+      const entry = { plugin, component, ...(options ? { options } : {}) }
+      components.set(id, entry)
+      return {
+        dispose() {
+          if (components.get(id) === entry) components.delete(id)
+        },
+      }
+    },
+  }
+  g[BLOCK_REGISTRY_SYMBOL] = created
+  return created
 }
 
 export function registerBlock(
   rookery: ClientRookery,
   id: string,
   component: (props: BlockRendererProps) => JSX.Element,
+  options?: {
+    forceWidth?: (attrs: Record<string, unknown>) => "reading" | "wide" | "full" | null | undefined
+  },
 ): Disposable {
   const native = (
     rookery as unknown as {
-      blocks?: { register(id: string, component: (props: BlockRendererProps) => JSX.Element): Disposable }
+      blocks?: {
+        register(
+          id: string,
+          component: (props: BlockRendererProps) => JSX.Element,
+          options?: {
+            forceWidth?: (attrs: Record<string, unknown>) => "reading" | "wide" | "full" | null | undefined
+          },
+        ): Disposable
+      }
     }
   ).blocks
-  return native ? native.register(id, component) : { dispose() {} }
+  if (native) return native.register(id, component, options)
+  return blockStore().register(rookery.id, id, component, options)
 }
 
 // ── workbench, env & agents ──────────────────────────────────────────────────────────────────────────
