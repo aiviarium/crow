@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 // Prepares `.deps/<name>` for cross-repo TypeScript packages (@rookery/client, @rookery/sdk,
-// @aiviarium/nocturne). Inside aiviarium/mono (when sibling checkouts exist and CROW_USE_PINS is
-// unset), symlinks directly to the sibling checkouts so local edits apply immediately. Standalone
-// and in CI, shallow-fetches the exact commit pinned in deps.json.
+// @aiviarium/nocturne). Inside aiviarium/mono, when the sibling checkouts exist, symlinks directly
+// to them so local edits apply immediately, and so the end-to-end stack there is built from the
+// Rookery and Crow it checked out, in CI as much as on a developer's machine. Standalone, and with
+// CROW_USE_PINS=1, shallow-fetches the exact commit pinned in deps.json.
 
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs"
 import { dirname, join, relative, resolve } from "node:path"
@@ -17,7 +18,9 @@ interface DepPin {
 
 const ROOT = resolve(dirname(import.meta.path), "..")
 const DEPS_DIR = join(ROOT, ".deps")
-const usePins = process.env.CROW_USE_PINS === "1" || process.env.CI === "true"
+// The pins are for a checkout without its siblings, such as Crow's own CI. A runner's CI=true is
+// not a reason to prefer them: inside mono the siblings are what the stack is made of.
+const usePins = process.env.CROW_USE_PINS === "1"
 
 const pins = JSON.parse(readFileSync(join(ROOT, "deps.json"), "utf8")) as Record<string, DepPin>
 mkdirSync(DEPS_DIR, { recursive: true })
