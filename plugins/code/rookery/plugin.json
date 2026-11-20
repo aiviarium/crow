@@ -613,7 +613,7 @@
       {
         "id": "code.github-app",
         "title": "GitHub App installation",
-        "description": "An installation of a GitHub App: Crow signs in as the app and mints short-lived installation tokens. Create the app from Crow (GitHub › Connect), or enter the ids of one you made. Needs the app's private key.",
+        "description": "An installation of a GitHub App: Crow signs in as the app and mints short-lived installation tokens. Create the app from Crow (GitHub \u203a Connect), or enter the ids of one you made. Needs the app's private key.",
         "icon": "link",
         "fields": {
           "type": "object",
@@ -647,7 +647,7 @@
           },
           "required": ["appId", "privateKey"]
         },
-        "secret": ["privateKey", "webhookSecret"],
+        "secret": ["privateKey"],
         "scopes": ["global", "user"],
         "test": true
       },
@@ -683,7 +683,7 @@
         "key": "code.pollSecs",
         "title": "Poll every",
         "description": "How often a repository is checked for changes when webhooks do not reach the server. Idle checks are conditional requests that cost no rate limit.",
-        "category": "GitHub ›",
+        "category": "GitHub \u203a",
         "type": "integer",
         "default": 60,
         "minimum": 15,
@@ -695,7 +695,7 @@
         "key": "code.notifyReviewRequests",
         "title": "Review requests",
         "description": "A notification when someone asks you to review a pull request.",
-        "category": "GitHub ›",
+        "category": "GitHub \u203a",
         "type": "boolean",
         "default": true,
         "scopes": ["user"]
@@ -704,7 +704,7 @@
         "key": "code.notifyMentions",
         "title": "Mentions",
         "description": "A notification when a comment or description mentions you.",
-        "category": "GitHub ›",
+        "category": "GitHub \u203a",
         "type": "boolean",
         "default": true,
         "scopes": ["user"]
@@ -713,7 +713,7 @@
         "key": "code.notifyChecks",
         "title": "Failed checks",
         "description": "A notification when checks fail on a pull request you opened.",
-        "category": "GitHub ›",
+        "category": "GitHub \u203a",
         "type": "boolean",
         "default": true,
         "scopes": ["user"]

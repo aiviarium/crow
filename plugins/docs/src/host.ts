@@ -5,7 +5,16 @@
 // documents), duplicate, templates, comments (with notifications), Markdown in and out, a page as text for
 // models, and the `docs` service that agent tools call. Everything acts as the caller, so their access applies;
 // only the documents are created and removed as the plugin (it attaches them to its own pages).
-import { type Ctx, definePlugin, mentions, type Query, type RichText, RookeryError, z } from "@rookery/sdk"
+import {
+  type Ctx,
+  type DocumentEdit,
+  definePlugin,
+  mentions,
+  type Query,
+  type RichText,
+  RookeryError,
+  z,
+} from "@rookery/sdk"
 import api from "../rookery/interface"
 import { stringifyFrontMatter } from "./lib/frontmatter"
 import { type ExportPage, exportTree, type PlannedPage } from "./lib/mdio"
@@ -47,18 +56,23 @@ const pageRef = z.string().describe("The page: its id, its doc:// link, or its e
 export default definePlugin((baseRookery) => {
   const rookery = baseRookery as HostRookery
 
-  const requireDocuments = () => {
-    if (!rookery.documents) {
-      throw new RookeryError("UNAVAILABLE", "Rookery documents facility is not available (M2b)")
+  const requireDocuments = () => rookery.documents
+  const requireEntities = () => rookery.entities
+
+  /** A document's ProseMirror JSON, as an empty document when it has none. */
+  const docJson = async (ctx: Ctx, id: string): Promise<RichText> =>
+    ((await rookery.documents.read(ctx, id, "json")).content as RichText | undefined) ?? {
+      type: "doc",
+      content: [],
     }
-    return rookery.documents
-  }
-  const requireEntities = () => {
-    if (!rookery.entities) {
-      throw new RookeryError("UNAVAILABLE", "Rookery entities index is not available (M2b)")
-    }
-    return rookery.entities
-  }
+
+  /** A document as Markdown. */
+  const docMarkdown = async (ctx: Ctx, id: string): Promise<string> =>
+    (await rookery.documents.read(ctx, id, "markdown")).markdown ?? ""
+
+  /** Applies blocks to a document as the caller (or the agent that acts for them). */
+  const docEdit = (ctx: Ctx, id: string, ops: DocumentEdit["ops"]) =>
+    rookery.documents.edit(ctx, { id, ops, ...(author(ctx) ? { author: author(ctx) } : {}) })
 
   /** The pages collection as the caller, in a space (theirs by default). */
   const pages = (ctx: Ctx, sp?: string | null): Pages =>
@@ -86,24 +100,27 @@ export default definePlugin((baseRookery) => {
   const resolve = async (ctx: Ctx, ref: string, sp?: string | null): Promise<PageRow> => {
     const id = idOf(ref)
     if (id && /^[0-9a-f-]{36}$/i.test(id)) {
-      const found = rookery.entities ? await rookery.entities.lookup(ctx, uriOf(id)).catch(() => null) : null
+      const found = await requireEntities()
+        .lookup(ctx, uriOf(id))
+        .catch(() => null)
       const row = await pages(ctx, sp ?? found?.spaceId ?? null).get(id)
       if (row) return row
     }
-    if (rookery.entities) {
-      const hits = await rookery.entities.search(ctx, ref, {
+    const hits = await requireEntities()
+      .search(ctx, ref, {
         schemes: ["doc"],
         ...(sp ? { space: sp } : {}),
         limit: 10,
       })
-      const exact = hits
-        .map(entityOfHit)
-        .find((h) => h.title.trim().toLowerCase() === ref.trim().toLowerCase())
-      if (exact) {
-        const row = await pages(ctx, exact.spaceId ?? sp).get(exact.id)
-        if (row) return row
-      }
+      .catch(() => null)
+    const exact = hits
+      ?.map(entityOfHit)
+      .find((h) => h.title.trim().toLowerCase() === ref.trim().toLowerCase())
+    if (exact) {
+      const row = await pages(ctx, exact.spaceId ?? sp).get(exact.id)
+      if (row) return row
     } else if (id) {
+      // A server whose entity index is not there still resolves a page by its id.
       const row = await pages(ctx, sp ?? null)
         .get(id)
         .catch(() => null)
@@ -115,10 +132,9 @@ export default definePlugin((baseRookery) => {
   /** The page's document id, making one for a page that has none. */
   const documentOf = async (ctx: Ctx, page: PageRow): Promise<string> => {
     if (page.document) return page.document
-    const docs = requireDocuments()
-    const existing = await docs.list(ctx, uriOf(page.id))
+    const existing = await requireDocuments().list(ctx, uriOf(page.id))
     if (existing[0]) return existing[0].id
-    const doc = await docs.create(null, { parent: uriOf(page.id), title: page.title })
+    const doc = await requireDocuments().create(ctx, { parent: uriOf(page.id), title: page.title })
     await pages(ctx, page.spaceId)
       .update(page.id, { document: doc.id })
       .catch(() => {})
@@ -197,7 +213,7 @@ export default definePlugin((baseRookery) => {
     // The session that made it, in the reference index, so the agents plugin's library lists it.
     if (isAgent(ctx)) values.session = `session://${ctx.principal.id}`
     const row = await pages(ctx, sp).insert(values)
-    const doc = await requireDocuments().create(null, {
+    const doc = await requireDocuments().create(ctx, {
       parent: uriOf(row.id),
       title: row.title,
       ...(o.content ? { content: o.content } : o.markdown ? { markdown: o.markdown } : {}),
@@ -306,12 +322,10 @@ export default definePlugin((baseRookery) => {
     // Children first, so no row is left pointing at a purged parent.
     for (const p of list.reverse()) {
       await col.purge(p.id)
-      if (rookery.documents) {
-        const docs = p.document
-          ? [{ id: p.document }]
-          : await rookery.documents.list(null, uriOf(p.id)).catch(() => [])
-        for (const d of docs) await rookery.documents.delete(null, d.id).catch(() => {})
-      }
+      const docs = p.document
+        ? [{ id: p.document }]
+        : await rookery.documents.list(ctx, uriOf(p.id)).catch(() => [])
+      for (const d of docs) await rookery.documents.delete(ctx, d.id).catch(() => {})
       const notes = await all(comments(ctx, p.spaceId), { where: { page: uriOf(p.id) } }).catch(() => [])
       for (const part of chunks(notes, 1000))
         await comments(ctx, p.spaceId)
@@ -334,14 +348,13 @@ export default definePlugin((baseRookery) => {
       index?: number
     },
   ) => {
-    const docs = requireDocuments()
     const tree = opts.subpages ? await subtree(ctx, root) : [root]
     const map = new Map<string, string>()
     let first: PageRow | null = null
     for (const p of tree) {
       const isRoot = p.id === root.id
       const docId = p.document ?? (await documentOf(ctx, p))
-      const content = await docs.json(ctx, docId)
+      const content = await docJson(ctx, docId)
       const parent = isRoot ? (opts.parent === undefined ? parentId(p) : opts.parent) : map.get(parentId(p)!)!
       const made = await create(ctx, {
         title: isRoot ? (opts.title ?? p.title) : p.title,
@@ -457,12 +470,11 @@ export default definePlugin((baseRookery) => {
 
   /** A page as Markdown with its properties as front matter. */
   const pageMarkdown = async (ctx: Ctx, page: PageRow, withMeta = true) => {
-    const body = await requireDocuments().markdown(ctx, await documentOf(ctx, page))
+    const body = await docMarkdown(ctx, await documentOf(ctx, page))
     return (withMeta ? stringifyFrontMatter(await metaOf(ctx, page)) : "") + body
   }
 
   const exportPages = async (ctx: Ctx, id: string, subpages: boolean, sp?: string | null) => {
-    const docs = requireDocuments()
     const root = await resolve(ctx, id, sp)
     const tree = subpages ? await subtree(ctx, root) : [root]
     const list: ExportPage[] = []
@@ -471,7 +483,7 @@ export default definePlugin((baseRookery) => {
         id: p.id,
         title: p.title,
         parent: p.id === root.id ? null : parentId(p),
-        markdown: await docs.markdown(ctx, await documentOf(ctx, p)),
+        markdown: await docMarkdown(ctx, await documentOf(ctx, p)),
         meta: await metaOf(ctx, p),
       })
     const names = new Map<string, string>()
@@ -491,7 +503,6 @@ export default definePlugin((baseRookery) => {
     planned: Array<Pick<PlannedPage, "key" | "title" | "parent" | "props" | "icon">>,
     o: { parent?: string | null; space?: string | null },
   ) => {
-    const docs = requireDocuments()
     const target = o.parent ? await resolve(ctx, o.parent, o.space) : null
     const sp = target?.spaceId ?? o.space ?? ctx.space
     if (!sp) throw new RookeryError("INVALID", "open a space first, or name one")
@@ -543,7 +554,7 @@ export default definePlugin((baseRookery) => {
         ...(isAgent(ctx) ? { session: `session://${ctx.principal.id}` } : {}),
       }
       const row = await pages(ctx, sp).insert(values)
-      const doc = await docs.create(null, { parent: uriOf(row.id), title: row.title })
+      const doc = await requireDocuments().create(ctx, { parent: uriOf(row.id), title: row.title })
       await pages(ctx, sp).update(row.id, { document: doc.id })
       ids.set(p.key, row.id)
     }
@@ -556,14 +567,10 @@ export default definePlugin((baseRookery) => {
     items: Array<{ id: string; markdown: string }>,
     sp?: string | null,
   ) => {
-    const docs = requireDocuments()
     for (const it of items) {
       const page = await resolve(ctx, it.id, sp)
       const doc = await documentOf(ctx, page)
-      if (it.markdown.trim())
-        await docs.edit(ctx, doc, [{ op: "setContent", markdown: it.markdown }], {
-          author: author(ctx),
-        })
+      if (it.markdown.trim()) await docEdit(ctx, doc, [{ op: "setContent", markdown: it.markdown }])
     }
     return { done: items.length }
   }
@@ -664,9 +671,8 @@ export default definePlugin((baseRookery) => {
 
   const append = async (ctx: Ctx, ref: string, markdown: string, sp?: string | null) => {
     const page = await resolve(ctx, ref, sp)
-    const blocks = await requireDocuments().append(ctx, await documentOf(ctx, page), markdown, {
-      author: author(ctx),
-    })
+    const blocks = (await docEdit(ctx, await documentOf(ctx, page), [{ op: "appendMarkdown", markdown }]))
+      .blocks
     return { id: page.id, blocks }
   }
 
@@ -678,10 +684,9 @@ export default definePlugin((baseRookery) => {
     markdown: string,
     sp?: string | null,
   ) => {
-    const docs = requireDocuments()
     const page = await resolve(ctx, ref, sp)
     const doc = await documentOf(ctx, page)
-    const json = (await docs.json(ctx, doc)) as RichText
+    const json = await docJson(ctx, doc)
     const blocks = json.content ?? []
     const want = heading
       .replace(/^#+\s*/, "")
@@ -693,9 +698,12 @@ export default definePlugin((baseRookery) => {
     if (at < 0) {
       // No such section: add it at the end.
       const level = 2
-      await docs.append(ctx, doc, `${"#".repeat(level)} ${heading.replace(/^#+\s*/, "")}\n\n${markdown}`, {
-        author: author(ctx),
-      })
+      await docEdit(ctx, doc, [
+        {
+          op: "appendMarkdown",
+          markdown: `${"#".repeat(level)} ${heading.replace(/^#+\s*/, "")}\n\n${markdown}`,
+        },
+      ])
       return { id: page.id, added: true }
     }
     const level = Number(blocks[at]!.attrs?.level ?? 1)
@@ -705,9 +713,8 @@ export default definePlugin((baseRookery) => {
       !(blocks[end]!.type === "heading" && Number(blocks[end]!.attrs?.level ?? 1) <= level)
     )
       end++
-    if (end > at + 1)
-      await docs.replaceBlocks(ctx, doc, { from: at + 1, to: end }, { markdown }, { author: author(ctx) })
-    else await docs.insert(ctx, doc, { markdown, at: at + 1 }, { author: author(ctx) })
+    if (end > at + 1) await docEdit(ctx, doc, [{ op: "replaceBlocks", from: at + 1, to: end, markdown }])
+    else await docEdit(ctx, doc, [{ op: "insert", at: at + 1, markdown }])
     return { id: page.id, added: false }
   }
 
@@ -760,20 +767,6 @@ export default definePlugin((baseRookery) => {
   }
 
   // ── Registration ────────────────────────────────────────────────────────────────────────────────
-
-  if (rookery.entities) {
-    rookery.entities.text("doc", async (ctx, { id }) => {
-      const found = await rookery.entities!.lookup(ctx, uriOf(id))
-      const page = await pages(ctx, found?.spaceId ?? null).get(id)
-      return page ? { title: page.title, text: await pageMarkdown(ctx, page) } : null
-    })
-
-    rookery.entities.text("doc-comment", async (ctx, { id }) => {
-      const found = await rookery.entities!.lookup(ctx, `doc-comment://${id}`)
-      const c = await comments(ctx, found?.spaceId ?? null).get(id)
-      return c ? { title: "Comment", text: String((c as unknown as { text: string }).text) } : null
-    })
-  }
 
   const ok = <T extends z.ZodRawShape>(shape: T) => z.object(shape)
   const rpc = <T extends z.ZodRawShape>(
@@ -909,16 +902,13 @@ export default definePlugin((baseRookery) => {
           !!seen.add(r.source),
       )
       .slice(0, 50)
-    const entities = rookery.entities
-    const texts = entities
-      ? await entities
-          .toText(
-            ctx,
-            linked.slice(0, 20).map((r) => r.source),
-            { maxChars: 20_000 },
-          )
-          .catch(() => null)
-      : null
+    const texts = await requireEntities()
+      .text(
+        ctx,
+        linked.slice(0, 20).map((r) => r.source),
+        { maxChars: 20_000 },
+      )
+      .catch(() => null)
     const textOf = new Map((texts?.texts ?? []).map((t) => [t.uri, t.text]))
     const around = (text: string | undefined, needles: string[]) => {
       if (!text) return null
@@ -941,8 +931,10 @@ export default definePlugin((baseRookery) => {
       return null
     }
     let unlinked: Array<{ uri: string; title: string; snippet: string | null }> = []
-    if (entities && page.title.trim().length >= 3 && page.title !== "Untitled") {
-      const hits = await entities.search(ctx, page.title, { limit: 12 }).catch(() => [])
+    if (page.title.trim().length >= 3 && page.title !== "Untitled") {
+      const hits = await requireEntities()
+        .search(ctx, page.title, { limit: 12 })
+        .catch(() => [])
       const candidates = hits
         .map(entityOfHit)
         .filter(
@@ -954,8 +946,8 @@ export default definePlugin((baseRookery) => {
             !h.deletedAt &&
             h.title.trim().toLowerCase() !== page.title.trim().toLowerCase(),
         )
-      const more = await entities
-        .toText(
+      const more = await requireEntities()
+        .text(
           ctx,
           candidates.slice(0, 8).map((h) => h.uri),
           { maxChars: 20_000 },
@@ -1006,7 +998,9 @@ export default definePlugin((baseRookery) => {
     def: { params: S; run: (ctx: Ctx, p: z.infer<S>) => unknown },
   ) => {
     rookery.commands.register(id as never, def as never)
-    rookery.agents?.tool(id, { params: def.params, run: def.run })
+    const agents = (rookery as typeof rookery & { agents?: { tool?: (id: string, def: unknown) => unknown } })
+      .agents
+    agents?.tool?.(id, { params: def.params, run: def.run })
   }
   both("docs.create", {
     params: z.object({

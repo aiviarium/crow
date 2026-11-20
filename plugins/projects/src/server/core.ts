@@ -23,7 +23,7 @@ import {
   type StateRow,
 } from "../lib/model"
 import { between, compareRank, rankFor, sequence } from "../lib/rank"
-import { accessLevel, documentsOf, entitiesOf, extrasOf, sendNotice, toRookeryError } from "./sdk"
+import { accessLevel, entitiesOf, sendNotice, toRookeryError } from "./sdk"
 
 export const KIND = "projects.project"
 export const issueUri = (id: string) => `issue://${id}`
@@ -164,13 +164,11 @@ export function createCore(rookery: Rookery) {
     const name = p.name.trim()
     if (!name) throw new RookeryError("INVALID", "a project needs a name")
     if (await spaceOfKey(key)) throw new RookeryError("CONFLICT", `the key ${key} is taken`, { key })
-    const space = await extrasOf(rookery)
-      .spaces.create(ctx, { kind: KIND, name, slug: slugForKey(key) })
-      .catch((e) => {
-        if (toRookeryError(e).code === "CONFLICT" || /slug/i.test(String(e?.message)))
-          throw new RookeryError("CONFLICT", `a space with the address ${slugForKey(key)} exists`, { key })
-        throw e
-      })
+    const space = await rookery.spaces.create(ctx, { kind: KIND, name, slug: slugForKey(key) }).catch((e) => {
+      if (toRookeryError(e).code === "CONFLICT" || /slug/i.test(String(e?.message)))
+        throw new RookeryError("CONFLICT", `a space with the address ${slugForKey(key)} exists`, { key })
+      throw e
+    })
     try {
       await rookery.data.registry.insert({ space: space.id, key } as never)
       keyCache = null
@@ -280,7 +278,7 @@ export function createCore(rookery: Rookery) {
     }
     const id = idOf(ref)
     if (space) return getIssue(ctx, space, id)
-    const e = await entitiesOf(rookery)?.lookup(ctx, issueUri(id))
+    const e = await entitiesOf(rookery).lookup(ctx as Ctx, issueUri(id))
     if (!e?.spaceId) return null
     return getIssue(ctx, e.spaceId, id)
   }
@@ -338,7 +336,7 @@ export function createCore(rookery: Rookery) {
       label: issueLabel(key, inserted.title),
     } as never)) as unknown as IssueRow
     if (p.description && plainText(p.description).trim()) {
-      const docs = extrasOf(rookery).documents
+      const docs = rookery.documents
       if (docs) {
         const doc = await docs.create(ctx, {
           parent: issueUri(row.id),
@@ -669,8 +667,6 @@ export function createCore(rookery: Rookery) {
     }
     return out
   }
-
-  void documentsOf
 
   return {
     hooks,

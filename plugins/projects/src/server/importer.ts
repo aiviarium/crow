@@ -9,7 +9,7 @@ import { CATEGORY_ICON, defaultState, firstOf, type IssueRow, issueLabel, type S
 import { sequence } from "../lib/rank"
 import type { Core } from "./core"
 import { uid, userUri } from "./core"
-import { entitiesOf, extrasOf } from "./sdk"
+import { entitiesOf } from "./sdk"
 
 export interface ImportParams {
   space: string
@@ -137,18 +137,15 @@ export function createImporter(rookery: Rookery, core: Core) {
         }),
       )
       // Descriptions become the issues' documents.
-      const docs = extrasOf(rookery).documents
-      if (docs) {
-        for (const [n, r] of rows.entries()) {
-          const md = chunk[n]!.description
-          if (!md?.trim()) continue
-          const doc = await docs.create(ctx, {
-            parent: `issue://${r.id}`,
-            title: r.title,
-            markdown: md,
-          })
-          await d.issues.update(r.id, { document: doc.id } as never)
-        }
+      for (const [n, r] of rows.entries()) {
+        const md = chunk[n]!.description
+        if (!md?.trim()) continue
+        const doc = await rookery.documents.create(ctx, {
+          parent: `issue://${r.id}`,
+          title: r.title,
+          markdown: md,
+        })
+        await d.issues.update(r.id, { document: doc.id } as never)
       }
       done += rows.length
       created.push(...rows.map((r) => r.id))

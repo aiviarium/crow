@@ -1,38 +1,20 @@
 // Typed adapters from the prototype's host API (`@crow/sdk`) onto `@rookery/sdk`'s `Rookery` and `Ctx`.
 //
-// Rookery's extension host arrived in M2 and its datastore, spaces and groups in M2b. The handles below use
-// what `@rookery/sdk` types today and reach, through a cast, for the few facilities the pinned SDK does not
-// declare yet (`entities`, `settings.getFor`, `access.levelOf`, `schedules.create`,
-// `env.repositories`, `agents.tool`). Each is marked in `API.md`; every fallback keeps the
-// plugin working (or failing cleanly) where the facility is absent.
-import type { Ctx, Disposable, JobHandle, Rookery, SpaceInfo } from "@rookery/sdk"
+// Documents, entities, spaces, access levels and schedules are the SDK's own handles. The two still reached
+// through a cast are the ones the pinned extension host does not serve yet (`env.repositories`,
+// `agents.tool`); each is marked in `API.md`, and its absence keeps the plugin working or failing cleanly.
+import {
+  type Ctx,
+  type Disposable,
+  type JobHandle,
+  type Rookery,
+  RookeryError,
+  type SpaceInfo,
+} from "@rookery/sdk"
 import { ghSpace, type RepoRow } from "./rows"
 
-/** The host handle with the facilities that arrive with M2b and M5b. */
+/** The host handle with the facilities that are not in the SDK yet. */
 export interface RookeryExtras {
-  entities?: {
-    lookup(ctx: Ctx | null, uri: string): Promise<EntityInfo | null>
-    lookupMany(ctx: Ctx | null, uris: string[]): Promise<EntityInfo[]>
-    search(
-      ctx: Ctx | null,
-      query: string,
-      opts?: { schemes?: string[]; limit?: number },
-    ): Promise<EntityInfo[]>
-    text?(
-      scheme: string,
-      handler: (ctx: Ctx, ref: { id: string }) => Promise<{ title: string; text: string } | null>,
-    ): Disposable
-    alias?(ctx: Ctx | null, from: string, to: string): Promise<void>
-  }
-  settings: Rookery["settings"] & {
-    /** Another person's user-scoped setting (the prototype's `settings.getFor`). */
-    getFor?(key: string, user: string): Promise<unknown>
-    get(key: string, opts?: { space?: string; user?: string }): Promise<unknown>
-  }
-  schedules: Rookery["schedules"] & {
-    create?(ctx: Ctx | null, schedule: ScheduleInput): Promise<{ id: string }>
-    remove?(ctx: Ctx | null, id: string): Promise<void>
-  }
   env: Rookery["env"] & {
     repositories?(ctx: Ctx | null, space: string): Promise<Array<{ id: string; url: string }>>
     addRepository?(
@@ -121,20 +103,19 @@ export interface EntityInfo {
   deletedAt?: string | null
 }
 
-export const entitiesOf = (rookery: Rookery): RookeryExtras["entities"] | undefined =>
-  extrasOf(rookery).entities
+export const entitiesOf = (rookery: Rookery): Rookery["entities"] => rookery.entities
 
 /**
- * The entity behind a `gh-…://` URI. Uses `entities.lookup` when the server has it; otherwise it looks the
- * row up in every space the caller can see, which is what the entity index would say.
+ * The entity behind a `gh-…://` URI. The index answers first; a row it has not indexed yet is looked up in
+ * every space the caller can see, which is what the index would say.
  */
 export async function lookupEntity(
   rookery: Rookery,
   ctx: Ctx | null,
   uri: string,
 ): Promise<EntityInfo | null> {
-  const native = entitiesOf(rookery)
-  if (native) return native.lookup(ctx, uri).catch(() => null)
+  const found = await rookery.entities.lookup(ctx as Ctx, uri).catch(() => null)
+  if (found) return found
   const m = /^(gh-pr|gh-repo):\/\/(.+)$/.exec(uri)
   if (!m) return null
   const kind = m[1] === "gh-pr" ? "prs" : "repos"
@@ -217,24 +198,18 @@ export async function requireLevel(ctx: Ctx, resource: string, level: Level): Pr
 }
 
 export async function levelOf(ctx: Ctx, resource: string, user: string): Promise<Level | null> {
-  const access = ctx.access as Ctx["access"] & {
-    levelOf?(resource: string, user: string): Promise<Level | null>
-  }
-  if (typeof access.levelOf === "function") return access.levelOf(resource, user)
-  // Without `access.levelOf` (M2b), a notification cannot check what its recipient may see: it is not sent.
-  return null
+  return (await ctx.access.levelOf(resource, user).catch(() => null)) as Level | null
 }
 
 // ── settings ────────────────────────────────────────────────────────────────────────────────────────
 
+/** A setting as it resolves for the caller, or for a space: `user` is another person's and is not served. */
 export async function getSetting<T = unknown>(
   rookery: Rookery,
   key: string,
   opts: { space?: string; user?: string } = {},
 ): Promise<T> {
-  const settings = extrasOf(rookery).settings
-  if (opts.user && typeof settings.getFor === "function") return (await settings.getFor(key, opts.user)) as T
-  return (await settings.get(key, opts)) as T
+  return (await rookery.settings.get(key, opts.space ? { space: opts.space } : {})) as T
 }
 
 // ── schedules ───────────────────────────────────────────────────────────────────────────────────────
@@ -251,23 +226,30 @@ export interface ScheduleInput {
 
 export const scheduleName = (repoId: string) => `code:sync:${repoId}`
 
-/** Creates or replaces the per-repository poll schedule, where the server lets a plugin make one (M2). */
+/** Creates or replaces the per-repository poll schedule. */
 export async function putSchedule(
   rookery: Rookery,
   ctx: Ctx | null,
   schedule: ScheduleInput,
 ): Promise<boolean> {
-  const create = extrasOf(rookery).schedules.create
-  if (!create) return false
-  await create(ctx, schedule)
-  return true
+  void ctx
+  try {
+    await rookery.schedules.create(schedule)
+    return true
+  } catch (e) {
+    // A server whose extension host does not serve schedules yet: the repository still syncs on demand.
+    if (RookeryError.from(e).code === "UNAVAILABLE") return false
+    throw e
+  }
 }
 
 export async function removeScheduleFor(rookery: Rookery, ctx: Ctx | null, repoId: string) {
-  const schedules = extrasOf(rookery).schedules
-  if (!schedules.remove) return
+  void ctx
   const found = await rookery.schedules.list().catch(() => [])
-  for (const s of found) if (s.name === scheduleName(repoId)) await schedules.remove(ctx, s.id)
+  for (const s of found) {
+    if (s.name !== scheduleName(repoId)) continue
+    await rookery.schedules.remove(s.id).catch(() => {})
+  }
 }
 
 // ── notifications ───────────────────────────────────────────────────────────────────────────────────
@@ -313,6 +295,7 @@ export function jobCtx(rookery: Rookery, job: JobHandle): Ctx {
   const attached = (job as unknown as { ctx?: Ctx }).ctx
   if (attached) return attached
   return {
+    callId: `job:${job.id}`,
     user: null,
     principal: { kind: "plugin", id: rookery.id } as never,
     space: null,
@@ -322,6 +305,8 @@ export function jobCtx(rookery: Rookery, job: JobHandle): Ctx {
       check: async () => true,
       require: async () => {},
       level: async () => "manage" as never,
+      levelOf: async () => null,
+      grants: async (resource: string) => ({ resource, owner: null, grants: [] }),
       filter: async (resources: string[]) => resources,
       grant: async () => {},
       revoke: async () => {},

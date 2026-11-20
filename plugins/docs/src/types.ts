@@ -1,24 +1,21 @@
-// M2/M2b bridge types for Rookery SDK surfaces that Docs uses (documents, entities, pins, recents, blocks,
-// widgets, blobs.upload, workbench.share, and host agents.tool). Once Rookery M2 and M2b land in `@rookery/sdk`,
-// these optional extensions become part of the core `Rookery` and `ClientRookery` handles.
+// Types for the SDK surfaces Docs uses, and the few UI extensions Crow's shell adds on top.
+// Documents, entities, pins and recents are the SDK's own handles; only entity chips, cards, rows and
+// the mention picker are still a shell extension.
 import type { BlockWidth, CollabProvider, OutlineHeading } from "@aiviarium/nocturne"
 import type { Ctx, Disposable, Rookery, z } from "@rookery/sdk"
 import type {
   BlobInfo,
   ClientRookery,
   DocumentContent,
-  DocumentInfo,
   DocumentVersion,
   EntityInfo,
-  PinInfo,
-  RecentEntity,
   SearchHit,
 } from "@rookery/sdk/client"
 import type { JSX } from "solid-js"
 
 export type { BlockWidth, OutlineHeading }
 
-/** Extracts the underlying `EntityInfo` from either a flat `EntityInfo` or an M2b `SearchHit`. */
+/** Extracts the underlying `EntityInfo` from either a flat `EntityInfo` or a `SearchHit`. */
 export function entityOfHit(hit: EntityInfo | SearchHit): EntityInfo {
   return "entity" in hit ? hit.entity : hit
 }
@@ -58,24 +55,11 @@ export interface WidgetsClient {
 }
 
 export interface DocumentSession extends CollabProvider {
-  status(): "connecting" | "synced" | "offline" | "error" | (string & {})
+  status(): "connecting" | "syncing" | "synced" | "offline" | "error" | (string & {})
   unsynced(): boolean
   error(): Error | null | undefined
+  readOnly(): boolean
   close(): void
-}
-
-export interface DocumentsClient {
-  open(id: string): DocumentSession
-  create(opts: {
-    parent?: string
-    title?: string
-    content?: unknown
-    markdown?: string
-  }): Promise<DocumentInfo>
-  history(id: string): Promise<DocumentVersion[]>
-  read(id: string, opts?: { version?: string; format?: "json" | "markdown" }): Promise<DocumentContent>
-  saveVersion(id: string, name?: string): Promise<DocumentVersion>
-  restore(id: string, version: string): Promise<void>
 }
 
 export interface EntityChipProps {
@@ -108,43 +92,18 @@ export interface MentionPickerProps {
   onClose: () => void
 }
 
-export interface EntitiesClient {
-  open(uri: string): void
-  resolve(uri: string): Promise<EntityInfo | null>
-  resolveMany(uris: string[]): Promise<EntityInfo[]>
-  search(
-    query: string,
-    opts?: { schemes?: string[]; space?: string; limit?: number },
-  ): Promise<Array<EntityInfo | SearchHit>>
-  renders(surface: "card" | "row" | "chip", scheme: string): boolean
-  Chip: (props: EntityChipProps) => JSX.Element
-  Card: (props: EntityCardProps) => JSX.Element
-  Row: (props: EntityRowProps) => JSX.Element
-  MentionPicker: (props: MentionPickerProps) => JSX.Element
+/** The SDK's entity index, with the shell's entity components where it draws them. */
+export type EntitiesClient = ClientRookery["entities"] & {
+  open?(uri: string): void
+  renders?(surface: "card" | "row" | "chip", scheme: string): boolean
+  Chip?(props: EntityChipProps): JSX.Element
+  Card?(props: EntityCardProps): JSX.Element
+  Row?(props: EntityRowProps): JSX.Element
+  MentionPicker?(props: MentionPickerProps): JSX.Element
 }
 
-export interface PinsClient {
-  list(): Promise<PinInfo[]>
-  add(pin: {
-    kind: string
-    target: string
-    title?: string
-    icon?: string
-    spaceId?: string
-  }): Promise<PinInfo>
-  remove(id: string): Promise<void>
-  onChange(fn: () => void): Promise<Disposable>
-}
-
-export interface RecentsClient {
-  entities(opts?: { schemes?: string[]; limit?: number }): Promise<RecentEntity[]>
-}
-
-export type ClientRookeryWithDocs = ClientRookery & {
-  readonly entities?: EntitiesClient
-  readonly documents?: DocumentsClient
-  readonly pins?: PinsClient
-  readonly recents?: RecentsClient
+export type ClientRookeryWithDocs = Omit<ClientRookery, "entities"> & {
+  readonly entities: EntitiesClient
   readonly blocks?: BlocksClient
   readonly widgets?: WidgetsClient
   readonly blobs: ClientRookery["blobs"] & {
@@ -155,64 +114,23 @@ export type ClientRookeryWithDocs = ClientRookery & {
   }
 }
 
-export interface HostDocuments {
-  list(ctx: Ctx | null, parentUri: string): Promise<DocumentInfo[]>
-  create(
-    ctx: Ctx | null,
-    opts: { parent?: string; title?: string; content?: unknown; markdown?: string },
-  ): Promise<DocumentInfo>
-  delete(ctx: Ctx | null, id: string): Promise<void>
-  json(ctx: Ctx, id: string): Promise<unknown>
-  markdown(ctx: Ctx, id: string): Promise<string>
-  append(ctx: Ctx, id: string, markdown: string, opts?: { author?: { name: string } }): Promise<unknown>
-  edit(
-    ctx: Ctx,
-    id: string,
-    ops: Array<{ op: string; [k: string]: unknown }>,
-    opts?: { author?: { name: string } },
-  ): Promise<unknown>
-  replaceBlocks(
-    ctx: Ctx,
-    id: string,
-    range: { from: number; to: number },
-    body: { markdown: string },
-    opts?: { author?: { name: string } },
-  ): Promise<unknown>
-  insert(
-    ctx: Ctx,
-    id: string,
-    body: { markdown: string; at: number },
-    opts?: { author?: { name: string } },
-  ): Promise<unknown>
-}
+/** The host handle. Documents, entities and spaces are the SDK's own; nothing is bridged here. */
+export type HostRookery = Rookery
 
-export interface HostEntities {
-  lookup(ctx: Ctx, uri: string): Promise<EntityInfo | null>
-  search(
-    ctx: Ctx,
-    query: string,
-    opts?: { schemes?: string[]; space?: string; limit?: number },
-  ): Promise<Array<EntityInfo | SearchHit>>
-  toText(
-    ctx: Ctx,
-    uris: string[],
-    opts?: { maxChars?: number },
-  ): Promise<{ texts: Array<{ uri: string; title?: string | null; text: string }> }>
-  text(
-    scheme: string,
-    handler: (ctx: Ctx, ref: { id: string }) => Promise<{ title: string; text: string } | null>,
-  ): Disposable
-}
+/** The `documents.read` shapes Docs uses, named for the views that pass them around. */
+export type DocumentsRead = DocumentContent
 
-export interface HostAgents {
-  tool<S extends z.ZodTypeAny>(
-    id: string,
-    def: { params: S; run: (ctx: Ctx, params: z.infer<S>) => unknown },
-  ): Disposable
-}
+/** A document's history, as the views list it. */
+export type DocumentHistory = DocumentVersion[]
 
-export type HostRookery = Rookery & {
-  readonly documents?: HostDocuments
-  readonly entities?: HostEntities
-  readonly agents?: HostAgents
-}
+/** The SDK's documents, as the host half calls them. */
+export type HostDocuments = Rookery["documents"]
+
+/** The SDK's entity index. */
+export type HostEntities = Rookery["entities"]
+
+/** The SDK's context, for the helpers that take one. */
+export type HostCtx = Ctx
+
+/** Kept for the interface declarations the service modules import. */
+export type { z }

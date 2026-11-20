@@ -6,6 +6,7 @@ import { defineClient } from "@rookery/sdk/client"
 import { createResource, For, onCleanup, Show } from "solid-js"
 import { DatabaseBlock } from "./blocks/Database"
 import { ItemCard, PageCard, Synced, Toc } from "./blocks/Small"
+import { openDocument } from "./lib/collab"
 import { databaseIsWide } from "./lib/dbview"
 import { idOf, uriOf } from "./lib/tree"
 import type { ClientRookeryWithDocs } from "./types"
@@ -230,15 +231,7 @@ export default defineClient((baseRookery) => {
         }
       >
         {(p) => {
-          const docsClient = rookery.documents
-          if (!docsClient) {
-            return (
-              <Widget fill title={p.row.title} data-widget-body="docs-embed">
-                <span class="nc-meta">Embedded pages require Rookery documents (M2b).</span>
-              </Widget>
-            )
-          }
-          const session = docsClient.open(p.doc)
+          const session = openDocument(rookery, p.doc)
           onCleanup(() => session.close())
           return (
             <Widget

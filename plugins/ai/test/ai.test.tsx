@@ -58,6 +58,7 @@ function startFakeAiServer() {
       scope: "global",
       config: { baseUrl: "https://api.anthropic.com" },
       hasCredential: true,
+      spaceId: null,
       updatedAt: "2026-11-01T00:00:00Z",
     },
     {
@@ -67,6 +68,7 @@ function startFakeAiServer() {
       scope: "user",
       config: { baseUrl: "https://example.test/v1" },
       hasCredential: true,
+      spaceId: null,
       updatedAt: "2026-11-01T00:00:00Z",
     },
   ]
@@ -163,6 +165,28 @@ function startFakeAiServer() {
             return
           case "settings.get":
             sendReply(ws, msg.id, { key: p.key, value: "auto", scope: "default" })
+            return
+          case "settings.list":
+            sendReply(ws, msg.id, { settings: [] })
+            return
+          case "spaces.list":
+            sendReply(ws, msg.id, { spaces: [] })
+            return
+          case "pins.list":
+            sendReply(ws, msg.id, { pins: [] })
+            return
+          case "recents.list":
+            sendReply(ws, msg.id, { entities: [], commands: [] })
+            return
+          case "entities.resolveMany":
+            sendReply(ws, msg.id, { entities: [] })
+            return
+          case "entities.search":
+            sendReply(ws, msg.id, { entities: [] })
+            return
+          case "data.find":
+          case "data.scan":
+            sendReply(ws, msg.id, { rows: [], next: null })
             return
           case "plugins.rpc": {
             const rpcMethod = String(p.method ?? "")

@@ -13,8 +13,8 @@ import { Notifier } from "./lib/notifier"
 import { APP, Pool, TOKEN } from "./lib/pool"
 import { apiBaseFor, attach, detach, parseRepo, remember, scheduleName, setPoll } from "./lib/repos"
 import { gh, ghSpace, type RepoRow, type Rows } from "./lib/rows"
-import { connectionView, entitiesOf, extrasOf, jobCtx, lookupEntity, requireLevel } from "./lib/sdk"
-import { itemText, makeService, repoText, tools } from "./lib/service"
+import { connectionView, extrasOf, jobCtx, lookupEntity, requireLevel } from "./lib/sdk"
+import { makeService, tools } from "./lib/service"
 import { type Services, syncRepo } from "./lib/sync"
 import { handleDelivery } from "./lib/webhook"
 
@@ -321,10 +321,6 @@ export default definePlugin((rookery) => {
   // ── Service, entity text, tools ──────────────────────────────────────────────────────────────────
 
   rookery.services.provide(api.services.github, makeService(sv))
-
-  const entities = entitiesOf(rookery)
-  entities?.text?.("gh-pr", (ctx, { id }) => itemText(sv, ctx, `gh-pr://${id}`))
-  entities?.text?.("gh-repo", (ctx, { id }) => repoText(sv, ctx, id))
 
   // ── Issues are Projects issues ───────────────────────────────────────────────────────────────────
 

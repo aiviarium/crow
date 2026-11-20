@@ -35,8 +35,8 @@ export function Recent(props: {
   api: Api
   space: SpaceInfo | null | undefined
 }): JSX.Element {
-  const [recent] = createResource(
-    () => props.rookery.recents?.entities({ schemes: ["doc"], limit: 10 }).catch(() => []) ?? [],
+  const [recent] = createResource(() =>
+    props.rookery.recents.entities({ schemes: ["doc"], limit: 10 }).catch(() => []),
   )
   const edited = props.space
     ? props.rookery.data
@@ -181,7 +181,7 @@ export function Search(props: {
 }): JSX.Element {
   const [q, setQ] = createSignal(props.query)
   const [hits] = createResource(q, async (text) => {
-    if (!text.trim() || !props.rookery.entities) return []
+    if (!text.trim()) return []
     const raw = await props.rookery.entities.search(text, { schemes: ["doc"], limit: 50 }).catch(() => [])
     return raw.map(entityOfHit)
   })

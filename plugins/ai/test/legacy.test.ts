@@ -1,8 +1,7 @@
 import { expect, test } from "bun:test"
-import type { MigrationTx, Storage } from "@rookery/sdk"
-import importLegacy from "../migrations/importLegacy"
-import { limit, mapping, usage } from "../migrations/legacy"
-import { importToStorage, LIMIT_PREFIX, MAPPING_PREFIX } from "../migrations/storageFallback"
+import type { MigrationTx } from "@rookery/sdk"
+import importLegacy from "../rookery/migrations/importLegacy"
+import { limit, mapping, usage } from "../rookery/migrations/legacy"
 
 // Rows as the pre-plugin `ai_*` tables had them.
 const ann = "0198a2b0-0000-7000-8000-000000000001"
@@ -184,45 +183,4 @@ test("a deployment that never had the tables adopts nothing", async () => {
   const empty = { ...tx, legacy: async function* () {} } as unknown as MigrationTx
   await importLegacy(empty)
   expect(data.mappings).toHaveLength(0)
-})
-
-test("storageFallback adopts mappings and limits idempotently onto Rookery storage without secrets", async () => {
-  const store = new Map<string, { value: unknown; revision: number }>()
-  const storage: Storage = {
-    async get<T>(key: string) {
-      return (store.get(key)?.value as T) ?? null
-    },
-    async set(key: string, value: unknown, opts) {
-      const prev = store.get(key)
-      if (opts?.expectedRevision !== undefined && (prev?.revision ?? 0) !== opts.expectedRevision) {
-        throw new Error("conflict")
-      }
-      store.set(key, { value, revision: (prev?.revision ?? 0) + 1 })
-    },
-    async list(opts) {
-      const prefix = opts?.prefix ?? ""
-      return Array.from(store.entries())
-        .filter(([k]) => k.startsWith(prefix))
-        .map(([key, entry]) => ({ key, value: entry.value, revision: entry.revision }))
-    },
-    async delete(key: string) {
-      store.delete(key)
-    },
-  }
-
-  const first = await importToStorage(storage, { mappings: oldMappings, limits: oldLimits })
-  expect(first).toEqual({ mappings: 3, limits: 2 })
-  expect(store.get(`${MAPPING_PREFIX}text|global||`)?.value).toMatchObject({
-    task: "text",
-    connection: conn,
-    model: "gpt-x",
-  })
-  expect(store.get(`${LIMIT_PREFIX}default`)?.value).toEqual({
-    user: "default",
-    requests: 100,
-    audioSeconds: 600,
-  })
-
-  const second = await importToStorage(storage, { mappings: oldMappings, limits: oldLimits })
-  expect(second).toEqual({ mappings: 0, limits: 0 })
 })
