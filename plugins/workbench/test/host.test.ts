@@ -24,6 +24,7 @@ function createFakeHost(reply: (call: ExecCall) => Partial<ExecResult> = () => (
   const rpcs = new Map<string, RpcHandlerDef>()
   const commands = new Map<string, unknown>()
   const listed: string[] = []
+  const entities: Array<Record<string, unknown>> = []
 
   const env = {
     async get(_ctx: Ctx, name: string) {
@@ -78,6 +79,12 @@ function createFakeHost(reply: (call: ExecCall) => Partial<ExecResult> = () => (
       },
     },
     env,
+    entities: {
+      async register(entity: Record<string, unknown>) {
+        entities.push(entity)
+        return entity
+      },
+    },
   } as unknown as Rookery
 
   const ctx: Ctx = {
@@ -106,6 +113,7 @@ function createFakeHost(reply: (call: ExecCall) => Partial<ExecResult> = () => (
     rpcs,
     commands,
     listed,
+    entities,
     async call<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
       const def = rpcs.get(method)
       if (!def) throw new Error(`RPC ${method} is not registered`)
@@ -223,6 +231,32 @@ describe("workbench host half", () => {
       GIT_AUTHOR_NAME: "Ada",
       GIT_AUTHOR_EMAIL: "ada@example.test",
       GIT_COMMITTER_EMAIL: "ada@example.test",
+    })
+  })
+
+  test("registers a file and a commit as entities other parts of Crow can link to", async () => {
+    const h = createFakeHost()
+    await hostPlugin.activate(h.rookery)
+    await h.call("entity.register", { env: "env://studio", kind: "file", path: "/srv/work/a.ts" })
+    await h.call("entity.register", {
+      env: "studio",
+      kind: "commit",
+      path: "/srv/work",
+      sha: "abc1234",
+      title: "abc1234 Fix the gearbox",
+    })
+    expect(h.entities[0]).toMatchObject({
+      uri: "code://studio/srv/work/a.ts",
+      title: "a.ts",
+      subtitle: "studio:/srv/work/a.ts",
+      icon: "file",
+      parent: "env://studio",
+      private: false,
+    })
+    expect(h.entities[1]).toMatchObject({
+      uri: "commit://studio/srv/work@abc1234",
+      title: "abc1234 Fix the gearbox",
+      icon: "branch",
     })
   })
 

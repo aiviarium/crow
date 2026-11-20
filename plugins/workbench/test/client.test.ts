@@ -23,13 +23,13 @@ describe("workbench plugin", () => {
     })
   })
 
-  test("links to a file and a commit are routes the workbench serves", () => {
+  test("links to a file and a commit are routes the workbench serves", async () => {
     const api = createApi({} as ClientRookery)
-    expect(api.link("env://studio", "/srv/work/a b.ts")).toEqual({
+    expect(await api.link("env://studio", "/srv/work/a b.ts")).toEqual({
       uri: "code://studio/srv/work/a b.ts",
       href: "/workbench/file/studio/srv/work/a%20b.ts",
     })
-    expect(api.commitLink("studio", "/srv/work", "abc1234")).toEqual({
+    expect(await api.commitLink("studio", "/srv/work", "abc1234")).toEqual({
       uri: "commit://studio/srv/work@abc1234",
       href: "/workbench/commit/studio/srv/work%40abc1234",
     })

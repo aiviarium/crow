@@ -17,13 +17,10 @@ import {
 } from "./git/log"
 import { parseStatus } from "./git/status"
 
-/**
- * What `env.exec` takes. `stdin` is in the wire's `ExecParams` and not in the SDK's type at this pin, so it
- * travels as the server reads it.
- */
-interface ExecOptions {
+/** What a git run adds to `env.exec`: variables for the command, and an exit code it accepts as an answer. */
+interface GitOptions {
   cwd?: string
-  vars?: Record<string, string>
+  env?: Record<string, string>
   stdin?: string
   timeoutMs?: number
 }
@@ -37,7 +34,7 @@ export default definePlugin((rookery: Rookery) => {
     env: string,
     root: string,
     args: string[],
-    opts: ExecOptions & { ok?: number[] } = {},
+    opts: GitOptions & { ok?: number[] } = {},
   ) {
     const r = await rookery.env.exec(
       ctx,
@@ -45,10 +42,10 @@ export default definePlugin((rookery: Rookery) => {
       ["git", "-c", "core.quotePath=false", "-c", "color.ui=false", ...args],
       {
         cwd: root,
-        env: { GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C", ...opts.vars },
+        env: { GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C", ...opts.env },
         ...(opts.stdin !== undefined ? { stdin: opts.stdin } : {}),
         timeoutMs: opts.timeoutMs ?? 28_000,
-      } as never,
+      },
     )
     if (r.lost) throw new RookeryError("UNAVAILABLE", `git ${args[0]} was lost on ${env}`)
     if (r.exitCode !== 0 && !(opts.ok ?? []).includes(r.exitCode ?? -1)) {
@@ -78,7 +75,7 @@ export default definePlugin((rookery: Rookery) => {
         "sh",
         path,
       ],
-      { timeoutMs: 28_000 } as never,
+      { timeoutMs: 28_000 },
     )
     if (r.exitCode === 3) throw new RookeryError("NOT_FOUND", `${path} does not exist on ${env}`)
     const [gitOut = "", tools = ""] = r.stdout.split("--\n")
@@ -200,7 +197,7 @@ export default definePlugin((rookery: Rookery) => {
       cwd: root,
       env: { GIT_OPTIONAL_LOCKS: "0" },
       timeoutMs: 28_000,
-    } as never)
+    })
     if (r.exitCode !== 0) return { missing: true, text: null, binary: false }
     const binary = r.stdout.slice(0, 8000).includes("\0") || r.stdout.includes("�")
     return { missing: false, binary, text: binary ? null : r.stdout }
@@ -270,7 +267,7 @@ export default definePlugin((rookery: Rookery) => {
         vars.GIT_AUTHOR_NAME = vars.GIT_COMMITTER_NAME = ctx.user.name
         vars.GIT_AUTHOR_EMAIL = vars.GIT_COMMITTER_EMAIL = ctx.user.email
       }
-      await git(ctx, p.env, p.root, args, { stdin: p.message, vars })
+      await git(ctx, p.env, p.root, args, { stdin: p.message, env: vars })
       const sha = await git(ctx, p.env, p.root, ["rev-parse", "HEAD"])
       return { sha: sha.stdout.trim() }
     },
@@ -429,7 +426,7 @@ export default definePlugin((rookery: Rookery) => {
         vars.GIT_AUTHOR_NAME = vars.GIT_COMMITTER_NAME = ctx.user.name
         vars.GIT_AUTHOR_EMAIL = vars.GIT_COMMITTER_EMAIL = ctx.user.email
       }
-      const r = await git(ctx, p.env, p.root, args, { ok: [1], vars })
+      const r = await git(ctx, p.env, p.root, args, { ok: [1], env: vars })
       return { conflicts: r.exitCode !== 0, output: `${r.stdout}${r.stderr}`.trim() }
     },
   )
@@ -529,7 +526,7 @@ export default definePlugin((rookery: Rookery) => {
         cwd: p.path,
         env: { GH_PROMPT_DISABLED: "1", NO_COLOR: "1" },
         timeoutMs: 15_000,
-      } as never)
+      })
       if (r.exitCode === 127)
         return { available: false, reason: `The GitHub CLI (gh) is not installed on ${p.env}.` }
       if (r.exitCode !== 0)
@@ -550,7 +547,7 @@ export default definePlugin((rookery: Rookery) => {
         ctx,
         p.env,
         ["git", "push", "--porcelain", "-u", p.remote, `HEAD:refs/heads/${p.branch}`],
-        { cwd: p.path, env: vars, timeoutMs: 28_000 } as never,
+        { cwd: p.path, env: vars, timeoutMs: 28_000 },
       )
       if (push.exitCode !== 0)
         throw new RookeryError("INVALID", `git push was refused: ${(push.stderr || push.stdout).trim()}`)
@@ -571,11 +568,40 @@ export default definePlugin((rookery: Rookery) => {
         cwd: p.path,
         env: vars,
         timeoutMs: 28_000,
-      } as never)
+      })
       if (r.exitCode !== 0)
         throw new RookeryError("INVALID", `gh pr create failed: ${(r.stderr || r.stdout).trim()}`)
       const url = /https?:\/\/\S+/.exec(r.stdout)?.[0] ?? null
       return { url, message: r.stdout.trim() }
     },
   })
+
+  // ── Entities: files and commits that other parts of Crow can link to ─────────────────────────────
+
+  rpc(
+    "entity.register",
+    {
+      env: z.string(),
+      kind: z.enum(["file", "commit"]),
+      path: z.string(),
+      sha: z.string().optional(),
+      title: z.string().optional(),
+      subtitle: z.string().optional(),
+    },
+    async (_ctx, p) => {
+      const env = p.env.replace(/^env:\/\//, "")
+      const uri = p.kind === "file" ? `code://${env}${p.path}` : `commit://${env}${p.path}@${p.sha ?? ""}`
+      const name = p.path.split("/").filter(Boolean).pop() ?? p.path
+      await rookery.entities.register({
+        uri,
+        title: p.title ?? (p.kind === "file" ? name : `${(p.sha ?? "").slice(0, 7)} ${name}`),
+        subtitle: p.subtitle ?? `${env}:${p.path}`,
+        icon: p.kind === "file" ? "file" : "branch",
+        parent: `env://${env}`,
+        searchText: `${p.path} ${p.sha ?? ""} ${p.title ?? ""}`,
+        private: false,
+      })
+      return { uri }
+    },
+  )
 })

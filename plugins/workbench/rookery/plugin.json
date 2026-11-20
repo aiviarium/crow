@@ -430,7 +430,7 @@
         "default": false,
         "category": "Workbench",
         "description": "Where Monaco can format the language.",
-        "scopes": ["global", "user"]
+        "scopes": ["global", "space", "user"]
       },
       {
         "key": "workbench.signOff",
@@ -439,7 +439,7 @@
         "default": false,
         "category": "Workbench",
         "description": "Add a Signed-off-by line to commits by default.",
-        "scopes": ["global", "user"]
+        "scopes": ["global", "space", "user"]
       },
       {
         "key": "workbench.largeFileBytes",
