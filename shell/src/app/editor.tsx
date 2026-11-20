@@ -13,7 +13,7 @@ import {
 } from "@aiviarium/nocturne"
 import type { PluginInfo } from "@rookery/client"
 import type { Disposable } from "@rookery/sdk/client"
-import { type Accessor, createMemo, createSignal, type JSX, type ParentProps } from "solid-js"
+import { type Accessor, createMemo, createSignal, type JSX, onCleanup, type ParentProps } from "solid-js"
 import type { ShellApp } from "./state"
 
 export const BLOCK_REGISTRY_SYMBOL = Symbol.for("crow.blocks.registry")
@@ -120,7 +120,9 @@ export function blockTypes(plugins: Readonly<Record<string, PluginInfo>>): Edito
 export function blockTypeSource(app: ShellApp): Accessor<EditorBlockType[]> {
   const store = sharedBlockStore()
   const [version, setVersion] = createSignal(0)
-  store.listeners.add(() => setVersion((v) => v + 1))
+  const listener = () => setVersion((v) => v + 1)
+  store.listeners.add(listener)
+  onCleanup(() => store.listeners.delete(listener))
   return createMemo(() => {
     version()
     // Reading the loader's plugins here is what makes a plugin's activation show its blocks.
