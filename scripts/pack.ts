@@ -22,6 +22,7 @@ import { basename, dirname, join } from "node:path"
 import { transformAsync } from "@babel/core"
 // @ts-expect-error no types
 import presetTs from "@babel/preset-typescript"
+import Ajv2020 from "ajv/dist/2020"
 // @ts-expect-error no types
 import presetSolid from "babel-preset-solid"
 import type { BunPlugin } from "bun"
@@ -136,6 +137,50 @@ function readPackage(dir: string): Package {
 const packages = ["shell", ...readdirSync(join(root, "plugins")).map((name) => `plugins/${name}`)]
   .filter((dir) => existsSync(join(root, dir, "package.kdl")))
   .map(readPackage)
+
+// ---------------------------------------------------------------------------
+// The manifests
+// ---------------------------------------------------------------------------
+
+/**
+ * Checks each package's `rookery/plugin.json` against Rookery's schema, and its numbered migrations.
+ * A plugin the server would refuse must not reach the registry.
+ */
+function checkManifests(): void {
+  const schemaPath = join(root, ".deps", "rookery", "schemas", "plugin.schema.json")
+  if (!existsSync(schemaPath))
+    throw new Error(
+      `${schemaPath} is missing: run \`bun run sync-deps\` so the pin of Rookery is there to check against`,
+    )
+  const validate = new Ajv2020({ allErrors: true, strict: false }).compile(
+    JSON.parse(readFileSync(schemaPath, "utf8")),
+  )
+  for (const source of packages) {
+    const path = join(root, source.dir, "rookery", "plugin.json")
+    if (!existsSync(path)) continue
+    const manifest = JSON.parse(readFileSync(path, "utf8"))
+    if (!validate(manifest)) {
+      const problems = (validate.errors ?? [])
+        .map((e) => `${e.instancePath || "/"} ${e.message ?? "is invalid"}`)
+        .join("; ")
+      throw new Error(`${source.dir}/rookery/plugin.json does not match the plugin schema: ${problems}`)
+    }
+    const migrations = join(root, source.dir, "rookery", "migrations")
+    if (!existsSync(migrations)) continue
+    for (const file of readdirSync(migrations)
+      .filter((f) => f.endsWith(".json"))
+      .sort()) {
+      const migration = JSON.parse(readFileSync(join(migrations, file), "utf8"))
+      if (!migration || !Array.isArray(migration.steps))
+        throw new Error(`${source.dir}/rookery/migrations/${file} has no steps`)
+      for (const step of migration.steps)
+        if (typeof step?.op !== "string")
+          throw new Error(`${source.dir}/rookery/migrations/${file} has a step without an op`)
+    }
+  }
+}
+
+checkManifests()
 
 // ---------------------------------------------------------------------------
 // Client halves

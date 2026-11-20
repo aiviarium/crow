@@ -19,6 +19,7 @@ import {
   signOut as rookerySignOut,
   type SessionStore,
   type SignInOptions,
+  type SpaceInfo,
   viewUrl,
   wsUrlFromLocation,
 } from "@rookery/client"
@@ -55,6 +56,17 @@ export interface ShellAppOptions {
   reconnect?: boolean
 }
 
+export interface SpaceStore {
+  /** The spaces the signed-in person can see. */
+  readonly list: Accessor<SpaceInfo[]>
+  /** The space every space-scoped call of this connection is made in. */
+  readonly current: Accessor<SpaceInfo | null>
+  readonly loading: Accessor<boolean>
+  refresh(): Promise<void>
+  /** Enters a space, so the plugins' space-scoped data follows it. */
+  enter(space: SpaceInfo): Promise<void>
+}
+
 export interface ShellApp {
   readonly baseUrl: string | undefined
   readonly conn: Connection
@@ -62,6 +74,7 @@ export interface ShellApp {
   readonly session: SessionStore
   readonly jobs: JobsStore
   readonly inbox: InboxStore
+  readonly spaces: SpaceStore
   readonly phase: Accessor<ConnectionPhase>
   readonly loader: PluginLoader
   readonly authPhase: Accessor<AuthPhase>
@@ -114,6 +127,10 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
   const [signInOptions, setSignInOptions] = createSignal<SignInOptions>(DEFAULT_SIGN_IN)
   const [aboutOpen, setAboutOpen] = createSignal(false)
   const [viewTitle, setViewTitle] = createSignal<string | null>(null)
+  const [spaces, setSpaces] = createSignal<SpaceInfo[]>([])
+  const [currentSpace, setCurrentSpace] = createSignal<SpaceInfo | null>(null)
+  const [spacesLoading, setSpacesLoading] = createSignal(false)
+  const [spaceVersion, setSpaceVersion] = createSignal(0)
 
   const initial = parseHref(
     opts.initialUrl ?? (typeof location !== "undefined" ? location.pathname + location.search : "/"),
@@ -152,6 +169,36 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
   const jobs = createJobsStore(conn)
   const inbox = createInboxStore(conn)
   const phase = createConnectionPhase(conn, opts.phaseTimings)
+
+  const refreshSpaces = async () => {
+    setSpacesLoading(true)
+    try {
+      const listed = await conn.call<{ spaces: SpaceInfo[] }>("spaces.list", {})
+      const visible = listed?.spaces ?? []
+      setSpaces(visible)
+      const current = currentSpace()
+      const stillThere = current ? visible.find((s) => s.id === current.id) : undefined
+      const chosen = stillThere ?? visible.find((s) => s.personal) ?? visible[0] ?? null
+      if (chosen && chosen.id !== current?.id) {
+        await conn.call("spaces.enter", { space: chosen.id })
+        setCurrentSpace(chosen)
+        setSpaceVersion((v) => v + 1)
+      } else if (chosen) {
+        setCurrentSpace(chosen)
+      }
+    } catch {
+      // A server without spaces yet: the shell keeps no current space, and every call is the person's own.
+      setSpaces([])
+    } finally {
+      setSpacesLoading(false)
+    }
+  }
+
+  const enterSpace = async (space: SpaceInfo) => {
+    await conn.call("spaces.enter", { space: space.id })
+    setCurrentSpace(space)
+    setSpaceVersion((v) => v + 1)
+  }
 
   const navigate = (to: string, navOpts?: { replace?: boolean }) => {
     const parsed = parseHref(to)
@@ -201,6 +248,7 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
         const u = session.me()?.user
         return u ? { id: u.id, name: u.name } : null
       },
+      space: () => currentSpace(),
     },
   })
 
@@ -216,7 +264,10 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
 
   const routeMatch = createMemo(() => {
     const cur = currentUrl()
-    return matchUrl(routeTable(), cur.pathname, cur.search)
+    // A different space remounts the view: its live queries follow the space it is shown in.
+    spaceVersion()
+    const match = matchUrl(routeTable(), cur.pathname, cur.search)
+    return match ? { ...match } : null
   })
 
   const href = (id: string, linkOpts?: { path?: string; params?: Record<string, string> }): string | null => {
@@ -261,6 +312,8 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
     jobs.start()
     inbox.start()
     conn.connect()
+    conn.onOpen(() => void refreshSpaces())
+    void refreshSpaces()
   }
 
   const signOut = async () => {
@@ -298,6 +351,13 @@ export function createShellApp(opts: ShellAppOptions = {}): ShellApp {
     session,
     jobs,
     inbox,
+    spaces: {
+      list: spaces,
+      current: currentSpace,
+      loading: spacesLoading,
+      refresh: refreshSpaces,
+      enter: enterSpace,
+    },
     phase,
     loader,
     authPhase,

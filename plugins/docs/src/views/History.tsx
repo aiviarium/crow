@@ -1,7 +1,7 @@
 // A page's history: its document's versions (saved by name, periodic, and before each restore), one shown as
 // it was or as a diff against now (both as Markdown), restore, and naming the current state.
 import { Button, DiffView, IconButton, RichTextEditor, Tabs } from "@aiviarium/nocturne"
-import type { DocumentVersion } from "@rookery/sdk/client"
+import type { DocumentContent, DocumentVersion } from "@rookery/sdk/client"
 import { createResource, createSignal, For, type JSX, onCleanup, Show } from "solid-js"
 import type { ClientRookeryWithDocs } from "../types"
 import { ago } from "./api"
@@ -15,36 +15,33 @@ export function HistoryPanel(props: {
   readOnly: boolean
   who: (principal?: string) => string
 }): JSX.Element {
-  const docs = props.rookery.documents
-  if (!docs) {
-    return (
-      <div class="docs-history" data-part="history">
-        <p class="nc-meta docs-panel__empty">Version history requires Rookery documents (M2b).</p>
-      </div>
-    )
-  }
-  const [versions, { refetch }] = createResource(() => docs.history(props.document))
+  const read = (version?: string, format?: "json" | "markdown") =>
+    props.rookery.rpc.call<DocumentContent>("documents.read", {
+      id: props.document,
+      ...(format ? { format } : {}),
+      ...(version ? { version } : {}),
+    })
+  const [versions, { refetch }] = createResource(() => props.rookery.documents.history(props.document))
   const timer = setInterval(() => refetch(), 15_000)
   onCleanup(() => clearInterval(timer))
   const [viewing, setViewing] = createSignal<DocumentVersion | null>(null)
   const [mode, setMode] = createSignal<"diff" | "page">("diff")
-  const [then] = createResource(viewing, (v) =>
-    docs.read(props.document, { version: v.id, format: "markdown" }),
-  )
+  const [then] = createResource(viewing, (v) => read(v.id, "markdown"))
   const [thenJson] = createResource(
     () => (mode() === "page" ? viewing() : null),
-    (v) => docs.read(props.document, { version: v.id }),
+    (v) => read(v.id, "json"),
   )
-  const [now, { refetch: refetchNow }] = createResource(viewing, () =>
-    docs.read(props.document, { format: "markdown" }),
-  )
+  const [now, { refetch: refetchNow }] = createResource(viewing, () => read(undefined, "markdown"))
 
   const save = async () => {
     const name = (
       await ask("Name this version", { placeholder: "Before the review", confirm: "Save version" })
     )?.trim()
     if (name === undefined || name === null) return
-    await docs.saveVersion(props.document, name || undefined)
+    await props.rookery.rpc.call<DocumentVersion>("documents.saveVersion", {
+      id: props.document,
+      ...(name ? { name } : {}),
+    })
     refetch()
   }
 
@@ -115,7 +112,7 @@ export function HistoryPanel(props: {
                       }))
                     )
                       return
-                    await docs.restore(props.document, v().id)
+                    await props.rookery.documents.restore(props.document, v().id)
                     setViewing(null)
                     refetch()
                     props.rookery.workbench.toast({

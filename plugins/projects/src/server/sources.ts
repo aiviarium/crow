@@ -9,7 +9,7 @@
 // and when Crow last wrote it (`source.crowAt`): an inbound value is taken when only the source changed, and
 // when both changed the later write wins and the losing value goes into `source.conflicts`, which the issue's
 // activity shows.
-import { type Ctx, mentions, plainText, type RichText, type Rookery, RookeryError } from "@rookery/sdk"
+import { type Ctx, mentions, type RichText, type Rookery, RookeryError } from "@rookery/sdk"
 import { formatIssueKey, isProjectKey, keyWords } from "../lib/keys"
 import {
   CATEGORY_ICON,
@@ -44,9 +44,10 @@ import {
 import { type Core, idOf, issueUri, KIND, stateFields, userUri } from "./core"
 import {
   callPluginService,
-  extrasOf,
-  fallbackTextDoc,
+  documentMarkdown,
+  markdownToRichText,
   requireAccess,
+  richTextToMarkdown,
   sendNotice,
   toRookeryError,
 } from "./sdk"
@@ -239,7 +240,7 @@ export function createSources(rookery: Rookery, core: Core) {
       ? await rookery.data.projectSources.update(existing.id, values as never)
       : await rookery.data.projectSources.insert(values as never)) as unknown as SourceLink
     const proj = await core.project(null, space)
-    return { link: row, space, key: proj.key, name: proj.name, created }
+    return { link: row, space, key: proj?.key ?? "", name: proj?.name ?? "", created }
   }
 
   async function unlink(ctx: Ctx, id: string, opts: { tell?: boolean } = {}) {
@@ -378,35 +379,36 @@ export function createSources(rookery: Rookery, core: Core) {
     return { linked: true, removed: p.removed }
   }
 
-  async function docMarkdown(issue: IssueRow): Promise<string> {
+  async function docMarkdown(issue: IssueRow, ctx: Ctx | null): Promise<string> {
     if (!issue.document) return ""
-    return (
-      (await extrasOf(rookery)
-        .documents?.markdown(null, issue.document)
-        .catch(() => "")) ?? ""
-    )
+    return documentMarkdown(rookery.documents, ctx as Ctx, issue.document).catch(() => "")
   }
 
   async function setDescription(
     issue: IssueRow,
     markdown: string,
+    ctx: Ctx | null,
   ): Promise<{ document: string | null; md: string }> {
-    const docs = extrasOf(rookery).documents
-    if (!docs) return { document: issue.document ?? null, md: markdown }
+    const docs = rookery.documents
     let doc = issue.document
     if (!doc) {
-      const made = await docs.create(null, {
+      const made = await docs.create(ctx as Ctx, {
         parent: issueUri(issue.id),
         title: issue.title,
         markdown,
       })
       doc = made.id
     } else {
-      await docs.edit(null, doc, [{ op: "setContent", markdown }], {
+      await docs.edit(ctx as Ctx, {
+        id: doc,
+        ops: [{ op: "setContent", markdown }],
         author: { name: "GitHub" },
       })
     }
-    return { document: doc, md: await docs.markdown(null, doc).catch(() => markdown) }
+    return {
+      document: doc,
+      md: await documentMarkdown(docs, ctx as Ctx, doc).catch(() => markdown),
+    }
   }
 
   /** Creates the Crow issue for one the source has and Crow does not, as the plugin. */
@@ -466,7 +468,7 @@ export function createSources(rookery: Rookery, core: Core) {
       label: issueLabel(key, inserted.title),
     } as never)) as unknown as IssueRow
     if ((item.body ?? "").trim()) {
-      const desc = await setDescription(row, item.body ?? "")
+      const desc = await setDescription(row, item.body ?? "", null)
       row = (await d.issues.update(row.id, {
         ...(desc.document ? { document: desc.document } : {}),
         source: { ...source, base: { ...source.base, bodyCrow: desc.md } },
@@ -494,7 +496,7 @@ export function createSources(rookery: Rookery, core: Core) {
 
   /** Links a Crow issue to the source's copy of it, which the source just created: both now agree. */
   async function adopt(link: SourceLink, issue: IssueRow, item: SourceIssueIn): Promise<IssueRow> {
-    const md = await docMarkdown(issue)
+    const md = await docMarkdown(issue, null)
     const source: IssueSource = {
       ...(issue.source ?? ({} as IssueSource)),
       provider: link.provider,
@@ -560,7 +562,7 @@ export function createSources(rookery: Rookery, core: Core) {
       // Description.
       const body = item.body ?? ""
       if (!sameMarkdown(body, base.body)) {
-        const md = await docMarkdown(issue)
+        const md = await docMarkdown(issue, null)
         const d = decide({
           remoteChanged: true,
           crowChanged: base.bodyCrow !== undefined && !sameMarkdown(md, base.bodyCrow),
@@ -570,7 +572,7 @@ export function createSources(rookery: Rookery, core: Core) {
         })
         if (d.kind === "apply" || (d.kind === "conflict" && d.won === "source")) {
           if (d.kind === "conflict") conflict("body", "source", md, body)
-          const desc = await setDescription(issue, body)
+          const desc = await setDescription(issue, body, null)
           if (desc.document && desc.document !== issue.document) values.document = desc.document
           base.body = body
           base.bodyCrow = desc.md
@@ -705,17 +707,9 @@ export function createSources(rookery: Rookery, core: Core) {
 
   const excerpt = (doc: RichText) => core.excerpt(doc)
 
-  const mdToRichText = async (md: string): Promise<RichText> => {
-    const docs = extrasOf(rookery).documents
-    if (docs) return docs.fromMarkdown(null, md)
-    return fallbackTextDoc(md)
-  }
+  const mdToRichText = (md: string): Promise<RichText> => markdownToRichText(rookery.documents, md)
 
-  const richTextToMd = async (body: RichText): Promise<string> => {
-    const docs = extrasOf(rookery).documents
-    if (docs) return docs.toMarkdown(null, body)
-    return plainText(body)
-  }
+  const richTextToMd = (body: RichText): Promise<string> => richTextToMarkdown(rookery.documents, body)
 
   async function upsertComments(
     ctx: Ctx | null,
@@ -831,7 +825,7 @@ export function createSources(rookery: Rookery, core: Core) {
     const labels = await labelNames(issue.spaceId, issue.labels ?? [])
     return {
       title: issue.title,
-      body: await docMarkdown(issue),
+      body: await docMarkdown(issue, null),
       state: remoteStateOf(issue.stateCategory),
       labels,
       assignee: issue.assignee,
@@ -1053,7 +1047,7 @@ export function createSources(rookery: Rookery, core: Core) {
     const issue = await core.getIssue(ctx, space, id)
     if (!issue?.source?.link || !issue.document) return { queued: false }
     await requireAccess(ctx, issueUri(id), "use")
-    const md = await docMarkdown(issue)
+    const md = await docMarkdown(issue, null)
     if (sameMarkdown(md, issue.source.base?.bodyCrow)) return { queued: false }
     await rookery.data.space(space).issues.update(id, { source: stamp(issue, ["body"]) } as never)
     await queue(ctx, { space, issue: id, fields: ["body"] })

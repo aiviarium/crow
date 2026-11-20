@@ -8,6 +8,9 @@
     "@aiviarium/nocturne": "file:../../.deps/nocturne",
     "@rookery/client": "file:../../.deps/rookery/client",
     "@rookery/sdk": "file:../../.deps/rookery/sdk",
-    "solid-js": "^1.9.19"
+    "lib0": "^0.2.120",
+    "solid-js": "^1.9.19",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.33"
   }
 }

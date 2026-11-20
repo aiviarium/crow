@@ -65,6 +65,36 @@
     min-width: 0;
   }
 
+  .crow-sidebar__space {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    min-width: 0;
+    margin-top: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border-1);
+    border-radius: var(--radius-2);
+    background: var(--bg-1);
+    color: var(--text-2);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .crow-sidebar__space:hover {
+    background: var(--bg-2);
+    color: var(--text-1);
+  }
+
+  .crow-sidebar__space-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .crow-sidebar__nav {
     flex: 1;
     min-height: 0;

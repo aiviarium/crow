@@ -42,6 +42,12 @@ impl Conn {
         let scope = match c.scope {
             FacilityScope::User => Scope::User,
             FacilityScope::Global => Scope::Global,
+            FacilityScope::Space => Scope::Space,
+        };
+        let space = if scope == Scope::Space {
+            c.space_id.clone()
+        } else {
+            None
         };
         let mut values = c.config.as_object().cloned().unwrap_or_default();
         if let Some(cred) = resolved.credential.filter(|s| !s.is_empty()) {
@@ -58,7 +64,7 @@ impl Conn {
             kind: c.kind,
             name: c.name,
             scope,
-            space: None,
+            space,
             user,
             values,
         }
@@ -97,6 +103,7 @@ mod tests {
                 scope: FacilityScope::User,
                 config: json!({ "baseUrl": "https://api.openai.com/v1" }),
                 has_credential: true,
+                space_id: None,
                 updated_at: "2026-11-14T12:00:00Z".into(),
             },
             credential: Some("sk-secret-value".into()),

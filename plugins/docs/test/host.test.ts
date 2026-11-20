@@ -17,7 +17,6 @@ function createFakeHost() {
   const docBodies = new Map<string, string>()
   const rpcHandlers = new Map<string, RpcHandler>()
   const services = new Map<string, Record<string, (ctx: Ctx, p: any) => Promise<unknown> | unknown>>()
-  const textExtractors = new Map<string, (ctx: Ctx, ref: { id: string }) => Promise<unknown>>()
 
   const makeCollection = () => ({
     async get(id: string, opts?: { trashed?: boolean }) {
@@ -216,16 +215,41 @@ function createFakeHost() {
       async delete(_ctx: Ctx | null, id: string) {
         docBodies.delete(id)
       },
-      async json() {
-        return { type: "doc", content: [] }
+      async read(_ctx: Ctx | null, id: string, format?: string) {
+        const body = docBodies.get(id) ?? ""
+        if (format === "markdown") return { id, title: "", markdown: body, blocks: body ? 1 : 0 }
+        if (format === "text") return { id, title: "", text: body, blocks: body ? 1 : 0 }
+        return {
+          id,
+          title: "",
+          content: {
+            type: "doc",
+            content: body ? [{ type: "paragraph", content: [{ type: "text", text: body }] }] : [],
+          },
+          blocks: body ? 1 : 0,
+        }
       },
-      async markdown(_ctx: Ctx, id: string) {
-        return docBodies.get(id) ?? ""
-      },
-      async append(_ctx: Ctx, id: string, md: string) {
-        const cur = docBodies.get(id) ?? ""
-        docBodies.set(id, cur ? `${cur}\n${md}` : md)
-        return { ok: true }
+      async edit(
+        _ctx: Ctx | null,
+        params: {
+          id: string
+          ops: Array<{ op: string; markdown?: string; at?: number; from?: number; to?: number }>
+        },
+      ) {
+        let body = docBodies.get(params.id) ?? ""
+        for (const op of params.ops) {
+          if (op.op === "setContent") body = op.markdown ?? ""
+          else if (op.op === "appendMarkdown")
+            body = body ? `${body}\n${op.markdown ?? ""}` : (op.markdown ?? "")
+          else if (op.op === "insert" || op.op === "replaceBlocks") {
+            const parts = body ? body.split("\n") : []
+            if (op.op === "insert") parts.splice(op.at ?? parts.length, 0, op.markdown ?? "")
+            else parts.splice(op.from ?? 0, (op.to ?? 0) - (op.from ?? 0), op.markdown ?? "")
+            body = parts.join("\n")
+          }
+        }
+        docBodies.set(params.id, body)
+        return { blocks: body ? body.split("\n").length : 0 }
       },
     },
     entities: {
@@ -258,7 +282,7 @@ function createFakeHost() {
             updatedAt: r.updatedAt,
           }))
       },
-      async toText(_ctx: Ctx, uris: string[]) {
+      async text(_ctx: Ctx, uris: string[]) {
         return {
           texts: uris.map((uri) => {
             const id = uri.replace(/^doc:\/\//, "")
@@ -267,10 +291,6 @@ function createFakeHost() {
             return { uri, title: (row?.title as string) ?? uri, text }
           }),
         }
-      },
-      text(scheme: string, fn: (ctx: Ctx, ref: { id: string }) => Promise<unknown>) {
-        textExtractors.set(scheme, fn)
-        return { dispose() {} }
       },
     },
     agents: {
@@ -291,7 +311,6 @@ function createFakeHost() {
       return fn(ctx, params)
     },
     service: () => services.get("docs")!,
-    extractor: (scheme: string) => textExtractors.get(scheme)!,
   }
 }
 
@@ -339,13 +358,6 @@ describe("docs host plugin", () => {
     expect(backlinks.linked).toHaveLength(1)
     expect(backlinks.linked[0]!.source).toBe(`doc://${source.id}`)
     expect(backlinks.linked[0]!.snippet).toContain("Incident Guide")
-
-    const extracted = (await h.extractor("doc")(h.ctx, { id: source.id })) as {
-      title: string
-      text: string
-    }
-    expect(extracted.title).toBe("On-Call Handbook")
-    expect(extracted.text).toContain("Priority: 1")
   })
 })
 

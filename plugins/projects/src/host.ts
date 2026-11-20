@@ -24,6 +24,7 @@ import {
   fallbackTextDoc,
   grantAccess,
   jobCtx,
+  markdownToRichText,
   requireAccess,
   spaceGrants,
   subscribeCollections,
@@ -112,7 +113,7 @@ export default definePlugin((rookery) => {
         const name = patch.name.trim()
         if (!name) throw new RookeryError("INVALID", "a project needs a name")
         values.name = name
-        await extrasOf(rookery).spaces.rename?.(ctx, space, name)
+        await rookery.spaces.rename(ctx, space, name)
       }
       const row = await core.data(ctx, space).projects.update(proj.id, values as never)
       if (patch.archived !== undefined) {
@@ -129,7 +130,7 @@ export default definePlugin((rookery) => {
     const uri = `project://${proj.id}`
     const existing = await docs.list(ctx, uri)
     if (existing[0]) return { id: existing[0].id }
-    const doc = await docs.create(null, { parent: uri, title: proj.name })
+    const doc = await docs.create(ctx, { parent: uri, title: proj.name })
     // The plugin records it: members may edit the document without being allowed to edit the project row.
     await rookery.data.space(space).projects.update(proj.id, { document: doc.id } as never)
     return { id: doc.id }
@@ -545,12 +546,8 @@ export default definePlugin((rookery) => {
     async createIssue(ctx: Ctx, p: Record<string, any>) {
       const space = await projectSpace(ctx, p.project)
       const patch = await toPatch(ctx, space, p)
-      const docs = extrasOf(rookery).documents
-      const description = p.description
-        ? docs
-          ? await docs.fromMarkdown(ctx, String(p.description))
-          : fallbackTextDoc(String(p.description))
-        : null
+      const docs = rookery.documents
+      const description = p.description ? await markdownToRichText(docs, String(p.description)) : null
       const row = await core.createIssue(ctx, space, {
         ...patch,
         title: String(p.title ?? ""),

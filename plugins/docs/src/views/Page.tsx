@@ -32,6 +32,7 @@ import {
   Show,
   untrack,
 } from "solid-js"
+import { openDocument } from "../lib/collab"
 import { defsOf, HUES } from "../lib/props"
 import { byRank } from "../lib/rank"
 import { parentId, uriOf } from "../lib/tree"
@@ -76,19 +77,7 @@ function PageBody(props: {
   onView: (h: RichTextEditorHandle | null) => void
   onUpdate: () => void
 }): JSX.Element {
-  const docs = props.rookery.documents
-  if (!docs) {
-    return (
-      <div class="docs-body" data-part="page-body">
-        <EmptyState
-          icon="file"
-          title="Document collaboration requires Rookery documents (M2b)"
-          description="Page metadata and hierarchy are active; collaborative rich-text editing connects once M2b documents land."
-        />
-      </div>
-    )
-  }
-  const session = docs.open(props.document)
+  const session = openDocument(props.rookery, props.document)
   props.onSession(session)
   onCleanup(() => {
     props.onSession(null)
@@ -407,7 +396,7 @@ export function PageView(props: {
 
   // The document (made on first open for a page that has none).
   const [doc] = createResource(
-    () => (rookery.documents && page() && !page()!.document ? page()!.id : null),
+    () => (page() && !page()!.document ? page()!.id : null),
     (id) => props.api.document(id, props.space.id),
   )
   const documentId = () => page()?.document ?? doc()?.id
@@ -474,7 +463,6 @@ export function PageView(props: {
     if (!page()) return trashed.state === "ready" || trashed.state === "errored"
     // The breadcrumbs: the parent row (its title is part of what they are fetched with), then the ancestors.
     if (parentLive()?.loading || ancestors.loading) return false
-    if (!rookery.documents) return true
     const st = session()?.status()
     return st === "error" || st === "offline" || (st === "synced" && measured())
   })
@@ -753,7 +741,7 @@ export function PageView(props: {
               name={name}
             />
           </Show>
-          <Show when={panel() === "history" && (documentId() || !rookery.documents)}>
+          <Show when={panel() === "history" && documentId()}>
             <HistoryPanel
               rookery={rookery}
               document={documentId() ?? p.id}
@@ -985,11 +973,7 @@ export function PageView(props: {
                   readOnly,
                 }}
               />
-              <Show
-                when={documentId() || !rookery.documents}
-                keyed
-                fallback={<span class="nc-meta">Opening…</span>}
-              >
+              <Show when={documentId()} keyed fallback={<span class="nc-meta">Opening…</span>}>
                 {(d) => (
                   <PageBody
                     rookery={rookery}

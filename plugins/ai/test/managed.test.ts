@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test"
-import type { ClientRookery, ConnectionInfo, Setting } from "@rookery/sdk/client"
+import type { ClientRookery, ConnectionInfo } from "@rookery/sdk/client"
 import { calls } from "../src/client/calls"
 import { ANTHROPIC_TYPE, managedModels } from "../src/client/managed"
 
-test("a model task uses the connection saved in global settings", async () => {
+test("a model task uses the mapping in the plugin's collection", async () => {
   const connection: ConnectionInfo = {
     id: "test-connection",
     name: "An example provider",
@@ -11,28 +11,34 @@ test("a model task uses the connection saved in global settings", async () => {
     scope: "global",
     config: {},
     hasCredential: true,
+    spaceId: null,
     updatedAt: "2026-01-01T00:00:00Z",
   }
-  const settings = new Map<string, Setting>()
+  const mappings = new Map<string, Record<string, unknown>>()
+  let sequence = 0
   const rookery = {
     connections: {
       types: async () => [{ id: ANTHROPIC_TYPE }],
       list: async () => [connection],
     },
-    settings: {
-      list: async () => [...settings.values()],
+    data: {
+      mappings: {
+        async find() {
+          return { rows: [...mappings.values()], next: null }
+        },
+        async upsert(row: Record<string, unknown>) {
+          const id = String(row.id ?? `mapping-${++sequence}`)
+          const stored = { ...row, id, updatedAt: "2026-01-01T00:00:00Z" }
+          mappings.set(id, stored)
+          return stored
+        },
+        async delete(id: string) {
+          return mappings.delete(id) ? {} : null
+        },
+      },
     },
     rpc: {
       async call(method: string, params: Record<string, unknown>) {
-        if (method === "settings.set") {
-          const setting = params as Setting
-          settings.set(setting.key, setting)
-          return {}
-        }
-        if (method === "settings.reset") {
-          settings.delete(params.key as string)
-          return {}
-        }
         if (method === "plugins.rpc") {
           expect(params).toMatchObject({
             plugin: "model-anthropic",
