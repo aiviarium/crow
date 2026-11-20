@@ -386,6 +386,7 @@ beforeEach(async () => {
     }),
     "issues.listFromSource": () => [],
     "issues.removedAtSource": () => ({ linked: true }),
+    getIssue: () => ({ key: "WID-7" }),
   } as never)
 })
 
@@ -394,6 +395,23 @@ const call = async <T = unknown>(name: string, params: Row): Promise<T> => {
   if (!run) throw new Error(`no rpc ${name}`)
   return (await run(fake.ctx(), params)) as T
 }
+
+describe("old issue addresses", () => {
+  test("an address from before issues were Projects issues opens the issue it became", async () => {
+    const entities = fake.ro.entities as unknown as {
+      lookup(ctx: unknown, uri: string): Promise<unknown>
+    }
+    const lookup = entities.lookup
+    entities.lookup = async (_ctx, uri: string) =>
+      uri === "gh-issue://i-7" ? { uri, scheme: "issue", spaceId: "proj-1" } : null
+    try {
+      expect(await call("issueFor", { id: "i-7" })).toEqual({ space: "widgets", key: "WID-7" })
+      expect(await call("issueFor", { id: "i-9" })).toBeNull()
+    } finally {
+      entities.lookup = lookup
+    }
+  })
+})
 
 describe("attaching and syncing a repository", () => {
   test("attach stores the repository, its route, its project link and a poll schedule", async () => {

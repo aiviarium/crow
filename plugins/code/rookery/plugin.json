@@ -835,6 +835,12 @@
         "icon": "list"
       },
       {
+        "id": "code.issue",
+        "title": "Issue",
+        "slot": "main",
+        "icon": "list"
+      },
+      {
         "id": "code.connect",
         "title": "Connect GitHub",
         "slot": "main",
@@ -879,6 +885,11 @@
       {
         "path": "/issues",
         "view": "code.issues",
+        "context": "rookery.space"
+      },
+      {
+        "path": "/issue/:issue",
+        "view": "code.issue",
         "context": "rookery.space"
       },
       {

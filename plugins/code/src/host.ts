@@ -353,6 +353,21 @@ export default definePlugin((rookery) => {
     },
   })
 
+  // An address from before issues were Projects issues: `gh-issue://<id>` names the issue it became.
+  rookery.rpc.handle("issueFor", {
+    level: "own",
+    params: z.object({ id: z.string() }),
+    async run(ctx, p) {
+      const e = await lookupEntity(rookery, ctx, `gh-issue://${p.id}`)
+      if (e?.scheme !== "issue" || !e.spaceId) return null
+      const i = (await projects(sv)
+        .getIssue(ctx, { issue: e.uri })
+        .catch(() => null)) as { key: string } | null
+      const s = await rookery.spaces.get(ctx, e.spaceId).catch(() => null)
+      return i && s ? { space: s.slug, key: i.key } : null
+    },
+  })
+
   // What `#<number>` in a pull request of a repository names: its pull request, or the Projects issue.
   rookery.rpc.handle("resolveNumber", {
     level: "own",
