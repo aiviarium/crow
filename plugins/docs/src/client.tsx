@@ -8,6 +8,7 @@ import { DatabaseBlock } from "./blocks/Database"
 import { ItemCard, PageCard, Synced, Toc } from "./blocks/Small"
 import { openDocument } from "./lib/collab"
 import { databaseIsWide } from "./lib/dbview"
+import { registerBlock, registerWidget } from "./lib/registry"
 import { idOf, uriOf } from "./lib/tree"
 import type { ClientRookeryWithDocs } from "./types"
 import { ago, api, openEntity, type Page } from "./views/api"
@@ -145,7 +146,8 @@ export default defineClient((baseRookery) => {
   })
 
   // A table or a board needs the room: they are always wide; a list follows the person's choice.
-  rookery.blocks?.register(
+  registerBlock(
+    rookery,
     "docs.database",
     (p) => (
       <DatabaseBlock
@@ -158,15 +160,15 @@ export default defineClient((baseRookery) => {
     ),
     { forceWidth: (attrs) => (databaseIsWide(attrs) ? "wide" : null) },
   )
-  rookery.blocks?.register("docs.page", (p) => <PageCard rookery={rookery} p={p} />)
-  rookery.blocks?.register("docs.item", (p) => <ItemCard rookery={rookery} p={p} />, {
+  registerBlock(rookery, "docs.page", (p) => <PageCard rookery={rookery} p={p} />)
+  registerBlock(rookery, "docs.item", (p) => <ItemCard rookery={rookery} p={p} />, {
     forceWidth: (attrs) => (String(attrs.uri ?? "") ? "wide" : null),
   })
-  rookery.blocks?.register("docs.toc", (p) => <Toc p={p} />)
-  rookery.blocks?.register("docs.synced", (p) => <Synced rookery={rookery} api={docs} p={p} />)
+  registerBlock(rookery, "docs.toc", (p) => <Toc p={p} />)
+  registerBlock(rookery, "docs.synced", (p) => <Synced rookery={rookery} api={docs} p={p} />)
 
   // The space's pages that changed last.
-  rookery.widgets?.register("docs.recent", (props) => {
+  registerWidget(rookery, "docs.recent", (props) => {
     const pages = rookery.data.pages.live({
       where: { template: false },
       orderBy: [["updatedAt", "desc"]],
@@ -203,7 +205,7 @@ export default defineClient((baseRookery) => {
   })
 
   // One page, live, on a dashboard: read only unless the widget says otherwise.
-  rookery.widgets?.register("docs.embed", (props) => {
+  registerWidget(rookery, "docs.embed", (props) => {
     const ref = () => idOf(String(props.widget.settings.page ?? "").trim())
     const [page] = createResource(ref, async (id) => {
       if (!rookery.entities) return null
