@@ -3,10 +3,12 @@
 // yet part of `@rookery/sdk/client`'s pinned `ClientRookery` surface. When the shell provides any of
 // these natively on `rookery`, the adapter delegates straight through; otherwise it provides a clean
 // fallback so views and tests work today.
-import type { CollabProvider } from "@aiviarium/nocturne"
-import type { ClientRookery, Disposable } from "@rookery/sdk/client"
+import type { ClientRookery, Disposable, EntityInfo } from "@rookery/sdk/client"
 import { RookeryError } from "@rookery/sdk/client"
 import { createResource, type JSX } from "solid-js"
+import { type DocumentSession, openDocument } from "./collab"
+
+export type { DocumentSession }
 
 /** Normalizes any thrown error into a `RookeryError` (replaces prototype's `CrowError.from`). */
 export function toRookeryError(err: unknown): RookeryError {
@@ -23,17 +25,6 @@ export function toRookeryError(err: unknown): RookeryError {
 
 // ── entities ─────────────────────────────────────────────────────────────────────────────────────────
 
-export interface ClientEntity {
-  id: string
-  uri: string
-  scheme?: string
-  title: string
-  subtitle?: string | null
-  parent?: string | null
-  spaceId?: string | null
-  deletedAt?: string | null
-}
-
 export interface EntityRendererProps {
   uri: string
   id: string
@@ -44,10 +35,8 @@ export interface EntityRendererProps {
   onOpen(): void
 }
 
-export interface ClientEntities {
-  resolve(uri: string): Promise<ClientEntity | null>
-  resolveMany(uris: string[]): Promise<ClientEntity[]>
-  search(query: string, opts?: { schemes?: string[]; limit?: number }): Promise<ClientEntity[]>
+/** The SDK's entity index, with the shell's entity components where it draws them. */
+export type ClientEntities = ClientRookery["entities"] & {
   open(uri: string): void
   card(scheme: string, renderer: (props: EntityRendererProps) => JSX.Element): Disposable
   row(scheme: string, renderer: (props: EntityRendererProps) => JSX.Element): Disposable
@@ -81,29 +70,13 @@ function openKnownUri(rookery: ClientRookery, uri: string): boolean {
 }
 
 export function entitiesOf(rookery: ClientRookery): ClientEntities {
-  const native = (rookery as unknown as { entities?: ClientEntities }).entities
-  if (native) return native
-
-  const resolve = (uri: string): Promise<ClientEntity | null> =>
-    rookery.rpc.call<ClientEntity | null>("entities.resolve", { uri }).catch(() => null)
-
-  const resolveMany = (uris: string[]): Promise<ClientEntity[]> =>
-    rookery.rpc.call<ClientEntity[]>("entities.resolveMany", { uris }).catch(() => [])
-
-  const search = (query: string, opts?: { schemes?: string[]; limit?: number }): Promise<ClientEntity[]> =>
-    rookery.rpc.call<ClientEntity[]>("entities.search", { query, ...opts }).catch(() => [])
-
   const open = (uri: string): void => {
     if (openKnownUri(rookery, uri)) return
     if (/^https?:\/\//.test(uri)) {
       window.open(uri, "_blank", "noopener,noreferrer")
       return
     }
-    rookery.workbench.toast({
-      title: "Cannot open link yet",
-      body: uri,
-      kind: "info",
-    })
+    rookery.workbench.toast({ title: "Cannot open link yet", body: uri, kind: "info" })
   }
 
   const noop = (): Disposable => ({ dispose() {} })
@@ -111,7 +84,7 @@ export function entitiesOf(rookery: ClientRookery): ClientEntities {
   const Chip = (props: { uri: string; label?: string }): JSX.Element => {
     const [resolved] = createResource(
       () => (props.label ? null : props.uri),
-      (uri) => resolve(uri),
+      (uri) => rookery.entities.resolve(uri).catch(() => null as EntityInfo | null),
     )
     const text = () => props.label || resolved()?.title || props.uri.replace(/^[a-z]+:\/\//, "")
     return (
@@ -122,9 +95,7 @@ export function entitiesOf(rookery: ClientRookery): ClientEntities {
   }
 
   return {
-    resolve,
-    resolveMany,
-    search,
+    ...rookery.entities,
     open,
     card: () => noop(),
     row: () => noop(),
@@ -134,20 +105,12 @@ export function entitiesOf(rookery: ClientRookery): ClientEntities {
 
 // ── documents ────────────────────────────────────────────────────────────────────────────────────────
 
-export interface DocumentSession extends CollabProvider {
-  status(): string
-  error(): Error | null
-  unsynced(): boolean
-  readOnly(): boolean
-  close(): void
-}
-
 export interface ClientDocuments {
-  open(id: string): DocumentSession
+  open(id: string): ReturnType<typeof openDocument>
 }
 
-export function documentsOf(rookery: ClientRookery): ClientDocuments | null {
-  return (rookery as unknown as { documents?: ClientDocuments }).documents ?? null
+export function documentsOf(rookery: ClientRookery): ClientDocuments {
+  return { open: (id: string) => openDocument(rookery, id) }
 }
 
 // ── drafts ───────────────────────────────────────────────────────────────────────────────────────────

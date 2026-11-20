@@ -199,24 +199,16 @@ export function Workspace(props: WorkspaceProps): JSX.Element {
 
   // Favourites: the user's pins of pages.
   const [pins, setPins] = createSignal<PinInfo[] | undefined>(knownPins)
-  const refetchPins = () => {
-    if (!rookery.pins) {
-      setPins((p) => p ?? [])
-      return Promise.resolve()
-    }
-    return rookery.pins
+  const refetchPins = () =>
+    rookery.pins
       .list()
       .then((list) => {
         knownPins = list
         setPins(list)
       })
       .catch(() => setPins((p) => p ?? []))
-  }
   void refetchPins()
-  rookery.pins
-    ?.onChange(() => void refetchPins())
-    .then((d) => onCleanup(() => d.dispose()))
-    .catch(() => {})
+  onCleanup(() => rookery.pins.onChange(() => void refetchPins()).dispose())
   const favourites = () =>
     (pins() ?? []).filter((p) => p.kind === "entity" && p.target.startsWith("doc://") && !p.spaceId)
   const pinned = (page: Page) => favourites().some((p) => p.target === uriOf(page.id))
@@ -292,10 +284,6 @@ export function Workspace(props: WorkspaceProps): JSX.Element {
       })
     },
     async togglePin(page) {
-      if (!rookery.pins) {
-        rookery.workbench.toast({ title: "Pinning requires Rookery pins (M2b)", kind: "warning" })
-        return
-      }
       const mine = favourites().find((p) => p.target === uriOf(page.id))
       if (mine) await rookery.pins.remove(mine.id)
       else

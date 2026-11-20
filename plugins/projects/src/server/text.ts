@@ -3,8 +3,8 @@
 import { type Ctx, plainText, type RichText, type Rookery } from "@rookery/sdk"
 import { type CommentRow, type IssueRow, type ProjectRow, priorityName } from "../lib/model"
 import type { Core } from "./core"
-import { idOf, issueUri } from "./core"
-import { entitiesOf, extrasOf } from "./sdk"
+import { issueUri } from "./core"
+import { documentText, entitiesOf } from "./sdk"
 
 export function createText(rookery: Rookery, core: Core) {
   const names = new Map<string, string>()
@@ -13,7 +13,7 @@ export function createText(rookery: Rookery, core: Core) {
     const hit = names.get(uri)
     if (hit) return hit
     const e = await entitiesOf(rookery)
-      ?.lookup(ctx, uri)
+      .lookup(ctx as Ctx, uri)
       .catch(() => null)
     const n = e?.title ?? uri
     names.set(uri, n)
@@ -36,10 +36,7 @@ export function createText(rookery: Rookery, core: Core) {
     if (issue.parent) lines.push(`Parent: ${await nameOf(ctx, issue.parent)}`)
     if (issue.cycle) lines.push(`Cycle: ${await nameOf(ctx, issue.cycle)}`)
     if (issue.document) {
-      const body =
-        (await extrasOf(rookery)
-          .documents?.text(ctx, issue.document)
-          .catch(() => "")) ?? ""
+      const body = await documentText(rookery.documents, ctx, issue.document).catch(() => "")
       if (body.trim()) lines.push("", "Description:", body.trim())
     }
     const d = core.data(ctx, issue.spaceId)
@@ -89,10 +86,7 @@ export function createText(rookery: Rookery, core: Core) {
     if (p.summary) lines.push(p.summary)
     if (p.lead) lines.push(`Lead: ${await nameOf(ctx, p.lead)}`)
     if (p.document) {
-      const body =
-        (await extrasOf(rookery)
-          .documents?.text(ctx, p.document)
-          .catch(() => "")) ?? ""
+      const body = await documentText(rookery.documents, ctx, p.document).catch(() => "")
       if (body.trim()) lines.push("", body.trim())
     }
     const states = await core.states(ctx, p.spaceId)
@@ -104,28 +98,6 @@ export function createText(rookery: Rookery, core: Core) {
     const done = await d.issues.count({ where: { stateCategory: "completed" } })
     lines.push(`Issues: ${open} open, ${done} completed`)
     return lines.join("\n")
-  }
-
-  const entities = entitiesOf(rookery)
-  if (entities) {
-    entities.text("issue", async (ctx, { id }) => {
-      const issue = await core.findIssue(ctx, id)
-      return issue ? { title: `${issue.key} ${issue.title}`, text: await issueText(ctx, issue) } : null
-    })
-    entities.text("project", async (ctx, { id }) => {
-      const e = await entities.lookup(ctx, `project://${id}`)
-      if (!e?.spaceId) return null
-      const p = await core.project(ctx, e.spaceId).catch(() => null)
-      return p ? { title: p.name, text: await projectText(ctx, p) } : null
-    })
-    entities.text("comment", async (ctx, { id }) => {
-      const e = await entities.lookup(ctx, `comment://${id}`)
-      if (!e?.spaceId) return null
-      const c = (await core.data(ctx, e.spaceId).comments.get(id)) as unknown as CommentRow | null
-      if (!c) return null
-      const issue = await core.findIssue(ctx, c.issue, e.spaceId)
-      return { title: `Comment on ${issue?.key ?? idOf(c.issue)}`, text: plainText(c.body as RichText) }
-    })
   }
 
   return { issueText, projectText, nameOf }

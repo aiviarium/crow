@@ -81,6 +81,7 @@ function createFakeHost(reply: (call: ExecCall) => Partial<ExecResult> = () => (
   } as unknown as Rookery
 
   const ctx: Ctx = {
+    callId: "call-1",
     user: { id: "u1", name: "Ada", email: "ada@example.test", admin: false },
     principal: { kind: "user", id: "u1" },
     space: null,
@@ -90,6 +91,8 @@ function createFakeHost(reply: (call: ExecCall) => Partial<ExecResult> = () => (
       check: async () => true,
       require: async () => {},
       level: async () => "use" as never,
+      levelOf: async () => null,
+      grants: async (resource: string) => ({ resource, owner: null, grants: [] }),
       filter: async (r) => r,
       grant: async () => {},
       revoke: async () => {},

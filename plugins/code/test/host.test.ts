@@ -172,11 +172,24 @@ function createFakeRookery(mock: MockGitHub, token: string) {
     extensions: { list: async () => [] },
     events: { publish: async () => {}, subscribe: async () => ({ dispose() {} }) },
     settings: { get: async () => 60, set: async () => {}, reset: async () => {} },
+    entities: {
+      lookup: async () => null,
+      lookupMany: async () => [],
+      search: async () => [],
+      text: () => ({ dispose() {} }),
+      register: async () => ({}) as never,
+      remove: async () => {},
+      alias: async () => {},
+    } as never,
+    documents: {} as never,
+    users: {} as never,
+    sql: {} as never,
     data: data as never,
     spaces: {
       list: async () => [space as never],
       get: async () => space as never,
       create: async () => space as never,
+      rename: async () => space as never,
     },
     storage: {} as never,
     secrets: {
@@ -212,7 +225,7 @@ function createFakeRookery(mock: MockGitHub, token: string) {
       list: async () => schedules,
       setEnabled: async () => {},
       fire: async () => ({ id: "job-1" }) as never,
-      create: async (_ctx: Ctx | null, s: Row) => {
+      create: async (s: Row) => {
         schedules.push({ id: id("schedule"), ...s })
         return { id: "schedule-1" }
       },
@@ -263,6 +276,7 @@ function createFakeRookery(mock: MockGitHub, token: string) {
   let current: Ctx = userCtx()
   function userCtx(): Ctx {
     return {
+      callId: "call-1",
       user: { id: "u1", name: "Ada", admin: true },
       principal: { kind: "user", id: "u1" } as never,
       space: "proj-1",
@@ -272,6 +286,8 @@ function createFakeRookery(mock: MockGitHub, token: string) {
         check: async () => true,
         require: async () => {},
         level: async () => "manage" as never,
+        levelOf: async () => null,
+        grants: async (resource: string) => ({ resource, owner: null, grants: [] }),
         filter: async (r: string[]) => r,
         grant: async () => {},
         revoke: async () => {},
@@ -386,7 +402,7 @@ describe("attaching and syncing a repository", () => {
     expect(repo.status).toBe("pending")
     expect(repo.syncedBy).toBe("u1")
     expect(fake.tables.get("routes")?.[0]).toMatchObject({
-      repoKey: "127.0.0.1:" + new URL(mock.apiUrl).port + "/acme/widgets",
+      repoKey: `127.0.0.1:${new URL(mock.apiUrl).port}/acme/widgets`,
       inSpace: "proj-1",
       repoId: repo.id,
     })

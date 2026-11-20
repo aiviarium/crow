@@ -1,6 +1,6 @@
 // Left navigation sidebar: Crow brand header, Home link, plugin-contributed navigation items and
 // dynamic sections, and the signed-in AccountMenu at the bottom.
-import { Count, type IconName, Nav, NavItem } from "@aiviarium/nocturne"
+import { Count, DropdownMenu, Icon, type IconName, type MenuEntry, Nav, NavItem } from "@aiviarium/nocturne"
 import { createMemo, For, type JSX, Show } from "solid-js"
 import { AccountMenu } from "../auth/AccountMenu"
 import { BrandMark } from "./BrandMark"
@@ -46,6 +46,17 @@ export function Sidebar(props: { app: ShellApp; onNavigate?: () => void }): JSX.
 
   const unreadCount = () => props.app.inbox.unread()
   const activeJobsCount = () => props.app.jobs.activeCount()
+  const spaceItems = (): MenuEntry[] =>
+    props.app.spaces.list().map((space) => ({
+      id: space.id,
+      label: space.name,
+      description: space.personal ? "Your own space" : undefined,
+      checked: props.app.spaces.current()?.id === space.id,
+    }))
+  const chooseSpace = (id: string) => {
+    const space = props.app.spaces.list().find((s) => s.id === id)
+    if (space) void props.app.spaces.enter(space)
+  }
 
   return (
     <div class="crow-sidebar" data-part="sidebar">
@@ -54,6 +65,28 @@ export function Sidebar(props: { app: ShellApp; onNavigate?: () => void }): JSX.
           <BrandMark />
           <span>Crow</span>
         </span>
+        <Show when={props.app.spaces.list().length > 0}>
+          <DropdownMenu
+            label="Switch space"
+            items={spaceItems()}
+            onSelect={chooseSpace}
+            trigger={(t) => (
+              <button
+                {...t}
+                type="button"
+                class="crow-sidebar__space"
+                data-part="space-switcher"
+                aria-label={`Space: ${props.app.spaces.current()?.name ?? "none"}`}
+              >
+                <Icon name="layers" size="sm" />
+                <span class="crow-sidebar__space-name">
+                  {props.app.spaces.current()?.name ?? "Choose a space"}
+                </span>
+                <Icon name="chevron-down" size="sm" />
+              </button>
+            )}
+          />
+        </Show>
       </div>
 
       <Nav label="Main navigation" class="crow-sidebar__nav">

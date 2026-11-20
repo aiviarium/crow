@@ -6,6 +6,7 @@ import {
   type Disposable,
   type JobHandle,
   type NoticeKind,
+  plainText,
   type RichText,
   type Rookery,
   RookeryError,
@@ -22,48 +23,6 @@ export function toRookeryError(err: unknown): RookeryError {
     if (typeof e.message === "string") return new RookeryError("INTERNAL", e.message)
   }
   return new RookeryError("INTERNAL", String(err))
-}
-
-export interface HostDoc {
-  id: string
-  title?: string
-}
-
-export interface HostDocuments {
-  list(ctx: Ctx | null, parentUri: string): Promise<HostDoc[]>
-  create(
-    ctx: Ctx | null,
-    params: { parent: string; title: string; content?: RichText; markdown?: string },
-  ): Promise<HostDoc>
-  edit(
-    ctx: Ctx | null,
-    id: string,
-    ops: Array<{ op: string; markdown?: string }>,
-    opts?: { author?: Record<string, unknown> },
-  ): Promise<unknown>
-  delete(ctx: Ctx | null, id: string): Promise<void>
-  text(ctx: Ctx | null, id: string): Promise<string>
-  markdown(ctx: Ctx | null, id: string): Promise<string>
-  fromMarkdown(ctx: Ctx | null, markdown: string): Promise<RichText>
-  toMarkdown(ctx: Ctx | null, body: RichText): Promise<string>
-}
-
-export interface HostEntity {
-  id: string
-  uri: string
-  title: string
-  subtitle?: string | null
-  spaceId?: string | null
-}
-
-export interface HostEntities {
-  lookup(ctx: Ctx | null, uri: string): Promise<HostEntity | null>
-  lookupMany(ctx: Ctx | null, uris: string[]): Promise<HostEntity[]>
-  search(ctx: Ctx | null, query: string, opts?: { schemes?: string[]; limit?: number }): Promise<HostEntity[]>
-  text(
-    scheme: string,
-    handler: (ctx: Ctx, ref: { id: string }) => Promise<{ title: string; text: string } | null>,
-  ): Disposable | undefined
 }
 
 export interface HostAgents {
@@ -86,16 +45,7 @@ export interface SpaceGrants {
 }
 
 export interface HostRookeryExtras {
-  documents?: HostDocuments
-  entities?: HostEntities
   agents?: HostAgents
-  spaces: Rookery["spaces"] & {
-    create(
-      ctx: Ctx,
-      params: { kind: string; name: string; slug?: string },
-    ): Promise<Awaited<ReturnType<Rookery["spaces"]["create"]>>>
-    rename?(ctx: Ctx, space: string, name: string): Promise<unknown>
-  }
   env: Rookery["env"] & {
     repositories?(ctx: Ctx, space: string): Promise<unknown[]>
     addRepository?(ctx: Ctx, params: { space: string; url: string; name?: string }): Promise<unknown>
@@ -106,14 +56,28 @@ export function extrasOf(rookery: Rookery): HostRookeryExtras {
   return rookery as unknown as HostRookeryExtras
 }
 
-export function documentsOf(rookery: Rookery): HostDocuments {
-  const docs = extrasOf(rookery).documents
-  if (!docs) throw new RookeryError("UNAVAILABLE", "documents facility is not available on this server yet")
-  return docs
+export const documentsOf = (rookery: Rookery): Rookery["documents"] => rookery.documents
+
+export const entitiesOf = (rookery: Rookery): Rookery["entities"] => rookery.entities
+
+/** A document as Markdown, or empty when it has none. */
+export async function documentMarkdown(docs: Rookery["documents"], ctx: Ctx, id: string): Promise<string> {
+  return (await docs.read(ctx, id, "markdown")).markdown ?? ""
 }
 
-export function entitiesOf(rookery: Rookery): HostEntities | undefined {
-  return extrasOf(rookery).entities
+/** A document as plain text, or empty when it has none. */
+export async function documentText(docs: Rookery["documents"], ctx: Ctx, id: string): Promise<string> {
+  return (await docs.read(ctx, id, "text")).text ?? ""
+}
+
+/** Markdown as the editors' rich text, through the server's converter. */
+export async function markdownToRichText(docs: Rookery["documents"], markdown: string): Promise<RichText> {
+  return ((await docs.convert({ markdown })).content as RichText | undefined) ?? fallbackTextDoc(markdown)
+}
+
+/** Rich text as Markdown, through the server's converter. */
+export async function richTextToMarkdown(docs: Rookery["documents"], body: RichText): Promise<string> {
+  return (await docs.convert({ content: body })).markdown ?? plainText(body)
 }
 
 export function agentsOf(rookery: Rookery): HostAgents | undefined {
@@ -148,12 +112,18 @@ export async function accessLevel(ctx: Ctx, resource: string): Promise<GrantLeve
 }
 
 export async function spaceGrants(ctx: Ctx, space: string): Promise<SpaceGrants> {
+  const resource = `space://${space}`
   const access = ctx.access as Ctx["access"] & {
     grants?: (resource: string) => Promise<SpaceGrants>
   }
-  if (typeof access.grants === "function") return access.grants(`space://${space}`)
-  const level = await accessLevel(ctx, `space://${space}`)
-  return { level, owner: null, grants: [] }
+  const list = await access.grants(resource)
+  return {
+    level:
+      normalizeGrant(list.grants.find((g) => ctx.user && g.principal === ctx.user.id)?.level) ??
+      normalizeGrant(list.owner === ctx.user?.id ? "manage" : null),
+    owner: list.owner ? { principal: list.owner } : null,
+    grants: list.grants.map((g) => ({ principal: g.principal, level: normalizeGrant(g.level)! })),
+  }
 }
 
 /** Sends a user notification via `@rookery/sdk`'s `rookery.notify.send`. */
@@ -186,6 +156,7 @@ export function jobCtx(rookery: Rookery, job: JobHandle): Ctx {
   const attached = (job as unknown as { ctx?: Ctx }).ctx
   if (attached) return attached
   return {
+    callId: `job:${job.id}`,
     user: null,
     principal: { kind: "plugin", id: rookery.id },
     space: null,
@@ -195,6 +166,8 @@ export function jobCtx(rookery: Rookery, job: JobHandle): Ctx {
       check: async () => true,
       require: async () => {},
       level: async () => "manage" as never,
+      levelOf: async () => null,
+      grants: async (resource: string) => ({ resource, owner: null, grants: [] }),
       filter: async (resources) => resources,
       grant: async () => {},
       revoke: async () => {},

@@ -720,6 +720,7 @@ mod tests {
                         scope: FacilityScope::Global,
                         config: json!({ "baseUrl": "http://127.0.0.1:11434/v1" }),
                         has_credential: true,
+                        space_id: None,
                         updated_at: "2026-11-14T12:00:00Z".into(),
                     },
                     credential: Some("sk-fake-secret".into()),

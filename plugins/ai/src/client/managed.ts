@@ -13,8 +13,20 @@ const PROVIDER: ProviderInfo = {
 
 export const ANTHROPIC_TYPE = PROVIDER.connectionType
 const destination = "api.anthropic.com"
-const mappingKey = (task: Task) => `mapping.${task}`
+const mappingKey = (task: Task) => `${task}|global||`
 const supports = (task: unknown): task is Task => task === "text" || task === "fast"
+
+/** A row of the plugin's `mappings` collection: one task's model, at a scope. */
+interface MappingRow {
+  id: string
+  key: string
+  task: Task
+  scope: "global" | "space" | "user"
+  connection: string
+  model: string
+  live?: boolean
+  updatedAt: string
+}
 
 export function managedModels(rookery: ClientRookery, router: Calls) {
   const available = async () => {
@@ -33,28 +45,32 @@ export function managedModels(rookery: ClientRookery, router: Calls) {
       .list({ type: ANTHROPIC_TYPE })
       .then((list) => list.filter((c) => c.scope === "global" && c.hasCredential))
 
+  const mappingRows = async (): Promise<MappingRow[]> => {
+    const page = await rookery.data.mappings.find({
+      where: { scope: "global" },
+      limit: 50,
+    })
+    return page.rows as unknown as MappingRow[]
+  }
+
   const mappings = async (): Promise<MappingInfo[]> => {
     const byId = new Map((await connections()).map((c) => [c.id, c]))
-    const entries = await rookery.settings.list()
-    return PROVIDER.tasks.flatMap((task) => {
-      const entry = entries.find((s) => s.key === mappingKey(task) && s.scope === "global")
-      const value = entry?.value as Partial<MappingInfo> | undefined
-      if (!value?.connection || typeof value.model !== "string" || !value.model) return []
-      const connection = byId.get(value.connection)
-      if (!connection) return []
+    return (await mappingRows()).flatMap((row) => {
+      const connection = byId.get(row.connection)
+      if (!connection || !row.model) return []
       return [
         {
-          task,
+          task: row.task,
           scope: "global",
           connection: connection.id,
           connectionName: connection.name,
           connectionType: ANTHROPIC_TYPE,
-          model: value.model,
+          model: row.model,
           provider: PROVIDER.id,
           destination,
           local: false,
-          live: false,
-          updatedAt: value.updatedAt ?? connection.updatedAt,
+          live: row.live === true,
+          updatedAt: row.updatedAt,
         },
       ]
     })
@@ -82,12 +98,16 @@ export function managedModels(rookery: ClientRookery, router: Calls) {
       if (!(await connections()).some((c) => c.id === connection)) {
         throw new RookeryError("NOT_FOUND", "Choose a global Anthropic connection")
       }
-      await rookery.rpc.call("settings.set", {
-        plugin: "ai",
-        key: mappingKey(task),
-        scope: "global",
-        value: { connection, model: model.trim(), updatedAt: new Date().toISOString() },
-      })
+      await rookery.data.mappings.upsert(
+        {
+          key: mappingKey(task),
+          task,
+          scope: "global",
+          connection,
+          model: model.trim(),
+        },
+        { on: ["key"] },
+      )
       const mapping = (await mappings()).find((m) => m.task === task)
       if (!mapping) throw new RookeryError("UNAVAILABLE", "The task mapping could not be loaded")
       return mapping
@@ -95,11 +115,8 @@ export function managedModels(rookery: ClientRookery, router: Calls) {
     async removeMapping(params) {
       if (!(await available())) return router.removeMapping(params)
       if (supports(params.task) && params.scope === "global") {
-        await rookery.rpc.call("settings.reset", {
-          plugin: "ai",
-          key: mappingKey(params.task),
-          scope: "global",
-        })
+        const row = (await mappingRows()).find((r) => r.task === params.task)
+        if (row) await rookery.data.mappings.delete(row.id)
       }
     },
     async models(connection) {

@@ -111,7 +111,7 @@ export class Notifier {
     const sent = new Set<string>()
     for (const p of planned) {
       if (p.by && p.by.toLowerCase() === p.login.toLowerCase()) continue
-      const user = await this.accounts.userFor(host, p.login, api)
+      const user = await this.accounts.userFor(host, p.login, api, ctx)
       if (!user || sent.has(`${p.kind}:${user}`)) continue
       if (!(await this.wants(ctx, user, p.kind, entity))) continue
       sent.add(`${p.kind}:${user}`)

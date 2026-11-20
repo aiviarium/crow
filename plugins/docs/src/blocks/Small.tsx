@@ -3,8 +3,9 @@
 // opened in each place, so an edit in one shows in every other at once).
 import { Button, Icon, RichTextEditor } from "@aiviarium/nocturne"
 import { createResource, createSignal, For, type JSX, onCleanup, Show } from "solid-js"
+import { openDocument } from "../lib/collab"
 import { uriOf } from "../lib/tree"
-import { type BlockProps, type ClientRookeryWithDocs, type DocumentSession, entityOfHit } from "../types"
+import { type BlockProps, type ClientRookeryWithDocs, entityOfHit } from "../types"
 import { type Api, ago, openEntity } from "../views/api"
 import { EntityCard } from "../views/Entity"
 import { PageIcon } from "../views/Tree"
@@ -95,7 +96,7 @@ export function ItemCard(props: { rookery: ClientRookeryWithDocs; p: BlockProps 
     return raw.map(entityOfHit)
   })
   const drawn = (h: { scheme: string; deletedAt?: string | null }) =>
-    !h.deletedAt && !!props.rookery.entities?.renders("card", h.scheme)
+    !h.deletedAt && !!props.rookery.entities.renders?.("card", h.scheme)
   return (
     <Show
       when={uri()}
@@ -173,11 +174,7 @@ function SyncedBody(props: {
   document: string
   readOnly: boolean
 }): JSX.Element {
-  const docs = props.rookery.documents
-  if (!docs) {
-    return <span class="nc-meta">Synced blocks require Rookery documents (M2b).</span>
-  }
-  const session: DocumentSession = docs.open(props.document)
+  const session = openDocument(props.rookery, props.document)
   onCleanup(() => session.close())
   return (
     <Show
@@ -207,13 +204,6 @@ export function Synced(props: { rookery: ClientRookeryWithDocs; api: Api; p: Blo
     (u) => props.rookery.entities?.resolve(u).catch(() => null) ?? Promise.resolve(null),
   )
   const make = async () => {
-    if (!props.rookery.documents) {
-      props.rookery.workbench.toast({
-        title: "Synced blocks require Rookery documents (M2b)",
-        kind: "warning",
-      })
-      return
-    }
     setBusy(true)
     try {
       // Attached to the page the block is on, so whoever can see the page can see it.

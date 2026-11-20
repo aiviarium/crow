@@ -38,7 +38,7 @@ export class Accounts {
   }
 
   /** The Crow user (an id) a login maps to, asking GitHub for a public e-mail address once if needed. */
-  async userFor(host: string, login: string, api?: GitHubApi): Promise<string | null> {
+  async userFor(host: string, login: string, api?: GitHubApi, ctx?: Ctx | null): Promise<string | null> {
     if (!login) return null
     const known = await this.find(host, login)
     if (known?.user) return userId(known.user)
@@ -53,7 +53,7 @@ export class Accounts {
     } catch {
       // A profile we cannot read is not a reason to fail a sync.
     }
-    const user = email ? await this.userByEmail(email) : null
+    const user = email ? await this.userByEmail(email, ctx) : null
     if (!user) {
       this.misses.set(accountKey(host, login), Date.now())
       return null
@@ -62,13 +62,11 @@ export class Accounts {
     return user
   }
 
-  async userByEmail(email: string): Promise<string | null> {
+  async userByEmail(email: string, ctx?: Ctx | null): Promise<string | null> {
     const want = email.trim().toLowerCase()
     if (!want) return null
     const entities = entitiesOf(this.rookery)
-    // Without the entity index (M2b) there is no e-mail to user mapping: a token still maps its owner.
-    if (!entities) return null
-    const found = await entities.search(null, want, { schemes: ["user"], limit: 10 }).catch(() => [])
+    const found = await entities.search(ctx as Ctx, want, { schemes: ["user"], limit: 10 }).catch(() => [])
     const hit = found.find((e) => (e.subtitle ?? "").toLowerCase() === want)
     return hit ? hit.id : null
   }

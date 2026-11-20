@@ -1,4 +1,4 @@
-import { Badge, Button, EmptyState, Icon, Select, Skeleton, Tabs, TextField } from "@aiviarium/nocturne"
+import { Button, EmptyState, Icon, Select, Skeleton, Tabs, TextField } from "@aiviarium/nocturne"
 import { createMemo, createSignal, For, type JSX, Show } from "solid-js"
 import { openEntity, rookery, useMe } from "../lib/app"
 import { applyFilters, type Filters, facets, type ItemRow, NO_FILTERS } from "../lib/filters"
