@@ -140,21 +140,24 @@ export async function runCommand(
 export function createApi(rookery: ClientRookery) {
   const call = <R>(m: string, p: Record<string, unknown> = {}) => rookery.host.call<R>(m, p)
 
-  /** `env.writeFile` as the wire takes it: the bytes in base64, and the version to write over. */
-  const writeFile = async (
+  /** `env.writeFile`: the bytes, and the version they were read at so a save cannot overwrite another. */
+  const writeFile = (
     env: string,
     path: string,
     data: Uint8Array,
     opts: { ifMatch?: string; overwrite?: boolean } = {},
-  ) => {
-    const body: Record<string, unknown> = { env, path, base64: base64Of(data) }
-    if (opts.ifMatch) body.ifMatch = opts.ifMatch
-    else if (opts.overwrite) body.overwrite = true
-    return rookery.rpc.call<{ sha256: string; size: number }>("env.writeFile", body)
-  }
+  ) => rookery.env.writeFile(env, path, data, opts)
 
-  const readFile = async (env: string, path: string): Promise<FileData> =>
-    (await rookery.rpc.call("env.readFile", { env, path })) as FileData
+  const readFile = (env: string, path: string): Promise<FileData> => rookery.env.readFile(env, path)
+
+  /** A file's size without reading it, so a large one is refused before it travels. */
+  const sizeOf = async (env: string, path: string): Promise<number | undefined> => {
+    try {
+      return (await rookery.env.stat(env, path)).entry?.size
+    } catch {
+      return undefined
+    }
+  }
 
   const fs = {
     list: (env: string, path: string) => rookery.env.listDir(env, path) as Promise<DirListing>,
@@ -165,8 +168,9 @@ export function createApi(rookery: ClientRookery) {
       opts: { size?: number; limit?: number; force?: boolean } = {},
     ): Promise<ReadResult> => {
       const limit = opts.limit ?? 5 * 1024 * 1024
-      if (opts.size !== undefined && opts.size > limit && !opts.force && !IMAGE.test(path))
-        return { kind: "large", size: opts.size }
+      const size = opts.size ?? (opts.force ? undefined : await sizeOf(env, path))
+      if (size !== undefined && size > limit && !opts.force && !IMAGE.test(path))
+        return { kind: "large", size }
       const file = await readFile(env, path)
       if (file.size > limit && !opts.force && !IMAGE.test(path)) return { kind: "large", size: file.size }
       const data = bytesOf(file.base64)
@@ -401,16 +405,30 @@ export function createApi(rookery: ClientRookery) {
     prProviders: async () => (await call<{ providers: PrProvider[] }>("pr.providers")).providers,
     assistants: async () => (await call<{ assistants: Assistant[] }>("assistants")).assistants,
     /** The workbench's URL for a file: the route the `workbench.file` view is mounted at. */
-    link: (env: string, path: string) => {
+    /**
+     * The link to a file on a host: its `code://` entity, so it can be mentioned and pinned, and the
+     * workbench URL it opens at.
+     */
+    link: async (env: string, path: string) => {
       const id = `${env.replace(/^env:\/\//, "")}${path.startsWith("/") ? path : `/${path}`}`
+      try {
+        await call("entity.register", { env, kind: "file", path })
+      } catch {
+        // A server without the entity index: the URL still opens the file.
+      }
       return {
         uri: `code://${id}`,
         href: `/workbench/file/${id.split("/").map(encodeURIComponent).join("/")}`,
       }
     },
-    /** The workbench's URL for a commit: the route the `workbench.commit` view is mounted at. */
-    commitLink: (env: string, path: string, sha: string) => {
+    /** The link to a commit: its `commit://` entity, and the route the `workbench.commit` view is at. */
+    commitLink: async (env: string, path: string, sha: string, title?: string) => {
       const id = `${env.replace(/^env:\/\//, "")}${path.startsWith("/") ? path : `/${path}`}@${sha}`
+      try {
+        await call("entity.register", { env, kind: "commit", path, sha, ...(title ? { title } : {}) })
+      } catch {
+        // A server without the entity index: the URL still opens the commit.
+      }
       return {
         uri: `commit://${id}`,
         href: `/workbench/commit/${id.split("/").map(encodeURIComponent).join("/")}`,

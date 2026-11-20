@@ -269,7 +269,7 @@ function Opened(props: { rookery: ClientRookery; view: ViewHandle; info: import(
 
   async function copyLink(path?: string) {
     if (!path) return
-    const { uri, href } = w.api.link(w.env, w.abs(path))
+    const { uri, href } = await w.api.link(w.env, w.abs(path))
     await navigator.clipboard?.writeText(`${location.origin}${href}`).catch(() => {})
     rookery.workbench.toast({ title: "Link copied", body: uri, kind: "success" })
   }

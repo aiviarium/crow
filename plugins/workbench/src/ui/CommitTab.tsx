@@ -18,7 +18,7 @@ export function CommitTab(props: { w: Workspace; sha: string }) {
   const copy = async () => {
     const c = info()?.commit
     if (!c) return
-    const { uri, href } = w.api.commitLink(w.env, w.root, c.sha)
+    const { uri, href } = await w.api.commitLink(w.env, w.root, c.sha, `${c.sha.slice(0, 7)} ${c.subject}`)
     await navigator.clipboard?.writeText(`${location.origin}${href}`).catch(() => {})
     w.rookery.workbench.toast({ title: "Link copied", body: uri, kind: "success" })
   }
