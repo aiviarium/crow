@@ -8,6 +8,7 @@ import { defineClient } from "@rookery/sdk/client"
 import { setRookery } from "./lib/app"
 import { registerWidget } from "./lib/widgets"
 import { ConnectView } from "./views/Connect"
+import { IssueView } from "./views/Issue"
 import { IssuesView, PullsView } from "./views/Lists"
 import { PullView } from "./views/Pull"
 import { RepoView } from "./views/Repo"
@@ -22,6 +23,7 @@ export default defineClient((rookery) => {
   rookery.views.register("code.pulls", PullsView)
   rookery.views.register("code.pull", PullView)
   rookery.views.register("code.issues", IssuesView)
+  rookery.views.register("code.issue", IssueView)
   rookery.views.register("code.connect", ConnectView)
   registerWidget(rookery, "code.myPulls", MyPulls)
   registerWidget(rookery, "code.reviewRequests", ReviewRequests)
